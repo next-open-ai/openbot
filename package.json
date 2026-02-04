@@ -1,0 +1,57 @@
+{
+    "name": "@freebot/openbot",
+    "publishConfig": {
+        "access": "public"
+    },
+    "version": "1.0.0",
+    "description": "CLI and library to run prompts with skill paths (Agent Skills style). Use as npm package or freebot CLI.",
+    "type": "module",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "skills",
+        "README.md"
+    ],
+    "bin": {
+        "freebot": "./dist/cli.js"
+    },
+    "dependencies": {
+        "@mariozechner/pi-ai": "^0.51.2",
+        "@mariozechner/pi-coding-agent": "^0.51.2",
+        "@sinclair/typebox": "^0.34.41",
+        "agent-browser": "^0.8.5",
+        "commander": "^14.0.2",
+        "ws": "^8.19.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "@types/ws": "^8.18.1",
+        "typescript": "^5.7.0"
+    },
+    "scripts": {
+        "clean": "rm -rf dist",
+        "build": "npm run clean && tsc",
+        "start": "node dist/cli.js",
+        "run": "node dist/cli.js",
+        "dev": "npm run build && node dist/cli.js"
+    },
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "keywords": [
+        "skill",
+        "agent",
+        "cli",
+        "llm",
+        "freebot"
+    ],
+    "license": "MIT"
+}
