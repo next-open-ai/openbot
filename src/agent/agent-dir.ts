@@ -21,37 +21,50 @@ export function ensureDefaultAgentDir(agentDir: string): void {
     const modelsJsonPath = join(agentDir, "models.json");
     if (!existsSync(modelsJsonPath)) {
         const defaultModels = {
-            providers: [
-                {
-                    id: "deepseek",
+            providers: {
+                deepseek: {
                     name: "DeepSeek",
                     apiKey: "OPENAI_API_KEY",
                     api: "openai-completions",
-                    baseUrl: "https://api.deepseek.com",
+                    baseUrl: "https://api.deepseek.com/v1",
+                    authHeader: true,
                     models: [
                         {
                             id: "deepseek-chat",
                             name: "DeepSeek Chat",
                             contextWindow: 64000,
                             supportsTools: true
+                        },
+                        {
+                            id: "deepseek-reasoner",
+                            name: "DeepSeek Reasoner",
+                            contextWindow: 64000,
+                            supportsTools: true
                         }
                     ]
                 },
-                {
-                    id: "dashscope",
+                dashscope: {
                     name: "DashScope (Alibaba)",
-                    apiKeyEnvVar: "DASHSCOPE_API_KEY",
+                    apiKey: "DASHSCOPE_API_KEY",
+                    api: "openai-completions",
                     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    authHeader: true,
                     models: [
                         {
                             id: "qwen-max",
                             name: "Qwen Max",
                             contextWindow: 30000,
                             supportsTools: true
+                        },
+                        {
+                            id: "qwen-plus",
+                            name: "Qwen Plus",
+                            contextWindow: 128000,
+                            supportsTools: true
                         }
                     ]
                 }
-            ]
+            }
         };
         writeFileSync(modelsJsonPath, JSON.stringify(defaultModels, null, 2), "utf-8");
     }

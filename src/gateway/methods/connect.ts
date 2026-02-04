@@ -1,4 +1,5 @@
 import type { GatewayClient, ConnectParams } from "../types.js";
+import { agentManager } from "../../agent/agent-manager.js";
 import { randomUUID } from "crypto";
 
 /**
@@ -17,7 +18,7 @@ export async function handleConnect(
     console.log(`Client ${client.id} connected with session ${client.sessionId}`);
 
     return {
-        sessionId: client.sessionId,
+        sessionId: client.sessionId || "",
         status: "connected",
     };
 }

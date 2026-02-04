@@ -4,6 +4,6 @@ export {
     formatSkillsForPrompt,
     type Skill,
     type LoadSkillsFromDirOptions,
-} from "./skills.js";
-export { run, type RunOptions, type RunResult } from "./run.js";
-export { getFreebotAgentDir, ensureDefaultAgentDir } from "./agent-dir.js";
+} from "./agent/skills.js";
+export { run, type RunOptions, type RunResult } from "./agent/run.js";
+export { getFreebotAgentDir, ensureDefaultAgentDir } from "./agent/agent-dir.js";

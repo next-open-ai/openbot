@@ -1,9 +1,10 @@
 import type { WebSocket } from "ws";
 import type { IncomingMessage } from "http";
-import { randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 import type { GatewayClient } from "./types.js";
 import { send, createEvent } from "./utils.js";
 import { handleMessage } from "./message-handler.js";
+import { agentManager } from "../agent/agent-manager.js";
 
 /**
  * Handle new WebSocket connection

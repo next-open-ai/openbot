@@ -3,9 +3,10 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { getFreebotAgentDir } from "./agent-dir.js";
-import { loadSkillsFromPaths, type Skill } from "./skills.js";
-import { run } from "./run.js";
+import { getFreebotAgentDir } from "./agent/agent-dir.js";
+import { loadSkillsFromPaths, type Skill } from "./agent/skills.js";
+import { run } from "./agent/run.js";
+import { ConfigManager } from "./agent/config-manager.js";
 
 const require = createRequire(import.meta.url);
 const PKG = require("../package.json") as { version: string };
@@ -70,9 +71,7 @@ async function runAction(
             console.log("\n(dry-run: 未调用 LLM，设置 OPENAI_API_KEY 可实际调用)");
             return;
         }
-        if (result.assistantContent !== undefined) {
-            console.log(result.assistantContent);
-        }
+        // Content is already streamed by run()
         if (
             !result.dryRun &&
             (result.assistantContent === undefined || result.assistantContent === "")
@@ -167,6 +166,47 @@ program
 
         process.on("SIGINT", shutdown);
         process.on("SIGTERM", shutdown);
+    });
+
+// Login command
+program
+    .command("login")
+    .description("Save API key for a provider persistently")
+    .argument("<provider>", "Provider name (e.g., deepseek, dashscope, openai)")
+    .argument("<apiKey>", "API Key")
+    .action(async (provider, apiKey) => {
+        const config = new ConfigManager(program.opts().agentDir);
+        await config.login(provider, apiKey);
+    });
+
+// Config command
+const configCmd = program.command("config").description("Manage configurations");
+
+configCmd
+    .command("set-model")
+    .description("Set default model for a provider")
+    .argument("<provider>", "Provider name")
+    .argument("<modelId>", "Model ID")
+    .action(async (provider, modelId) => {
+        const cm = new ConfigManager(program.opts().agentDir);
+        await cm.setModel(provider, modelId);
+    });
+
+configCmd
+    .command("list")
+    .description("List current configurations")
+    .action(() => {
+        const cm = new ConfigManager(program.opts().agentDir);
+        const results = cm.list();
+        if (results.length === 0) {
+            console.log("No providers found in models.json.");
+        } else {
+            console.table(results.map(r => ({
+                Provider: r.provider,
+                "Default Model": r.model,
+                "Auth Configured": r.hasKey ? "✅ Yes" : "❌ No"
+            })));
+        }
     });
 
 program.parseAsync(process.argv).catch((err: unknown) => {

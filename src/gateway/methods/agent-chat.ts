@@ -1,5 +1,5 @@
 import type { GatewayClient, AgentChatParams } from "../types.js";
-import { sessionManager } from "../session-manager.js";
+import { agentManager } from "../../agent/agent-manager.js";
 import { send, createEvent } from "../utils.js";
 
 /**
@@ -24,7 +24,7 @@ export async function handleAgentChat(
     console.log(`Agent chat request for session ${targetSessionId}: ${message.substring(0, 50)}...`);
 
     // Get or create agent session
-    const session = await sessionManager.getOrCreateSession(targetSessionId);
+    const session = await agentManager.getOrCreateSession(targetSessionId);
 
     // Set up event listener for streaming
     const unsubscribe = session.subscribe((event: any) => {
