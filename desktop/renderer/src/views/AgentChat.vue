@@ -40,8 +40,8 @@
             :content-parts="message.contentParts"
           />
 
-          <!-- Streaming Message -->
-          <div v-if="isStreaming || toolExecutions.length > 0" class="streaming-message">
+          <!-- Streaming Message: Only show if there is actual content or active tools to show -->
+          <div v-if="(isStreaming || toolExecutions.length > 0) && (currentMessage || toolExecutions.length > 0)" class="streaming-message">
             <ChatMessage
               :role="'assistant'"
               :content="currentMessage || (toolExecutions.length > 0 ? t('chat.thinking') : '')"

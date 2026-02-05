@@ -12,6 +12,13 @@ export default defineConfig({
     server: {
         port: 5173,
         strictPort: true,
+        proxy: {
+            '/server-api': {
+                target: 'http://localhost:3000',
+                changeOrigin: true,
+                secure: false,
+            },
+        },
     },
     build: {
         outDir: 'dist',

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { GatewayClient } from "./types.js";
 import { send, createEvent } from "./utils.js";
 import { handleMessage } from "./message-handler.js";
-import { agentManager } from "../agent/agent-manager.js";
+import { connectedClients } from "./clients.js";
 
 /**
  * Handle new WebSocket connection
@@ -22,6 +22,8 @@ export function handleConnection(ws: WebSocket, req: IncomingMessage): void {
         authenticated: false,
         connectedAt: Date.now(),
     };
+
+    connectedClients.add(client);
 
     // Send connection challenge
     send(ws, createEvent("connect.challenge", {
@@ -44,6 +46,7 @@ export function handleConnection(ws: WebSocket, req: IncomingMessage): void {
 
     // Handle connection close
     ws.on("close", (code, reason) => {
+        connectedClients.delete(client);
         const duration = Date.now() - client.connectedAt;
         console.log(`Connection closed: ${connId} (duration: ${duration}ms, code: ${code}, reason: ${reason.toString()})`);
     });

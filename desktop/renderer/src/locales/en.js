@@ -17,6 +17,18 @@ export default {
     configuration: 'Configuration',
     settings: 'Settings',
   },
+  skills: {
+    sources: {
+      system: 'System',
+      global: 'Global',
+      workspace: 'Workspace',
+    },
+    noSkills: 'No Skills Found',
+    noSkillsHint: 'No skills available in this category',
+    noDocumentation: 'No documentation available',
+    install: 'Install New Skill',
+    installHint: 'Browse Skill Marketplace (Coming Soon)',
+  },
   sessions: {
     noSessions: 'No Sessions Yet',
     noSessionsHint: 'Create your first session to get started',

@@ -1,5 +1,5 @@
 import { Controller, Get, Param, HttpException, HttpStatus } from '@nestjs/common';
-import { SkillsService } from './skills.service';
+import { SkillsService } from './skills.service.js';
 
 @Controller('skills')
 export class SkillsController {

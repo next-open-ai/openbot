@@ -4,14 +4,12 @@
     "description": "OpenBot Desktop - Professional agent management application",
     "main": "main.js",
     "scripts": {
-        "dev": "concurrently \"npm run dev:server\" \"npm run dev:renderer\" \"npm run dev:electron\"",
-        "dev:server": "cd server && npm run start:dev",
+        "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
         "dev:renderer": "cd renderer && npm run dev",
         "dev:electron": "sleep 5 && electron .",
-        "build:server": "cd server && npm run build",
         "build:renderer": "cd renderer && npm run build",
-        "build": "npm run build:server && npm run build:renderer && electron-builder",
-        "postinstall": "cd server && npm install && cd ../renderer && npm install"
+        "build": "npm run build:renderer && electron-builder",
+        "postinstall": "cd renderer && npm install"
     },
     "keywords": [
         "electron",
@@ -37,7 +35,13 @@
         "files": [
             "main.js",
             "preload.js",
-            "server/dist/**/*",
+            {
+                "from": "../dist",
+                "to": "dist",
+                "filter": [
+                    "**/*"
+                ]
+            },
             "renderer/dist/**/*",
             "assets/**/*"
         ],

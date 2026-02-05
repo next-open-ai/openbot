@@ -103,7 +103,8 @@ export const useAgentStore = defineStore('agent', {
                     this.currentSession = session;
 
                     // CRITICAL: Subscribe to socket for this new session to receive stream
-                    socketService.subscribeToSession(session.id);
+                    // Await subscription to avoid race condition with sendMessage
+                    await socketService.subscribeToSession(session.id);
 
                     // We need to notify the router to update the URL (this is tricky from store, 
                     // usually better handled in component, but we can return the session to component)
@@ -114,6 +115,11 @@ export const useAgentStore = defineStore('agent', {
             }
 
             try {
+                // Ensure we are subscribed if session already existed
+                if (this.currentSession && socketService.currentSessionId !== this.currentSession.id) {
+                    await socketService.subscribeToSession(this.currentSession.id);
+                }
+
                 // Add user message immediately
                 const userMessage = {
                     id: Date.now().toString(),
@@ -140,8 +146,17 @@ export const useAgentStore = defineStore('agent', {
         },
 
         handleAgentChunk(data) {
-            // 仅在本会话流式过程中处理，避免迟到或其它会话的 chunk 被误追加
-            if (!this.isStreaming || !this.currentSession) return;
+            // Safety: Ensure we have a session selected
+            if (!this.currentSession) return;
+
+            // Auto-start streaming if not active (handles multi-turn agent responses)
+            if (!this.isStreaming) {
+                this.isStreaming = true;
+                this.currentMessage = '';
+                this.currentStreamParts = [];
+                this.toolExecutions = [];
+            }
+
             const text = data.text || '';
             if (!text) return;
             this.currentMessage += text;
@@ -160,6 +175,15 @@ export const useAgentStore = defineStore('agent', {
 
         handleToolExecution(data) {
             if (data.type === 'start') {
+                // Auto-start streaming if not active
+                if (!this.isStreaming) {
+                    this.isStreaming = true;
+                    this.currentMessage = '';
+                    this.currentStreamParts = [];
+                    // For tools, clear previous executions if we are starting fresh
+                    this.toolExecutions = [];
+                }
+
                 // 同一 toolCallId 只添加一次，避免重复事件导致重复卡片
                 if (this.toolExecutions.some(t => t.id === data.toolCallId)) return;
                 const newTool = {
@@ -189,15 +213,17 @@ export const useAgentStore = defineStore('agent', {
         handleMessageComplete(data) {
             if (data.sessionId === this.currentSession?.id) {
                 // Add assistant message
-                const assistantMessage = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content: this.currentMessage || data.content,
-                    timestamp: Date.now(),
-                    toolCalls: [...this.toolExecutions],
-                    contentParts: [...this.currentStreamParts] // Persist structure
-                };
-                this.messages.push(assistantMessage);
+                if (this.currentMessage || data.content) {
+                    const assistantMessage = {
+                        id: Date.now().toString(),
+                        role: 'assistant',
+                        content: this.currentMessage || data.content,
+                        timestamp: Date.now(),
+                        toolCalls: [...this.toolExecutions],
+                        contentParts: [...this.currentStreamParts] // Persist structure
+                    };
+                    this.messages.push(assistantMessage);
+                }
 
                 // Reset state
                 this.currentMessage = '';

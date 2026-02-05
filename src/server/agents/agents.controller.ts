@@ -8,7 +8,7 @@ import {
     HttpException,
     HttpStatus,
 } from '@nestjs/common';
-import { AgentsService } from './agents.service';
+import { AgentsService } from './agents.service.js';
 
 @Controller('agents')
 export class AgentsController {
@@ -24,7 +24,7 @@ export class AgentsController {
                 success: true,
                 data: session,
             };
-        } catch (error) {
+        } catch (error: any) {
             throw new HttpException(
                 error.message || 'Failed to create session',
                 HttpStatus.INTERNAL_SERVER_ERROR,
@@ -76,7 +76,7 @@ export class AgentsController {
                 success: true,
                 message: 'Message sent',
             };
-        } catch (error) {
+        } catch (error: any) {
             throw new HttpException(
                 error.message || 'Failed to send message',
                 HttpStatus.INTERNAL_SERVER_ERROR,

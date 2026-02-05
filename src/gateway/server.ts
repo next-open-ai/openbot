@@ -1,6 +1,74 @@
 import { WebSocketServer } from "ws";
-import { createServer, type Server } from "http";
+import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse, type RequestOptions } from "http";
 import { handleConnection } from "./connection-handler.js";
+import { readFile, stat } from "fs/promises";
+import { join, extname } from "path";
+import { existsSync } from "fs";
+import { spawn, type ChildProcess } from "child_process";
+import { createServer as createNetServer } from "net";
+
+/**
+ * Find an available port starting from startPort
+ */
+async function findAvailablePort(startPort: number): Promise<number> {
+    let port = startPort;
+    while (true) {
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const server = createNetServer();
+                server.once("error", (err: any) => {
+                    if (err.code === "EADDRINUSE") {
+                        resolve(); // Port taken, try next
+                    } else {
+                        reject(err);
+                    }
+                });
+                server.once("listening", () => {
+                    server.close(() => resolve()); // Port available
+                });
+                server.listen(port);
+            });
+            // If we get here and the server listened successfully (then closed), checking if it was actually available logic needs care.
+            // Actually the above logic is slightly flawed for "resolve on error".
+            // Let's refine:
+            // If listen succeeds -> port is free. return it.
+            // If EADDRINUSE -> port busy. loop continue.
+
+            const isAvailable = await new Promise<boolean>((resolve) => {
+                const server = createNetServer();
+                server.once("error", () => resolve(false));
+                server.once("listening", () => {
+                    server.close(() => resolve(true));
+                });
+                server.listen(port);
+            });
+
+            if (isAvailable) return port;
+            port++;
+        } catch (e) {
+            port++;
+        }
+    }
+}
+
+/**
+ * MIME types for static files
+ */
+const MIME_TYPES: Record<string, string> = {
+    ".html": "text/html",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".eot": "application/vnd.ms-fontobject",
+};
 
 /**
  * Start WebSocket gateway server
@@ -12,8 +80,44 @@ export async function startGatewayServer(port: number = 3000): Promise<{
 }> {
     console.log(`Starting gateway server on port ${port}...`);
 
+    // 1. Find available port for Desktop Server
+    const backendPort = await findAvailablePort(3001);
+    console.log(`Found available port for Desktop Server: ${backendPort}`);
+
+    // 2. Start Desktop Server
+    let backendProcess: ChildProcess | null = null;
+    const serverPath = join(process.cwd(), "dist/server/main.js");
+
+    if (existsSync(serverPath)) {
+        console.log(`Spawning Desktop Server at ${serverPath}...`);
+        backendProcess = spawn("node", [serverPath], {
+            cwd: process.cwd(),
+            env: { ...process.env, PORT: backendPort.toString() },
+            stdio: ["ignore", "pipe", "pipe"], // Pipe stdout/stderr to capture logs
+        });
+
+        backendProcess.stdout?.on("data", (data: Buffer) => {
+            const str = data.toString().trim();
+            if (str) console.log(`[Desktop Server] ${str}`);
+        });
+
+        backendProcess.stderr?.on("data", (data: Buffer) => {
+            const str = data.toString().trim();
+            if (str) console.error(`[Desktop Server Error] ${str}`);
+        });
+
+        backendProcess.on("exit", (code: number | null) => {
+            if (code !== 0 && code !== null) {
+                console.error(`Desktop Server exited with code ${code}`);
+            }
+        });
+    } else {
+        console.warn("⚠️ Desktop Server build not found. Skipping auto-start.");
+        console.warn("   Run 'npm run desktop:build' to build the server.");
+    }
+
     // Create HTTP server
-    const httpServer = createServer((req, res) => {
+    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         // Simple health check endpoint
         if (req.url === "/health") {
             res.writeHead(200, { "Content-Type": "application/json" });
@@ -21,9 +125,73 @@ export async function startGatewayServer(port: number = 3000): Promise<{
             return;
         }
 
-        // Default response
-        res.writeHead(200, { "Content-Type": "text/plain" });
-        res.end("OpenBot Gateway Server\n");
+        // Proxy API requests to Backend (prefixed with /server-api)
+        if (req.url && req.url.startsWith("/server-api")) {
+            const options: RequestOptions = {
+                hostname: "localhost",
+                port: backendPort, // Use discovered port
+                path: req.url,
+                method: req.method,
+                headers: req.headers,
+            };
+
+            const proxyReq = httpRequest(options, (proxyRes) => {
+                res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
+                proxyRes.pipe(res, { end: true });
+            });
+
+            proxyReq.on("error", (err) => {
+                console.error(`Proxy error to :${backendPort}`, err);
+                if (!res.headersSent) {
+                    res.writeHead(502, { "Content-Type": "application/json" });
+                    res.end(JSON.stringify({ error: "Bad Gateway", message: "Failed to connect to backend server" }));
+                }
+            });
+
+            req.pipe(proxyReq, { end: true });
+            return;
+        }
+
+        // Serve static files
+        try {
+            const staticDir = join(process.cwd(), "desktop/renderer/dist");
+            // Normalize URL to remove query parameters and ensuring it starts with /
+            const urlPath = req.url?.split("?")[0] || "/";
+
+            // Determine file path
+            let filePath = join(staticDir, urlPath === "/" ? "index.html" : urlPath);
+
+            // Check if file exists
+            try {
+                const stats = await stat(filePath);
+                if (stats.isDirectory()) {
+                    filePath = join(filePath, "index.html");
+                    await stat(filePath); // Check if index.html exists
+                }
+            } catch {
+                // File not found
+                // SPA Fallback: serve index.html for non-API requests accepting HTML
+                if (req.headers.accept?.includes("text/html") && req.method === "GET") {
+                    filePath = join(staticDir, "index.html");
+                } else {
+                    res.writeHead(404, { "Content-Type": "text/plain" });
+                    res.end("Not Found");
+                    return;
+                }
+            }
+
+            // Read and serve file
+            const content = await readFile(filePath);
+            const ext = extname(filePath).toLowerCase();
+            const contentType = MIME_TYPES[ext] || "application/octet-stream";
+
+            res.writeHead(200, { "Content-Type": contentType });
+            res.end(content);
+        } catch (error) {
+            console.error("Static file error:", error);
+            res.writeHead(500, { "Content-Type": "text/plain" });
+            res.end("Internal Server Error");
+        }
     });
 
     // Create WebSocket server
@@ -46,6 +214,12 @@ export async function startGatewayServer(port: number = 3000): Promise<{
     // Cleanup function
     const close = async () => {
         console.log("Closing gateway server...");
+
+        // Stop Desktop Server
+        if (backendProcess) {
+            console.log("Stopping Desktop Server...");
+            backendProcess.kill();
+        }
 
         // Close all WebSocket connections
         wss.clients.forEach((client) => {

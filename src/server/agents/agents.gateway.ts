@@ -7,7 +7,7 @@ import {
     SubscribeMessage,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { AgentsService } from './agents.service';
+import { AgentsService } from './agents.service.js';
 
 @WebSocketGateway({
     cors: {
@@ -18,7 +18,7 @@ import { AgentsService } from './agents.service';
 export class AgentsGateway
     implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
-    server: Server;
+    server!: Server;
 
     private sessionSubscriptions = new Map<string, Map<string, () => void>>();
 
@@ -58,7 +58,7 @@ export class AgentsGateway
         // Subscribe to agent chunks
         const unsubChunk = this.agentsService.addEventListener(
             'agent.chunk',
-            (data) => {
+            (data: any) => {
                 client.emit('agent_chunk', data);
             },
         );
@@ -67,7 +67,7 @@ export class AgentsGateway
         // Subscribe to tool events
         const unsubTool = this.agentsService.addEventListener(
             'agent.tool',
-            (data) => {
+            (data: any) => {
                 client.emit('agent_tool', data);
             },
         );
@@ -76,7 +76,7 @@ export class AgentsGateway
         // Subscribe to message completion
         const unsubComplete = this.agentsService.addEventListener(
             'message_complete',
-            (data) => {
+            (data: any) => {
                 // Ensure we only emit for the subscribed session
                 if (data.sessionId === sessionId) {
                     client.emit('message_complete', data);

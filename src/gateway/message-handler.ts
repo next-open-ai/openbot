@@ -41,6 +41,23 @@ export async function handleMessage(client: GatewayClient, data: Buffer | string
                 result = await handleAgentChat(client, params || {});
                 break;
 
+            case "subscribe_session":
+                // Handle session subscription
+                // Since handleAgentChat manages its own subscription per request,
+                // this might be for listening to async updates.
+                // For now, we just acknowledge it to prevent client errors.
+                // A more robust implementation would hook into agentManager.
+                console.log(`Client ${client.id} subscribed to session ${params.sessionId}`);
+                client.sessionId = params.sessionId; // Store session ID on client
+                result = { status: "subscribed", sessionId: params.sessionId };
+                break;
+
+            case "unsubscribe_session":
+                console.log(`Client ${client.id} unsubscribed from session`);
+                delete client.sessionId;
+                result = { status: "unsubscribed" };
+                break;
+
             default:
                 throw new Error(`Unknown method: ${method}`);
         }

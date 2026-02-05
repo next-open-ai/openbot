@@ -8,6 +8,7 @@ export interface Skill {
     description: string;
     path: string;
     category?: string;
+    source?: 'system' | 'global' | 'workspace';
     metadata?: any;
 }
 
@@ -20,12 +21,17 @@ export class SkillsService {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
         const freebotAgentDir = join(homeDir, '.freebot', 'agent', 'skills');
         const projectSkillsDir = join(process.cwd(), '..', '..', 'skills');
+        // Workspace skills: check for 'skills' folder in current working directory
+        const workspaceSkillsDir = join(process.cwd(), 'skills');
 
+        if (existsSync(projectSkillsDir)) {
+            this.skillPaths.push(projectSkillsDir);
+        }
         if (existsSync(freebotAgentDir)) {
             this.skillPaths.push(freebotAgentDir);
         }
-        if (existsSync(projectSkillsDir)) {
-            this.skillPaths.push(projectSkillsDir);
+        if (existsSync(workspaceSkillsDir)) {
+            this.skillPaths.push(workspaceSkillsDir);
         }
     }
 
@@ -44,7 +50,15 @@ export class SkillsService {
                         const skillMdPath = join(fullPath, 'SKILL.md');
                         if (existsSync(skillMdPath)) {
                             const content = await readFile(skillMdPath, 'utf-8');
-                            const skill = this.parseSkillFile(entry, content, fullPath);
+                            // Determine source
+                            let source: 'system' | 'global' | 'workspace' = 'system';
+                            if (skillPath.includes('.freebot')) {
+                                source = 'global';
+                            } else if (skillPath === join(process.cwd(), 'skills')) {
+                                source = 'workspace';
+                            }
+
+                            const skill = this.parseSkillFile(entry, content, fullPath, source);
                             skills.push(skill);
                         }
                     }
@@ -75,7 +89,7 @@ export class SkillsService {
         }
     }
 
-    private parseSkillFile(name: string, content: string, path: string): Skill {
+    private parseSkillFile(name: string, content: string, path: string, source: 'system' | 'global' | 'workspace' = 'system'): Skill {
         // Extract YAML frontmatter
         const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
         let description = 'No description available';
@@ -100,6 +114,7 @@ export class SkillsService {
             description,
             path,
             category: metadata.category,
+            source,
             metadata,
         };
     }

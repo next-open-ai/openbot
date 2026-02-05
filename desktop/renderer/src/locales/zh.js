@@ -17,6 +17,18 @@ export default {
     configuration: '配置',
     settings: '设置',
   },
+  skills: {
+    sources: {
+      system: '系统内置',
+      global: '全局技能',
+      workspace: '当前工作区',
+    },
+    noSkills: '暂无技能',
+    noSkillsHint: '当前分类下暂无可用技能',
+    noDocumentation: '暂无文档',
+    install: '安装新技能',
+    installHint: '浏览技能市场 (即将推出)',
+  },
   sessions: {
     noSessions: '暂无活动记录',
     noSessionsHint: '创建您的第一个会话以开始',

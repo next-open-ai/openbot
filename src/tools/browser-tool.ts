@@ -95,9 +95,12 @@ export function createBrowserTool(workspaceDir?: string): AgentTool<any> {
         parameters: BrowserToolSchema,
         execute: async (_toolCallId: string, args: unknown) => {
             const params = args as BrowserToolInput;
-            const browser = await getBrowserManager();
-
+            console.log(`[Browser Tool] Executing action: ${params.action}`);
             try {
+                // Ensure browser is ready
+                const browser = await getBrowserManager();
+                console.log(`[Browser Tool] Browser manager ready`);
+
                 switch (params.action) {
                     case "navigate": {
                         if (!params.url) {

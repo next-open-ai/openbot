@@ -12,8 +12,8 @@
       <!-- Grouped Content rendering -->
       <div v-if="contentParts && contentParts.length > 0" class="message-body has-steps">
         <div v-for="(step, index) in groupedParts" :key="index" class="message-step">
-          <!-- Text/Thought Part -->
-          <div v-if="step.text" class="step-thought" v-html="renderMarkdown(step.text)"></div>
+          <!-- Text/Thought Part: Only show if text is not empty string/whitespace -->
+          <div v-if="step.text && step.text.trim().length > 0" class="step-thought" v-html="renderMarkdown(step.text)"></div>
           
           <!-- Tools Part -->
           <div v-if="step.tools.length > 0" class="step-tools">
@@ -26,8 +26,8 @@
         </div>
       </div>
 
-      <!-- Legacy/Fallback rendering -->
-      <div v-else class="message-body">
+      <!-- Legacy/Fallback rendering -- only if content exists -->
+      <div v-else-if="renderedContent && renderedContent.trim() !== ''" class="message-body">
         <div v-html="renderedContent"></div>
         <div v-if="toolCalls && toolCalls.length > 0" class="tool-calls">
           <ToolExecutionCard

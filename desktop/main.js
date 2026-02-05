@@ -1,43 +1,61 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
+const http = require('http');
 
 let mainWindow;
-let serverProcess;
 let gatewayProcess;
+const GATEWAY_PORT = 3000;
 
 // Start OpenBot Gateway
 function startGateway() {
     const gatewayPath = path.join(__dirname, '..', 'dist', 'gateway', 'server.js');
 
     if (process.env.NODE_ENV !== 'production') {
-        // In development, gateway might be running separately
-        console.log('Development mode: Gateway should be started separately');
+        // In development, gateway might be running separately, but we can also spawn it if needed.
+        // For now, let's assume dev runs it separately or we rely on the one spawned by CLI if we run `freebot gateway`
+        console.log('Development mode: Gateway should be started separately or via CLI');
         return;
     }
 
+    console.log('Starting Gateway process...');
     gatewayProcess = spawn('node', [gatewayPath], {
         cwd: path.join(__dirname, '..'),
-        stdio: 'inherit'
+        stdio: 'inherit',
+        env: { ...process.env, PORT: GATEWAY_PORT.toString() }
     });
 }
 
-// Start NestJS server
-function startServer() {
-    const serverPath = path.join(__dirname, 'server', 'dist', 'main.js');
+// Wait for Gateway to be ready
+function waitForGateway() {
+    return new Promise((resolve) => {
+        const check = () => {
+            const req = http.get(`http://localhost:${GATEWAY_PORT}/health`, (res) => {
+                if (res.statusCode === 200) {
+                    resolve();
+                } else {
+                    setTimeout(check, 500);
+                }
+            });
 
-    // In development, the server runs via npm script
-    // In production, we'd run the compiled server
-    if (process.env.NODE_ENV === 'production') {
-        serverProcess = spawn('node', [serverPath], {
-            cwd: path.join(__dirname, 'server'),
-            stdio: 'inherit'
-        });
-    }
-    // In development, server is started separately via npm run dev:server
+            req.on('error', () => {
+                setTimeout(check, 500);
+            });
+
+            req.end();
+        };
+        check();
+    });
 }
 
-function createWindow() {
+async function createWindow() {
+    // Wait for Gateway before showing window
+    if (process.env.NODE_ENV === 'production') {
+        process.stdout.write('Waiting for Gateway...');
+        await waitForGateway();
+        console.log('Gateway is ready!');
+    }
+
     mainWindow = new BrowserWindow({
         width: 1600,
         height: 1000,
@@ -54,14 +72,15 @@ function createWindow() {
         frame: true,
     });
 
-    // Load the Vue.js app
-    // In development, use Vite dev server
-    // In production, use built files
+    // Load the Frontend
+    // In development: Vite dev server (5173)
+    // In production: Gateway static file serving (3000)
     const isDev = process.env.NODE_ENV !== 'production';
     const startUrl = isDev
         ? 'http://localhost:5173'
-        : `file://${path.join(__dirname, 'renderer/dist/index.html')}`;
+        : `http://localhost:${GATEWAY_PORT}`;
 
+    console.log(`Loading URL: ${startUrl}`);
     mainWindow.loadURL(startUrl);
 
     // Show window when ready
@@ -70,7 +89,7 @@ function createWindow() {
     });
 
     // Open DevTools in development
-    if (process.env.NODE_ENV !== 'production') {
+    if (isDev) {
         mainWindow.webContents.openDevTools();
     }
 
@@ -82,7 +101,7 @@ function createWindow() {
 // App lifecycle
 app.whenReady().then(() => {
     startGateway();
-    startServer();
+    // No need to startServer(), gateway does it.
     createWindow();
 
     app.on('activate', () => {
@@ -99,10 +118,8 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
-    if (serverProcess) {
-        serverProcess.kill();
-    }
     if (gatewayProcess) {
+        console.log('Killing Gateway process...');
         gatewayProcess.kill();
     }
 });

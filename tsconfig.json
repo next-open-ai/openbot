@@ -9,7 +9,9 @@
         "skipLibCheck": true,
         "declaration": true,
         "esModuleInterop": true,
-        "incremental": false
+        "incremental": false,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true
     },
     "include": [
         "src/**/*.ts"

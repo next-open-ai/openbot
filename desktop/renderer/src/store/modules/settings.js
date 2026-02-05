@@ -19,10 +19,14 @@ export const useSettingsStore = defineStore('settings', {
         async loadConfig() {
             try {
                 const response = await configAPI.getConfig();
-                this.config = response.data.data;
+                if (response.data && response.data.data) {
+                    this.config = { ...this.config, ...response.data.data };
+                }
                 this.applyTheme(this.config.theme);
             } catch (error) {
                 console.error('Failed to load config:', error);
+                // Apply default theme if config load fails
+                this.applyTheme(this.config.theme);
             }
         },
 

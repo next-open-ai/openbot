@@ -1,5 +1,5 @@
 import { Controller, Get, Put, Body } from '@nestjs/common';
-import { ConfigService, AppConfig } from './config.service';
+import { ConfigService, AppConfig } from './config.service.js';
 
 @Controller('config')
 export class ConfigController {
