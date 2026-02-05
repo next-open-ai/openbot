@@ -41,7 +41,10 @@
         "build": "npm run clean && tsc",
         "start": "node dist/cli.js",
         "run": "node dist/cli.js",
-        "dev": "npm run build && node dist/cli.js"
+        "dev": "npm run build && node dist/cli.js",
+        "desktop:dev": "cd desktop && npm run dev",
+        "desktop:build": "cd desktop && npm run build",
+        "desktop:install": "cd desktop && npm install"
     },
     "engines": {
         "node": ">=20.0.0"

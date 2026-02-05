@@ -78,8 +78,9 @@ async function getBrowserManager(): Promise<BrowserManager> {
 
 /**
  * Create browser automation tool
+ * @param workspaceDir Optional workspace directory for downloads
  */
-export function createBrowserTool(): AgentTool<any> {
+export function createBrowserTool(workspaceDir?: string): AgentTool<any> {
     return {
         name: "browser",
         label: "Browser",
@@ -301,7 +302,7 @@ export function createBrowserTool(): AgentTool<any> {
                         const path = await import("path");
 
                         // Create downloads directory if it doesn't exist
-                        const downloadsDir = path.join(process.cwd(), "downloads");
+                        const downloadsDir = workspaceDir ? path.join(workspaceDir, "downloads") : path.join(process.cwd(), "downloads");
                         try {
                             await fs.mkdir(downloadsDir, { recursive: true });
                         } catch (err) {

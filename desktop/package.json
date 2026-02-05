@@ -1,0 +1,54 @@
+{
+    "name": "@freebot/openbot-desktop",
+    "version": "1.0.0",
+    "description": "OpenBot Desktop - Professional agent management application",
+    "main": "main.js",
+    "scripts": {
+        "dev": "concurrently \"npm run dev:server\" \"npm run dev:renderer\" \"npm run dev:electron\"",
+        "dev:server": "cd server && npm run start:dev",
+        "dev:renderer": "cd renderer && npm run dev",
+        "dev:electron": "sleep 5 && electron .",
+        "build:server": "cd server && npm run build",
+        "build:renderer": "cd renderer && npm run build",
+        "build": "npm run build:server && npm run build:renderer && electron-builder",
+        "postinstall": "cd server && npm install && cd ../renderer && npm install"
+    },
+    "keywords": [
+        "electron",
+        "openbot",
+        "agent",
+        "desktop",
+        "ai"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "concurrently": "^8.2.2",
+        "electron": "^28.1.0",
+        "electron-builder": "^24.9.1",
+        "wait-on": "^7.2.0"
+    },
+    "build": {
+        "appId": "com.freebot.openbot",
+        "productName": "OpenBot Desktop",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "server/dist/**/*",
+            "renderer/dist/**/*",
+            "assets/**/*"
+        ],
+        "mac": {
+            "category": "public.app-category.productivity"
+        },
+        "win": {
+            "target": "nsis"
+        },
+        "linux": {
+            "target": "AppImage"
+        }
+    }
+}

@@ -11,6 +11,14 @@ export function getFreebotAgentDir(): string {
 }
 
 /**
+ * 获取 freebot 工作空间根目录（默认 ~/.freebot/workspace）
+ * 可通过环境变量 FREEBOT_WORKSPACE_DIR 覆盖
+ */
+export function getFreebotWorkspaceDir(): string {
+    return process.env.FREEBOT_WORKSPACE_DIR ?? join(homedir(), ".freebot", "workspace");
+}
+
+/**
  * 确保 agent 目录存在，并创建默认配置文件
  */
 export function ensureDefaultAgentDir(agentDir: string): void {

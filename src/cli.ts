@@ -11,16 +11,15 @@ import { ConfigManager } from "./agent/config-manager.js";
 const require = createRequire(import.meta.url);
 const PKG = require("../package.json") as { version: string };
 
-/** 应用安装目录下的 skills 路径（未传 -s 时使用）；基于 dist/cli.js 所在目录推算包根目录 */
-function getDefaultSkillsDir(): string {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    return join(__dirname, "..", "skills");
-}
+// Based on distillate, the package root is one level up from dist/
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PKG_ROOT = join(__dirname, "..");
 
 async function runAction(
     positionalPrompt: string | undefined,
     opts: {
         skillPath?: string[];
+        workspace?: string; // Restored workspace option
         prompt?: string;
         dryRun?: boolean;
         model?: string;
@@ -31,8 +30,8 @@ async function runAction(
         maxToolTurns?: number;
     },
 ): Promise<void> {
-    const skillPaths =
-        opts.skillPath && opts.skillPath.length > 0 ? opts.skillPath : [getDefaultSkillsDir()];
+    const skillPaths = opts.skillPath || [];
+    const workspace = opts.workspace || "default";
     const prompt = (opts.prompt ?? positionalPrompt ?? "").trim();
 
     if (!prompt) {
@@ -40,21 +39,15 @@ async function runAction(
         process.exit(1);
     }
 
-    const skills: Skill[] = loadSkillsFromPaths(skillPaths);
-    if (skills.length === 0) {
-        console.warn("Warning: 未从给定路径加载到任何 skill，将使用空技能列表运行");
-    } else {
-        console.error(
-            `[freebot] 已加载 ${skills.length} 个 skill: ${skills.map((s) => s.name).join(", ")}`,
-        );
-    }
+    console.error(`[freebot] Using workspace: ${workspace}`);
 
     const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY ?? "";
     if (opts.timing) process.env.FREEBOT_TIMING = "1";
 
     try {
         const result = await run({
-            skills,
+            workspace,
+            skillPaths,
             userPrompt: prompt,
             dryRun: opts.dryRun ?? false,
             model: opts.model ?? "deepseek-chat",
@@ -94,8 +87,9 @@ program
     .version(PKG.version, "-v, --version", "显示版本号")
     .option(
         "-s, --skill-path <paths...>",
-        "Skill 目录或单个 .md 文件路径，可多次指定；不传则使用安装目录下的 skills",
+        "Additional skill paths to load",
     )
+    .option("-w, --workspace <name>", "Workspace name", "default")
     .option("-p, --prompt <text>", "用户提示词（与位置参数二选一）")
     .option("--dry-run", "只输出组装的 system/user 内容，不调用 LLM")
     .option("--model <id>", "模型 ID", "deepseek-chat")

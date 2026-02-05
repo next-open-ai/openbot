@@ -1,0 +1,46 @@
+import { createRouter, createWebHistory } from 'vue-router';
+import Dashboard from '@/views/Dashboard.vue';
+import AgentChat from '@/views/AgentChat.vue';
+import Sessions from '@/views/Sessions.vue';
+import Skills from '@/views/Skills.vue';
+import Settings from '@/views/Settings.vue';
+
+const routes = [
+    {
+        path: '/',
+        name: 'Root',
+        component: AgentChat, // Default to Chat
+    },
+    {
+        path: '/dashboard',
+        name: 'Dashboard',
+        component: Dashboard,
+    },
+    {
+        path: '/chat/:sessionId?',
+        name: 'AgentChat',
+        component: AgentChat,
+    },
+    {
+        path: '/sessions',
+        name: 'Sessions',
+        component: Sessions,
+    },
+    {
+        path: '/skills',
+        name: 'Skills',
+        component: Skills,
+    },
+    {
+        path: '/settings',
+        name: 'Settings',
+        component: Settings,
+    },
+];
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes,
+});
+
+export default router;

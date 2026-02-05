@@ -3,13 +3,21 @@ import {
     AuthStorage,
     DefaultResourceLoader,
     ModelRegistry,
-    SessionManager as CoreSessionManager
+    SessionManager as CoreSessionManager,
+    createReadTool,
+    createWriteTool,
+    createEditTool,
+    createBashTool,
+    createFindTool,
+    createGrepTool,
+    createLsTool
 } from "@mariozechner/pi-coding-agent";
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import { join } from "node:path";
+import { existsSync, mkdirSync } from "node:fs";
 import { createBrowserTool } from "../tools/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
-import { getFreebotAgentDir, ensureDefaultAgentDir } from "./agent-dir.js";
+import { getFreebotAgentDir, getFreebotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
 import { formatSkillsForPrompt } from "./skills.js";
 import type { Skill } from "./skills.js";
 
@@ -18,7 +26,9 @@ registerBuiltInApiProviders();
 
 export interface AgentManagerOptions {
     agentDir?: string;
-    skills?: Skill[];
+    workspace?: string; // Workspace name (e.g. "default", "my-project")
+    skillPaths?: string[]; // Additional skill paths from CLI/Config
+    skills?: Skill[]; // Pre-loaded skills (optional)
 }
 
 /** system prompt 中每个技能描述最大字符数，超出截断以省 token */
@@ -30,18 +40,48 @@ const MAX_SKILL_DESC_IN_PROMPT = 250;
 export class AgentManager {
     private sessions = new Map<string, AgentSession>();
     private agentDir: string;
-    private skills: Skill[] = [];
+    private workspaceDir: string;
+    private skillPaths: string[] = [];
+    private preLoadedSkills: Skill[] = [];
 
     constructor(options: AgentManagerOptions = {}) {
         this.agentDir = options.agentDir || getFreebotAgentDir();
-        this.skills = options.skills || [];
+
+        // Centralized workspace root: ~/.freebot/workspace/
+        const workspaceRoot = getFreebotWorkspaceDir();
+        const workspaceName = options.workspace || "default";
+        this.workspaceDir = join(workspaceRoot, workspaceName);
+
+        this.skillPaths = options.skillPaths || [];
+        this.preLoadedSkills = options.skills || [];
+
+        // Ensure workspace directory exists
+        if (!existsSync(this.workspaceDir)) {
+            mkdirSync(this.workspaceDir, { recursive: true });
+        }
+    }
+
+    /**
+     * Re-configure the manager
+     */
+    public configure(options: AgentManagerOptions): void {
+        if (options.agentDir) this.agentDir = options.agentDir;
+        if (options.workspace) {
+            const workspaceRoot = getFreebotWorkspaceDir();
+            this.workspaceDir = join(workspaceRoot, options.workspace);
+            if (!existsSync(this.workspaceDir)) {
+                mkdirSync(this.workspaceDir, { recursive: true });
+            }
+        }
+        if (options.skillPaths) this.skillPaths = options.skillPaths;
+        if (options.skills) this.preLoadedSkills = options.skills;
     }
 
     /**
      * Build system prompt with skills and browser tool description
      */
-    public buildSystemPrompt(): string {
-        const shortSkills = this.skills.map((s) => ({
+    public buildSystemPrompt(skills: Skill[]): string {
+        const shortSkills = skills.map((s) => ({
             ...s,
             description:
                 s.description.length <= MAX_SKILL_DESC_IN_PROMPT
@@ -75,7 +115,59 @@ For downloads, provide either a direct URL or a selector to click.`;
             browserToolDesc,
             skillsBlock,
         ].filter(Boolean);
-        return parts.join("\n");
+        return parts.join("\n\n");
+    }
+
+    /**
+     * Get the initial context (prompt and skills)
+     */
+    public async getContext(): Promise<{ systemPrompt: string; skills: Skill[] }> {
+        const loader = this.createResourceLoader();
+        await loader.reload();
+        const loadedSkills = loader.getSkills().skills;
+        const systemPrompt = this.buildSystemPrompt(loadedSkills);
+        return { systemPrompt, skills: loadedSkills };
+    }
+
+    private createResourceLoader(): DefaultResourceLoader {
+        const loader = new DefaultResourceLoader({
+            cwd: this.workspaceDir,
+            agentDir: this.agentDir,
+            noSkills: true, // Disable SDK's built-in skills logic to take full control
+            additionalSkillPaths: this.resolveSkillPaths(),
+            systemPromptOverride: (base) => {
+                const loadedSkills = loader.getSkills().skills;
+                const customPrompt = this.buildSystemPrompt(loadedSkills);
+                // We DON'T use base here to avoid inheriting SDK's default system prompt instructions
+                // if they include references to built-ins we don't want.
+                return customPrompt;
+            },
+        });
+        return loader;
+    }
+
+    /**
+     * Resolve all relevant skill paths (Global, Project, Workspace)
+     */
+    private resolveSkillPaths(): string[] {
+        const paths = new Set<string>();
+
+        // 1. Managed skills (Global: ~/.freebot/agent/skills)
+        const managedSkillsDir = join(this.agentDir, "skills");
+        if (existsSync(managedSkillsDir)) paths.add(managedSkillsDir);
+
+        // 2. Extra paths (CLI -s / Config)
+        this.skillPaths.forEach(p => paths.add(p));
+
+        // 3. Project skills (./skills)
+        const projectSkillsDir = join(process.cwd(), "skills");
+        if (existsSync(projectSkillsDir)) paths.add(projectSkillsDir);
+
+        // 4. Workspace skills (./workspace/<name>/skills)
+        const workspaceSkillsDir = join(this.workspaceDir, "skills");
+        if (existsSync(workspaceSkillsDir)) paths.add(workspaceSkillsDir);
+
+        return Array.from(paths);
     }
 
     /**
@@ -130,39 +222,32 @@ For downloads, provide either a direct URL or a selector to click.`;
             return process.env.OPENAI_API_KEY;
         });
 
-        const systemPrompt = this.buildSystemPrompt();
+        const systemPrompt = this.buildSystemPrompt(this.preLoadedSkills);
 
-        const loader = new DefaultResourceLoader({
-            cwd: process.cwd(),
-            systemPromptOverride: (base) => {
-                const parts = [base, systemPrompt].filter(Boolean);
-                console.log("--- DEBUG: SYSTEM PROMPT PARTS ---");
-                parts.forEach((p, i) => console.log(`PART ${i}:\n${p}\n---`));
-                return parts.join("\n\n");
-            },
-        });
+        const loader = this.createResourceLoader();
         await loader.reload();
 
-        console.log("--- DEBUG: FINAL RESOURCES INFO ---");
-        const loadedSkills = loader.getSkills().skills;
-        console.log("SDK Loaded Skills:", loadedSkills.map(s => s.name));
-
-        const appendPrompts = loader.getAppendSystemPrompt();
-        console.log("SDK Append Prompts Count:", appendPrompts.length);
-        appendPrompts.forEach((p, i) => {
-            console.log(`--- APPEND PART ${i} ---`);
-            console.log(p);
-            console.log("------------------------");
-        });
+        const coreTools: Record<string, any> = {
+            read: createReadTool(this.workspaceDir),
+            write: createWriteTool(this.workspaceDir),
+            edit: createEditTool(this.workspaceDir),
+            bash: createBashTool(this.workspaceDir),
+            find: createFindTool(this.workspaceDir),
+            grep: createGrepTool(this.workspaceDir),
+            ls: createLsTool(this.workspaceDir),
+        };
 
         const { session } = await createAgentSession({
+            agentDir: this.agentDir,
             sessionManager: CoreSessionManager.inMemory(),
             authStorage,
             modelRegistry,
-            cwd: process.cwd(),
+            cwd: this.workspaceDir,
             resourceLoader: loader,
-            customTools: [createBrowserTool()],
-        });
+            customTools: [createBrowserTool(this.workspaceDir)],
+            // @ts-ignore - Strictly scope tools to the workspace
+            baseToolsOverride: coreTools,
+        } as any);
 
         // 4. Set model
         const model = modelRegistry.find(provider, modelId);

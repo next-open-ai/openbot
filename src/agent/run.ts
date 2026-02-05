@@ -4,8 +4,10 @@ import type { Skill } from "./skills.js";
 import { AgentManager } from "./agent-manager.js";
 
 export interface RunOptions {
-    /** 技能列表（已加载） */
-    skills: Skill[];
+    /** Workspace name (e.g. "default") */
+    workspace?: string;
+    /** Additional skill paths */
+    skillPaths?: string[];
     /** 用户提示词 */
     userPrompt: string;
     /** 是否仅打印组装后的内容，不调 LLM */
@@ -28,12 +30,10 @@ export interface RunResult {
     dryRun: boolean;
 }
 
-/**
- * 根据技能与提示词运行：使用 AgentManager
- */
 export async function run(options: RunOptions): Promise<RunResult> {
     const {
-        skills,
+        workspace = "default",
+        skillPaths = [],
         userPrompt,
         dryRun: explicitDryRun,
         apiKey,
@@ -42,8 +42,8 @@ export async function run(options: RunOptions): Promise<RunResult> {
         agentDir = getFreebotAgentDir(),
     } = options;
 
-    const manager = new AgentManager({ agentDir, skills });
-    const systemPrompt = manager.buildSystemPrompt();
+    const manager = new AgentManager({ agentDir, workspace, skillPaths });
+    const { systemPrompt } = await manager.getContext();
 
     // Determine dry run
     const dryRun = !!explicitDryRun; // Ensure boolean
@@ -70,13 +70,33 @@ export async function run(options: RunOptions): Promise<RunResult> {
     let assistantContent = "";
 
     session.subscribe((event: AgentSessionEvent) => {
-        if (event.type === "message_update") {
-            const evt = event.assistantMessageEvent;
-            if (evt.type === "text_delta") {
-                assistantContent += evt.delta;
-                process.stdout.write(evt.delta);
-            } else if (evt.type === "thinking_delta") {
-                process.stdout.write(evt.delta);
+        switch (event.type) {
+            case "message_update": {
+                const evt = event.assistantMessageEvent;
+                if (evt.type === "text_delta") {
+                    assistantContent += evt.delta;
+                    process.stdout.write(evt.delta);
+                } else if (evt.type === "thinking_delta") {
+                    process.stdout.write(evt.delta);
+                } else if (evt.type === "error") {
+                    console.error(`\n[model:error] ${evt.error.errorMessage || "Unknown error"}`);
+                }
+                break;
+            }
+            case "message_end": {
+                if (event.message.role === "assistant" && event.message.errorMessage) {
+                    console.error(`\n[message:error] ${event.message.errorMessage}`);
+                }
+                break;
+            }
+            case "tool_execution_start": {
+                console.log(`\n[tool:start] ${event.toolName}(${JSON.stringify(event.args)})`);
+                break;
+            }
+            case "tool_execution_end": {
+                const status = event.isError ? "failed" : "ok";
+                console.log(`[tool:end] ${event.toolName} -> ${status}`);
+                break;
             }
         }
     });
