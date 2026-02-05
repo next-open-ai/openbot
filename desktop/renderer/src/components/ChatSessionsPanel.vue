@@ -2,9 +2,11 @@
   <div class="chat-sessions-panel" :class="{ collapsed: !visible }">
     <div v-show="visible" class="panel-content">
 
-      <button class="btn-new-session" @click="$emit('create')">
-        + {{ t('chat.newSession') }}
-      </button>
+      <div class="panel-header-actions">
+        <button class="btn-new-session" @click="$emit('create')" :title="t('chat.newSession')">
+          + {{ t('chat.newSession') }}
+        </button>
+      </div>
       <div class="sessions-list">
         <button
           v-for="session in sessions"
@@ -23,6 +25,7 @@
 </template>
 
 <script>
+import { useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
 
 export default {
@@ -34,12 +37,14 @@ export default {
   },
   emits: ['create', 'select'],
   setup() {
+    const router = useRouter();
     const { t } = useI18n();
     const sessionTitle = (session) => {
       if (session.title) return session.title;
       const id = session.id || '';
       return id.length > 16 ? id.substring(0, 16) + '…' : id || 'Session';
     };
+
     return { t, sessionTitle };
   },
 };
@@ -81,14 +86,23 @@ export default {
 
 
 
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--glass-border);
+}
+
 .btn-new-session {
-  margin: var(--spacing-md);
+  flex: 1;
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--color-bg-tertiary);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-md);
   color: var(--color-text-primary);
   font-size: var(--font-size-sm);
+  white-space: nowrap;
   cursor: pointer;
   transition: all var(--transition-fast);
   text-align: center;

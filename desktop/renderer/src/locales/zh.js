@@ -5,6 +5,9 @@ export default {
     sending: '发送中…',
     loading: '加载中…',
     viewAll: '查看全部',
+    continue: '继续',
+    details: '详情',
+    delete: '删除',
   },
   nav: {
     dashboard: '仪表盘',
@@ -13,6 +16,12 @@ export default {
     skills: '技能',
     configuration: '配置',
     settings: '设置',
+  },
+  sessions: {
+    noSessions: '暂无活动记录',
+    noSessionsHint: '创建您的第一个会话以开始',
+    deleteConfirm: '确定要删除此会话吗？',
+    manage: '管理会话',
   },
   chat: {
     you: '你',

@@ -11,6 +11,8 @@ export interface AgentSession {
     workspace?: string;
     provider?: string;
     model?: string;
+    title?: string;
+    preview?: string;
 }
 
 export interface ChatMessage {
@@ -188,6 +190,7 @@ export class AgentsService implements OnModuleInit, OnModuleDestroy {
         workspace?: string;
         provider?: string;
         model?: string;
+        title?: string;
     }): Promise<AgentSession> {
         const sessionId = randomUUID();
 
@@ -203,6 +206,8 @@ export class AgentsService implements OnModuleInit, OnModuleDestroy {
             workspace: options?.workspace,
             provider: options?.provider,
             model: options?.model,
+            title: options?.title,
+            preview: '',
         };
 
         this.sessions.set(sessionId, session);
@@ -249,6 +254,21 @@ export class AgentsService implements OnModuleInit, OnModuleDestroy {
         session.lastActiveAt = Date.now();
         session.messageCount++;
         session.status = 'active';
+
+        // Update title and preview if this is the first message
+        if (!session.title || session.messageCount === 1) {
+            const cleanMessage = message.trim();
+            // Title: first sentence or first 50 chars
+            const firstSentence = cleanMessage.split(/[.!?\n]/)[0].substring(0, 50);
+            session.title = firstSentence || 'New Session';
+
+            // Preview: first 100 chars
+            session.preview = cleanMessage.substring(0, 100) + (cleanMessage.length > 100 ? '...' : '');
+        } else if (session.messageCount < 5) {
+            // Update preview occasionally in the beginning to have more context
+            const cleanMessage = message.trim();
+            session.preview = cleanMessage.substring(0, 100) + (cleanMessage.length > 100 ? '...' : '');
+        }
 
         // Clear response buffer for this session
         this.responseBuffers.set(sessionId, '');

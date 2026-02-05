@@ -5,6 +5,9 @@ export default {
     sending: 'Sending…',
     loading: 'Loading…',
     viewAll: 'View All',
+    continue: 'Continue',
+    details: 'Details',
+    delete: 'Delete',
   },
   nav: {
     dashboard: 'Dashboard',
@@ -13,6 +16,12 @@ export default {
     skills: 'Skills',
     configuration: 'Configuration',
     settings: 'Settings',
+  },
+  sessions: {
+    noSessions: 'No Sessions Yet',
+    noSessionsHint: 'Create your first session to get started',
+    deleteConfirm: 'Are you sure you want to delete this session?',
+    manage: 'Manage Sessions',
   },
   chat: {
     you: 'You',

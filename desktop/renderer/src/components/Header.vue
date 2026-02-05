@@ -10,6 +10,15 @@
       >
         {{ sessionsPanelVisible ? '‹' : '›' }}
       </button>
+      <button
+        v-if="isChatRoute"
+        type="button"
+        class="header-btn-sessions"
+        :title="t('sessions.manage')"
+        @click="router.push('/sessions')"
+      >
+        ❖
+      </button>
       <h1 class="page-title">{{ pageTitle }}</h1>
     </div>
     <div class="header-right">
@@ -30,7 +39,7 @@
 
 <script>
 import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useUIStore } from '@/store/modules/ui';
 import { useI18n } from '@/composables/useI18n';
 import ThemeToggle from './ThemeToggle.vue';
@@ -42,6 +51,7 @@ export default {
   },
   setup() {
     const route = useRoute();
+    const router = useRouter();
     const uiStore = useUIStore();
 
     const { t } = useI18n();
@@ -76,6 +86,7 @@ export default {
       isChatRoute,
       sessionsPanelVisible,
       toggleSessionsPanel,
+      router,
 
       t,
     };
