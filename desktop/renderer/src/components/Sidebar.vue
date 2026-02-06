@@ -47,6 +47,7 @@ export default {
 
     const navItems = computed(() => [
       { path: '/chat', label: t('nav.agentChat'), icon: '💬' },
+      { path: '/workspace', label: t('nav.workspace'), icon: '📁' },
       { path: '/skills', label: t('nav.skills'), icon: '🎯' },
     ]);
 

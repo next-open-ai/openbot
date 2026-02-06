@@ -139,9 +139,9 @@ export default {
     });
 
     const getTabDescription = (tabId) => {
-      if (tabId === 'system') return t('skills.sources.systemDesc') || 'Core capabilities built into OpenBot';
-      if (tabId === 'global') return t('skills.sources.globalDesc') || 'Skills available across all workspaces';
-      return t('skills.sources.workspaceDesc') || 'Skills specific to this workspace';
+      if (tabId === 'system') return t('skills.sources.systemDesc');
+      if (tabId === 'global') return t('skills.sources.globalDesc');
+      return t('skills.sources.workspaceDesc');
     };
 
     const getSkillCount = (source) => {
@@ -201,13 +201,14 @@ export default {
 
 <style scoped>
 .skills-view {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
+  width: 100%;
+  min-width: 0;
   height: 100%;
+  min-height: 0;
   display: flex;
   gap: var(--spacing-xl);
-  overflow: hidden; 
+  padding: var(--spacing-lg);
+  overflow: hidden;
 }
 
 /* Sidebar */
@@ -220,8 +221,8 @@ export default {
   border-radius: var(--radius-lg);
   background: var(--color-bg-secondary);
   border: 1px solid var(--glass-border);
-  height: fit-content;
-  min-height: 400px;
+  min-height: 0;
+  align-self: stretch;
 }
 
 .sidebar-header {
@@ -287,12 +288,13 @@ export default {
   color: white;
 }
 
-/* Content Area */
+/* Content Area - fills remaining space */
 .skills-content-wrapper {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
   overflow: hidden;
 }
 
@@ -300,7 +302,7 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: var(--spacing-xl);
+  margin-bottom: var(--spacing-lg);
   flex-shrink: 0;
 }
 
@@ -329,29 +331,32 @@ export default {
   box-shadow: var(--shadow-md);
 }
 
-/* Grid & States */
+/* Grid & States - operating area fills available height */
 .skills-grid-container {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
   overflow-y: auto;
   padding-right: var(--spacing-xs);
-  /* Add padding bottom to avoid cutting off last row shadows */
   padding-bottom: var(--spacing-xl);
 }
 
 .skills-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--spacing-lg);
+  padding-bottom: var(--spacing-md);
 }
 
 .loading-state,
 .empty-state {
+  flex: 1 1 0;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 60%;
   text-align: center;
+  padding: var(--spacing-2xl);
 }
 
 .spinner {

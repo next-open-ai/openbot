@@ -65,25 +65,6 @@ export class AgentsController {
         };
     }
 
-    @Post('sessions/:id/message')
-    async sendMessage(
-        @Param('id') id: string,
-        @Body() body: { message: string },
-    ) {
-        try {
-            await this.agentsService.sendMessage(id, body.message);
-            return {
-                success: true,
-                message: 'Message sent',
-            };
-        } catch (error: any) {
-            throw new HttpException(
-                error.message || 'Failed to send message',
-                HttpStatus.INTERNAL_SERVER_ERROR,
-            );
-        }
-    }
-
     @Get('sessions/:id/history')
     getHistory(@Param('id') id: string) {
         const history = this.agentsService.getMessageHistory(id);
@@ -91,5 +72,17 @@ export class AgentsController {
             success: true,
             data: history,
         };
+    }
+
+    @Post('sessions/:id/messages')
+    appendMessage(
+        @Param('id') id: string,
+        @Body() body: { role: 'user' | 'assistant'; content: string; toolCalls?: any[]; contentParts?: any[] },
+    ) {
+        this.agentsService.appendMessage(id, body.role, body.content, {
+            toolCalls: body.toolCalls,
+            contentParts: body.contentParts,
+        });
+        return { success: true };
     }
 }

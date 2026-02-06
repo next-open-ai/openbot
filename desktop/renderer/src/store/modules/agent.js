@@ -71,13 +71,13 @@ export const useAgentStore = defineStore('agent', {
                 const list = historyResponse?.data?.data ?? historyResponse?.data;
                 this.messages = Array.isArray(list) ? list : [];
 
-                socketService.subscribeToSession(sessionId);
+                await socketService.connectToSession(sessionId);
             } catch (error) {
                 console.error('Failed to select session:', error);
                 if (fallback) {
                     this.currentSession = fallback;
                     this.messages = [];
-                    socketService.subscribeToSession(sessionId);
+                    await socketService.connectToSession(sessionId);
                 } else {
                     throw error;
                 }
@@ -95,19 +95,10 @@ export const useAgentStore = defineStore('agent', {
             // Lazy Session Creation: If no current session, create one now
             if (!this.currentSession) {
                 try {
-                    // Title limited to 50 chars
                     const title = message.trim().substring(0, 50);
                     const session = await this.createSession({ title });
-
-                    // Set as current session immediately so UI updates
                     this.currentSession = session;
-
-                    // CRITICAL: Subscribe to socket for this new session to receive stream
-                    // Await subscription to avoid race condition with sendMessage
-                    await socketService.subscribeToSession(session.id);
-
-                    // We need to notify the router to update the URL (this is tricky from store, 
-                    // usually better handled in component, but we can return the session to component)
+                    await socketService.connectToSession(session.id);
                 } catch (error) {
                     console.error('Failed to create lazy session:', error);
                     return;
@@ -115,12 +106,10 @@ export const useAgentStore = defineStore('agent', {
             }
 
             try {
-                // Ensure we are subscribed if session already existed
                 if (this.currentSession && socketService.currentSessionId !== this.currentSession.id) {
-                    await socketService.subscribeToSession(this.currentSession.id);
+                    await socketService.connectToSession(this.currentSession.id);
                 }
 
-                // Add user message immediately
                 const userMessage = {
                     id: Date.now().toString(),
                     role: 'user',
@@ -129,14 +118,16 @@ export const useAgentStore = defineStore('agent', {
                 };
                 this.messages.push(userMessage);
 
-                // Reset streaming state
                 this.currentMessage = '';
                 this.currentStreamParts = [];
                 this.isStreaming = true;
                 this.toolExecutions = [];
 
-                // Send to backend
-                await agentAPI.sendMessage(this.currentSession.id, message);
+                // Persist user message to NestJS (for history)
+                agentAPI.appendMessage(this.currentSession.id, 'user', message).catch(() => {});
+
+                // Send to agent via Gateway WebSocket (no NestJS in path)
+                await socketService.sendMessage(this.currentSession.id, message);
             } catch (error) {
                 console.error('Failed to send message:', error);
                 this.isStreaming = false;
@@ -212,20 +203,23 @@ export const useAgentStore = defineStore('agent', {
 
         handleMessageComplete(data) {
             if (data.sessionId === this.currentSession?.id) {
-                // Add assistant message
-                if (this.currentMessage || data.content) {
+                const content = this.currentMessage || data.content || '';
+                if (content || this.toolExecutions.length > 0) {
                     const assistantMessage = {
                         id: Date.now().toString(),
                         role: 'assistant',
-                        content: this.currentMessage || data.content,
+                        content,
                         timestamp: Date.now(),
                         toolCalls: [...this.toolExecutions],
-                        contentParts: [...this.currentStreamParts] // Persist structure
+                        contentParts: [...this.currentStreamParts],
                     };
                     this.messages.push(assistantMessage);
+                    agentAPI.appendMessage(this.currentSession.id, 'assistant', content, {
+                        toolCalls: assistantMessage.toolCalls,
+                        contentParts: assistantMessage.contentParts,
+                    }).catch(() => {});
                 }
 
-                // Reset state
                 this.currentMessage = '';
                 this.currentStreamParts = [];
                 this.isStreaming = false;

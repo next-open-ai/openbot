@@ -3,6 +3,7 @@ import Dashboard from '@/views/Dashboard.vue';
 import AgentChat from '@/views/AgentChat.vue';
 import Sessions from '@/views/Sessions.vue';
 import Skills from '@/views/Skills.vue';
+import Workspace from '@/views/Workspace.vue';
 import Settings from '@/views/Settings.vue';
 
 const routes = [
@@ -30,6 +31,11 @@ const routes = [
         path: '/skills',
         name: 'Skills',
         component: Skills,
+    },
+    {
+        path: '/workspace',
+        name: 'Workspace',
+        component: Workspace,
     },
     {
         path: '/settings',

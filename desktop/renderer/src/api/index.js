@@ -15,8 +15,9 @@ export const agentAPI = {
     getSessions: () => apiClient.get('/agents/sessions'),
     getSession: (id) => apiClient.get(`/agents/sessions/${id}`),
     deleteSession: (id) => apiClient.delete(`/agents/sessions/${id}`),
-    sendMessage: (id, message) => apiClient.post(`/agents/sessions/${id}/message`, { message }),
     getHistory: (id) => apiClient.get(`/agents/sessions/${id}/history`),
+    appendMessage: (id, role, content, options = {}) =>
+        apiClient.post(`/agents/sessions/${id}/messages`, { role, content, ...options }),
 };
 
 // Skills API
@@ -32,6 +33,22 @@ export const configAPI = {
     updateConfig: (updates) => apiClient.put('/config', updates),
     getProviders: () => apiClient.get('/config/providers'),
     getModels: (provider) => apiClient.get(`/config/providers/${provider}/models`),
+};
+
+// Workspace API
+export const workspaceAPI = {
+    listWorkspaces: () => apiClient.get('/workspace'),
+    getCurrentWorkspace: () => apiClient.get('/workspace/current'),
+    listDocuments: (workspace, path = '') =>
+        apiClient.get('/workspace/documents', { params: { workspace, path } }),
+    fileServeUrl: (workspace, path, download = false) => {
+        const base = apiClient.defaults.baseURL || '/server-api';
+        const params = new URLSearchParams({ workspace, path });
+        if (download) params.set('download', '1');
+        return `${base}/workspace/files/serve?${params.toString()}`;
+    },
+    deleteDocument: (workspace, path) =>
+        apiClient.delete('/workspace/files', { params: { workspace, path } }),
 };
 
 export default apiClient;

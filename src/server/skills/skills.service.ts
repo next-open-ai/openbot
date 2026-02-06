@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readdir, readFile, stat } from 'fs/promises';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { existsSync } from 'fs';
 
 export interface Skill {
@@ -12,33 +12,39 @@ export interface Skill {
     metadata?: any;
 }
 
+/** 技能目录与来源：全局=~/.freebot/agent/skills，系统=项目根/skills，工作区=~/.freebot/workspace/xxx/skills */
 @Injectable()
 export class SkillsService {
-    private skillPaths: string[] = [];
+    /** 待扫描的目录列表 */
+    private skillPaths: Array<{ path: string; source: 'system' | 'global' | 'workspace' }> = [];
 
     constructor() {
-        // Initialize skill paths
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        const freebotAgentDir = join(homeDir, '.freebot', 'agent', 'skills');
-        const projectSkillsDir = join(process.cwd(), '..', '..', 'skills');
-        // Workspace skills: check for 'skills' folder in current working directory
-        const workspaceSkillsDir = join(process.cwd(), 'skills');
+        const cwd = process.cwd();
+        const workspaceName = process.env.FREEBOT_WORKSPACE || 'default';
 
-        if (existsSync(projectSkillsDir)) {
-            this.skillPaths.push(projectSkillsDir);
+        // 全局技能：~/.freebot/agent/skills
+        const globalSkillsDir = resolve(homeDir, '.freebot', 'agent', 'skills');
+        // 系统技能：当前项目代码根目录下的 skills
+        const systemSkillsDir = resolve(cwd, 'skills');
+        // 工作区技能：~/.freebot/workspace/<name>/skills
+        const workspaceSkillsDir = resolve(homeDir, '.freebot', 'workspace', workspaceName, 'skills');
+
+        if (existsSync(globalSkillsDir)) {
+            this.skillPaths.push({ path: globalSkillsDir, source: 'global' });
         }
-        if (existsSync(freebotAgentDir)) {
-            this.skillPaths.push(freebotAgentDir);
+        if (existsSync(systemSkillsDir)) {
+            this.skillPaths.push({ path: systemSkillsDir, source: 'system' });
         }
         if (existsSync(workspaceSkillsDir)) {
-            this.skillPaths.push(workspaceSkillsDir);
+            this.skillPaths.push({ path: workspaceSkillsDir, source: 'workspace' });
         }
     }
 
     async getSkills(): Promise<Skill[]> {
         const skills: Skill[] = [];
 
-        for (const skillPath of this.skillPaths) {
+        for (const { path: skillPath, source } of this.skillPaths) {
             try {
                 const entries = await readdir(skillPath);
 
@@ -50,14 +56,6 @@ export class SkillsService {
                         const skillMdPath = join(fullPath, 'SKILL.md');
                         if (existsSync(skillMdPath)) {
                             const content = await readFile(skillMdPath, 'utf-8');
-                            // Determine source
-                            let source: 'system' | 'global' | 'workspace' = 'system';
-                            if (skillPath.includes('.freebot')) {
-                                source = 'global';
-                            } else if (skillPath === join(process.cwd(), 'skills')) {
-                                source = 'workspace';
-                            }
-
                             const skill = this.parseSkillFile(entry, content, fullPath, source);
                             skills.push(skill);
                         }

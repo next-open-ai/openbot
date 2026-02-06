@@ -1,4 +1,7 @@
-import { io } from 'socket.io-client';
+/**
+ * WebSocket service: full-duplex connection to Gateway.
+ * All agent conversation (send message + receive stream) goes through this single connection.
+ */
 
 class SocketService {
     constructor() {
@@ -10,47 +13,10 @@ class SocketService {
         this.pendingRequests = new Map(); // Map<id, {resolve, reject}>
     }
 
-    // ... (connect/etc remain same) ...
-    // Note: I will need to update handleMessage to process responses too.
-
-    handleMessage(message) {
-        // Handle Responses
-        if (message.type === 'response' && message.id) {
-            const pending = this.pendingRequests.get(message.id);
-            if (pending) {
-                this.pendingRequests.delete(message.id);
-                if (message.error) {
-                    pending.reject(new Error(message.error.message));
-                } else {
-                    pending.resolve(message.result);
-                }
-            }
-            return;
-        }
-
-        // Gateway sends: { type: 'event', event: 'name', payload: ... }
-        if (message.type === 'event') {
-            const { event, payload } = message;
-
-            // Map backend events to frontend events
-            // agent.chunk (backend) -> agent_chunk (frontend store expects)
-            const eventMap = {
-                'agent.chunk': 'agent_chunk',
-                'agent.tool': 'agent_tool',
-                'message_complete': 'message_complete'
-            };
-
-            const mappedEvent = eventMap[event] || event;
-            this.emit(mappedEvent, payload);
-        }
-    }
-
-    // ...
-
     /**
-     * Send request and wait for response
+     * Send request and wait for response (used for connect, subscribe_session, agent.chat).
      */
-    call(method, params) {
+    call(method, params, timeoutMs = 10000) {
         return new Promise((resolve, reject) => {
             if (this.socket?.readyState !== WebSocket.OPEN) {
                 reject(new Error('WebSocket not connected'));
@@ -62,7 +28,7 @@ class SocketService {
                 type: 'request',
                 id,
                 method,
-                params
+                params,
             };
 
             this.pendingRequests.set(id, { resolve, reject });
@@ -70,13 +36,13 @@ class SocketService {
             try {
                 this.socket.send(JSON.stringify(request));
 
-                // Timeout after 10s
-                setTimeout(() => {
+                const timer = setTimeout(() => {
                     if (this.pendingRequests.has(id)) {
                         this.pendingRequests.delete(id);
                         reject(new Error('Request timeout'));
                     }
-                }, 10000);
+                }, timeoutMs);
+                this.pendingRequests.get(id).timer = timer;
             } catch (err) {
                 this.pendingRequests.delete(id);
                 reject(err);
@@ -84,59 +50,117 @@ class SocketService {
         });
     }
 
-    async subscribeToSession(sessionId) {
-        this.currentSessionId = sessionId;
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            console.log(`Subscribing to session ${sessionId}`);
-            await this.call('subscribe_session', { sessionId });
+    handleMessage(message) {
+        // Response to a previous request
+        if (message.type === 'response' && message.id) {
+            const pending = this.pendingRequests.get(message.id);
+            if (pending) {
+                this.pendingRequests.delete(message.id);
+                if (pending.timer) clearTimeout(pending.timer);
+                if (message.error) {
+                    pending.reject(new Error(message.error.message || 'Request failed'));
+                } else {
+                    pending.resolve(message.result);
+                }
+            }
+            return;
+        }
+
+        // Event from Gateway (agent.chunk, agent.tool, message_complete)
+        if (message.type === 'event') {
+            const { event, payload } = message;
+            const eventMap = {
+                'agent.chunk': 'agent_chunk',
+                'agent.tool': 'agent_tool',
+                'message_complete': 'message_complete',
+            };
+            const mappedEvent = eventMap[event] || event;
+            this.emit(mappedEvent, payload);
         }
     }
 
+    /**
+     * Connect to Gateway and authenticate with sessionId.
+     * Call this when opening a session so subsequent agent.chat is allowed.
+     */
+    async connectToSession(sessionId) {
+        this.currentSessionId = sessionId;
+        await this.whenReady();
+        if (this.socket?.readyState !== WebSocket.OPEN) {
+            throw new Error('WebSocket not connected');
+        }
+        await this.call('connect', { sessionId });
+        await this.call('subscribe_session', { sessionId });
+    }
+
+    /**
+     * Send user message to agent via Gateway (full-duplex: no NestJS in path).
+     */
+    async sendMessage(sessionId, message) {
+        return this.call('agent.chat', { sessionId, message }, 120000);
+    }
+
     async unsubscribeFromSession() {
-        this.currentSessionId = null;
         if (this.socket?.readyState === WebSocket.OPEN) {
-            console.log('Unsubscribing from session');
             await this.call('unsubscribe_session');
         }
+        this.currentSessionId = null;
+    }
+
+    /**
+     * Resolve when WebSocket is open (for use before connectToSession / sendMessage).
+     */
+    whenReady() {
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            const check = () => {
+                if (this.socket?.readyState === WebSocket.OPEN) {
+                    resolve();
+                    return;
+                }
+                if (this.socket?.readyState === WebSocket.CLOSED || this.socket?.readyState === WebSocket.CLOSING) {
+                    resolve(); // will reject in call() anyway
+                    return;
+                }
+                setTimeout(check, 50);
+            };
+            check();
+        });
     }
 
     connect() {
         if (this.socket?.readyState === WebSocket.OPEN) return;
 
-        // Connect to Gateway (port 3000)
-        // Development: ws://localhost:3000
-        // Production: Window location (since served by Gateway)
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let host = window.location.host;
-
-        // In dev (vite on 5173), connect to 3000
         if (window.location.hostname === 'localhost' && window.location.port === '5173') {
             host = 'localhost:3000';
         }
-
         const url = `${protocol}//${host}`;
-        console.log('Connecting to WebSocket:', url);
+        console.log('Connecting to Gateway WebSocket:', url);
 
         try {
             this.socket = new WebSocket(url);
 
             this.socket.onopen = () => {
-                console.log('✅ Connected to backend WebSocket');
+                console.log('✅ Connected to Gateway');
                 this.reconnectAttempts = 0;
-
-                // Re-subscribe if we have an active session
                 if (this.currentSessionId) {
-                    this.subscribeToSession(this.currentSessionId);
+                    this.connectToSession(this.currentSessionId).catch((e) =>
+                        console.warn('Re-subscribe after reconnect failed', e)
+                    );
                 }
             };
 
             this.socket.onclose = () => {
-                console.log('❌ Disconnected from backend WebSocket');
+                console.log('❌ Disconnected from Gateway');
                 this.scheduleReconnect();
             };
 
-            this.socket.onerror = (error) => {
-                console.error('WebSocket error:', error);
+            this.socket.onerror = (err) => {
+                console.error('WebSocket error:', err);
             };
 
             this.socket.onmessage = (event) => {
@@ -147,7 +171,6 @@ class SocketService {
                     console.error('Failed to parse WebSocket message:', error);
                 }
             };
-
         } catch (error) {
             console.error('Failed to create WebSocket:', error);
             this.scheduleReconnect();
@@ -161,59 +184,17 @@ class SocketService {
         }
     }
 
-    handleMessage(message) {
-        // Gateway sends: { type: 'event', event: 'name', payload: ... }
-        if (message.type === 'event') {
-            const { event, payload } = message;
-
-            // Map backend events to frontend events
-            // agent.chunk (backend) -> agent_chunk (frontend store expects)
-            const eventMap = {
-                'agent.chunk': 'agent_chunk',
-                'agent.tool': 'agent_tool', // Assuming backend sends agent.tool
-                'message_complete': 'message_complete'
-            };
-
-            const mappedEvent = eventMap[event] || event;
-            this.emit(mappedEvent, payload);
-        }
-    }
-
     disconnect() {
         if (this.socket) {
             this.socket.close();
             this.socket = null;
             this.currentSessionId = null;
         }
-    }
-
-    subscribeToSession(sessionId) {
-        this.currentSessionId = sessionId;
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            console.log(`Subscribing to session ${sessionId}`);
-            this.send('subscribe_session', { sessionId });
-        }
-    }
-
-    unsubscribeFromSession() {
-        this.currentSessionId = null;
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            console.log('Unsubscribing from session');
-            this.send('unsubscribe_session');
-        }
-    }
-
-    send(method, params) {
-        if (this.socket?.readyState === WebSocket.OPEN) {
-            // Gateway request format
-            const request = {
-                type: 'request',
-                id: crypto.randomUUID(),
-                method,
-                params
-            };
-            this.socket.send(JSON.stringify(request));
-        }
+        this.pendingRequests.forEach((p) => {
+            if (p.timer) clearTimeout(p.timer);
+            p.reject(new Error('Disconnected'));
+        });
+        this.pendingRequests.clear();
     }
 
     on(event, callback) {
@@ -221,21 +202,15 @@ class SocketService {
             this.listeners.set(event, new Set());
         }
         this.listeners.get(event).add(callback);
-
-        // Return unsubscribe function
         return () => {
             const callbacks = this.listeners.get(event);
-            if (callbacks) {
-                callbacks.delete(callback);
-            }
+            if (callbacks) callbacks.delete(callback);
         };
     }
 
     emit(event, data) {
         const callbacks = this.listeners.get(event);
-        if (callbacks) {
-            callbacks.forEach(callback => callback(data));
-        }
+        if (callbacks) callbacks.forEach((cb) => cb(data));
     }
 }
 
