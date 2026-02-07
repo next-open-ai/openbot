@@ -15,7 +15,9 @@
         :class="{ active: isActive(item.path) }"
         :title="item.label"
       >
-        <span class="nav-icon">{{ item.icon }}</span>
+        <span class="nav-icon" aria-hidden="true">
+          <component :is="item.iconComponent" />
+        </span>
         <span class="nav-label">{{ item.label }}</span>
       </router-link>
     </nav>
@@ -27,7 +29,9 @@
         :class="{ active: isActive('/settings') }"
         :title="t('nav.settings')"
       >
-        <span class="nav-icon">⚙️</span>
+        <span class="nav-icon" aria-hidden="true">
+          <IconSettings />
+        </span>
         <span class="nav-label">{{ t('nav.settings') }}</span>
       </router-link>
     </div>
@@ -38,24 +42,26 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
+import IconChat from '@/components/icons/IconChat.vue';
+import IconAgents from '@/components/icons/IconAgents.vue';
+import IconSkills from '@/components/icons/IconSkills.vue';
+import IconSettings from '@/components/icons/IconSettings.vue';
 
 export default {
   name: 'Sidebar',
+  components: { IconChat, IconAgents, IconSkills, IconSettings },
   setup() {
     const route = useRoute();
     const { t } = useI18n();
 
     const navItems = computed(() => [
-      { path: '/chat', label: t('nav.agentChat'), icon: '💬' },
-      { path: '/workspace', label: t('nav.workspace'), icon: '📁' },
-      { path: '/skills', label: t('nav.skills'), icon: '🎯' },
+      { path: '/chat', label: t('nav.agentChat'), iconComponent: IconChat },
+      { path: '/agents', label: t('nav.agents'), iconComponent: IconAgents },
+      { path: '/skills', label: t('nav.skills'), iconComponent: IconSkills },
     ]);
 
     const isActive = (path) => {
-      // Special case for dashboard
       if (path === '/') return route.path === '/';
-      
-      // Match starts with for other routes
       return route.path.startsWith(path);
     };
 
@@ -155,8 +161,12 @@ export default {
 }
 
 .nav-icon {
-  font-size: 1.25rem;
-  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  line-height: 0;
 }
 
 .nav-label {

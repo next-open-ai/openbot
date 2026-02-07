@@ -112,13 +112,14 @@ export class AgentsService {
     }): Promise<AgentSession> {
         const sessionId = randomUUID();
         const now = Date.now();
+        const workspace = options?.workspace ?? 'default';
         const session: AgentSession = {
             id: sessionId,
             createdAt: now,
             lastActiveAt: now,
             messageCount: 0,
             status: 'idle',
-            workspace: options?.workspace,
+            workspace,
             provider: options?.provider,
             model: options?.model,
             title: options?.title,
@@ -133,7 +134,7 @@ export class AgentsService {
                 session.lastActiveAt,
                 session.messageCount,
                 session.status,
-                session.workspace ?? null,
+                workspace,
                 session.provider ?? null,
                 session.model ?? null,
                 session.title ?? null,

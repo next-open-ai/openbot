@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param } from '@nestjs/common';
 import { ConfigService, AppConfig } from './config.service.js';
 
 @Controller('config')
@@ -33,7 +33,7 @@ export class ConfigController {
     }
 
     @Get('providers/:provider/models')
-    async getModels(@Body('provider') provider: string) {
+    async getModels(@Param('provider') provider: string) {
         const models = await this.configService.getModels(provider);
         return {
             success: true,

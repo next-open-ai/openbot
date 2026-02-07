@@ -4,6 +4,8 @@ import AgentChat from '@/views/AgentChat.vue';
 import Sessions from '@/views/Sessions.vue';
 import Skills from '@/views/Skills.vue';
 import Workspace from '@/views/Workspace.vue';
+import Agents from '@/views/Agents.vue';
+import AgentDetail from '@/views/AgentDetail.vue';
 import Settings from '@/views/Settings.vue';
 
 const routes = [
@@ -31,6 +33,16 @@ const routes = [
         path: '/skills',
         name: 'Skills',
         component: Skills,
+    },
+    {
+        path: '/agents',
+        name: 'Agents',
+        component: Agents,
+    },
+    {
+        path: '/agents/:id',
+        name: 'AgentDetail',
+        component: AgentDetail,
     },
     {
         path: '/workspace',

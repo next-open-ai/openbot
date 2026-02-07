@@ -30,7 +30,8 @@ export const useAgentStore = defineStore('agent', {
 
         async createSession(options = {}) {
             try {
-                const response = await agentAPI.createSession(options);
+                const payload = { workspace: 'default', ...options };
+                const response = await agentAPI.createSession(payload);
                 const session = response.data.data;
                 this.sessions.push(session);
                 return session;

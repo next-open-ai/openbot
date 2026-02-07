@@ -20,11 +20,25 @@ export const agentAPI = {
         apiClient.post(`/agents/sessions/${id}/messages`, { role, content, ...options }),
 };
 
+// Agent config (智能体配置) API
+export const agentConfigAPI = {
+    listAgents: () => apiClient.get('/agent-config'),
+    getAgent: (id) => apiClient.get(`/agent-config/${id}`),
+    createAgent: (body) => apiClient.post('/agent-config', body),
+    updateAgent: (id, body) => apiClient.put(`/agent-config/${id}`, body),
+    deleteAgent: (id) => apiClient.delete(`/agent-config/${id}`),
+};
+
 // Skills API
 export const skillsAPI = {
-    getSkills: () => apiClient.get('/skills'),
+    getSkills: (workspace) =>
+        apiClient.get('/skills', workspace ? { params: { workspace } } : {}),
     getSkill: (name) => apiClient.get(`/skills/${name}`),
-    getSkillContent: (name) => apiClient.get(`/skills/${name}/content`),
+    getSkillContent: (name, workspace) =>
+        apiClient.get(`/skills/${name}/content`, workspace ? { params: { workspace } } : {}),
+    addSkill: (body) => apiClient.post('/skills', body),
+    deleteSkill: (workspace, name) =>
+        apiClient.delete(`/skills/${encodeURIComponent(name)}`, { params: { workspace } }),
 };
 
 // Config API
