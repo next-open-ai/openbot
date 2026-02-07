@@ -9,6 +9,12 @@ export interface AppConfig {
     defaultModel: string;
     defaultWorkspace: string;
     theme: 'light' | 'dark';
+    /** 同时存在的聊天 AgentSession 上限，超过时淘汰最久未用的 */
+    maxAgentSessions?: number;
+    /** 登录用户名，未配置时使用缺省（与缺省密码 123456 搭配） */
+    loginUsername?: string;
+    /** 登录密码，未配置时使用缺省 123456 */
+    loginPassword?: string;
     providers: {
         [key: string]: {
             apiKey?: string;
@@ -43,6 +49,7 @@ export class ConfigService {
             defaultModel: 'deepseek-chat',
             defaultWorkspace: 'default',
             theme: 'dark',
+            maxAgentSessions: 5,
             providers: {},
         };
     }

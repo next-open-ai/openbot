@@ -3,6 +3,7 @@ import { agentManager } from "../../agent/agent-manager.js";
 import { getExperienceContextForUserMessage } from "../../memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
+import { getDesktopConfig } from "../desktop-config.js";
 
 /**
  * Broadcast message to all clients subscribed to a session
@@ -36,8 +37,9 @@ export async function handleAgentChat(
 
     console.log(`Agent chat request for session ${targetSessionId}: ${message.substring(0, 50)}...`);
 
-    // Get or create agent session
-    const session = await agentManager.getOrCreateSession(targetSessionId);
+    // Get or create agent session（超过上限时淘汰最久未用的）
+    const { maxAgentSessions } = getDesktopConfig();
+    const session = await agentManager.getOrCreateSession(targetSessionId, { maxSessions: maxAgentSessions });
 
     // Set up event listener for streaming
     const unsubscribe = session.subscribe((event: any) => {

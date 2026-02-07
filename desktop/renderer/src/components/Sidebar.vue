@@ -45,11 +45,13 @@ import { useI18n } from '@/composables/useI18n';
 import IconChat from '@/components/icons/IconChat.vue';
 import IconAgents from '@/components/icons/IconAgents.vue';
 import IconSkills from '@/components/icons/IconSkills.vue';
+import IconTasks from '@/components/icons/IconTasks.vue';
+import IconWorkResults from '@/components/icons/IconWorkResults.vue';
 import IconSettings from '@/components/icons/IconSettings.vue';
 
 export default {
   name: 'Sidebar',
-  components: { IconChat, IconAgents, IconSkills, IconSettings },
+  components: { IconChat, IconAgents, IconSkills, IconTasks, IconWorkResults, IconSettings },
   setup() {
     const route = useRoute();
     const { t } = useI18n();
@@ -58,6 +60,8 @@ export default {
       { path: '/chat', label: t('nav.agentChat'), iconComponent: IconChat },
       { path: '/agents', label: t('nav.agents'), iconComponent: IconAgents },
       { path: '/skills', label: t('nav.skills'), iconComponent: IconSkills },
+      { path: '/tasks', label: t('nav.tasks'), iconComponent: IconTasks },
+      { path: '/work-results', label: t('nav.workResults'), iconComponent: IconWorkResults },
     ]);
 
     const isActive = (path) => {
@@ -136,28 +140,32 @@ export default {
   width: 44px;
   height: 44px;
   padding: 0;
-  border-radius: var(--radius-md);
+  border-radius: 12px;
   color: var(--color-text-secondary);
   text-decoration: none;
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-base), color var(--transition-base), box-shadow var(--transition-fast);
   position: relative;
 }
 
-.nav-item:hover,
+.nav-item:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-accent-primary);
+}
+
 .nav-item.active {
   background: var(--color-bg-elevated);
   color: var(--color-accent-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .nav-item.active::after {
   content: '';
   position: absolute;
-  left: -10px;
-  width: 4px;
-  height: 20px;
+  left: -8px;
+  width: 3px;
+  height: 18px;
   background: var(--color-accent-primary);
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 3px 3px 0;
 }
 
 .nav-icon {

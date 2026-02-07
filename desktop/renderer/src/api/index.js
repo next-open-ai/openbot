@@ -49,6 +49,31 @@ export const configAPI = {
     getModels: (provider) => apiClient.get(`/config/providers/${provider}/models`),
 };
 
+// Auth API（登录）
+export const authAPI = {
+    login: (username, password) => apiClient.post('/auth/login', { username, password }),
+};
+
+// Users API（用户管理）
+export const usersAPI = {
+    list: () => apiClient.get('/users'),
+    create: (username, password) => apiClient.post('/users', { username, password }),
+    update: (id, updates) => apiClient.put(`/users/${id}`, updates),
+    delete: (id) => apiClient.delete(`/users/${id}`),
+};
+
+// Tasks API (定时任务)
+export const tasksAPI = {
+    list: () => apiClient.get('/tasks'),
+    get: (id) => apiClient.get(`/tasks/${id}`),
+    create: (body) => apiClient.post('/tasks', body),
+    update: (id, body) => apiClient.put(`/tasks/${id}`, body),
+    delete: (id) => apiClient.delete(`/tasks/${id}`),
+    listExecutions: (taskId) => apiClient.get(`/tasks/${taskId}/executions`),
+    getExecution: (eid) => apiClient.get(`/tasks/executions/${eid}`),
+    clearExecutions: (taskId) => apiClient.delete(`/tasks/${taskId}/executions`),
+};
+
 // Workspace API
 export const workspaceAPI = {
     listWorkspaces: () => apiClient.get('/workspace'),

@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import { agentManager } from '../../agent/agent-manager.js';
 import { DatabaseService } from '../database/database.service.js';
 
+export type SessionType = 'scheduled' | 'chat';
+
 export interface AgentSession {
     id: string;
     createdAt: number;
@@ -14,6 +16,7 @@ export interface AgentSession {
     model?: string;
     title?: string;
     preview?: string;
+    type?: SessionType;
 }
 
 export interface ChatMessage {
@@ -36,6 +39,7 @@ interface SessionRow {
     model: string | null;
     title: string | null;
     preview: string | null;
+    type?: string | null;
 }
 
 interface MessageRow {
@@ -85,6 +89,7 @@ export class AgentsService {
             model: r.model ?? undefined,
             title: r.title ?? undefined,
             preview: r.preview ?? undefined,
+            type: (r.type === 'scheduled' || r.type === 'chat' ? r.type : 'chat') as SessionType,
         };
     }
 
@@ -105,12 +110,18 @@ export class AgentsService {
     }
 
     async createSession(options?: {
+        id?: string;
         workspace?: string;
         provider?: string;
         model?: string;
         title?: string;
+        type?: SessionType;
     }): Promise<AgentSession> {
-        const sessionId = randomUUID();
+        const sessionId = options?.id ?? randomUUID();
+        const sessionType = options?.type ?? 'chat';
+        const existing = this.getSession(sessionId);
+        if (existing) return existing;
+
         const now = Date.now();
         const workspace = options?.workspace ?? 'default';
         const session: AgentSession = {
@@ -122,12 +133,13 @@ export class AgentsService {
             workspace,
             provider: options?.provider,
             model: options?.model,
-            title: options?.title,
+            title: options?.title ?? undefined,
             preview: '',
+            type: sessionType,
         };
         this.db.run(
-            `INSERT INTO sessions (id, created_at, last_active_at, message_count, status, workspace, provider, model, title, preview)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO sessions (id, created_at, last_active_at, message_count, status, workspace, provider, model, title, preview, type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 session.id,
                 session.createdAt,
@@ -139,9 +151,33 @@ export class AgentsService {
                 session.model ?? null,
                 session.title ?? null,
                 session.preview ?? null,
+                sessionType,
             ],
         );
         return session;
+    }
+
+    /** 获取或创建会话（指定 id 时复用同一会话，用于定时任务固定 sessionId） */
+    async getOrCreateSession(
+        sessionId: string,
+        options?: { workspace?: string; title?: string; type?: SessionType },
+    ): Promise<AgentSession> {
+        const existing = this.getSession(sessionId);
+        if (existing) {
+            const now = Date.now();
+            const title = options?.title ?? existing.title;
+            this.db.run(
+                'UPDATE sessions SET last_active_at = ?, title = ? WHERE id = ?',
+                [now, title ?? null, sessionId],
+            );
+            return { ...existing, lastActiveAt: now, title };
+        }
+        return this.createSession({
+            id: sessionId,
+            workspace: options?.workspace ?? 'default',
+            title: options?.title,
+            type: options?.type ?? 'chat',
+        });
     }
 
     getSessions(): AgentSession[] {

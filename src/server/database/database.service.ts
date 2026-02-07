@@ -42,7 +42,8 @@ export class DatabaseService implements OnModuleDestroy {
             provider TEXT,
             model TEXT,
             title TEXT,
-            preview TEXT
+            preview TEXT,
+            type TEXT DEFAULT 'chat'
           );
           CREATE TABLE IF NOT EXISTS chat_messages (
             id TEXT PRIMARY KEY,
@@ -54,7 +55,45 @@ export class DatabaseService implements OnModuleDestroy {
             FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS idx_chat_messages_session_id ON chat_messages(session_id);
+
+          CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            id TEXT PRIMARY KEY,
+            workspace TEXT NOT NULL DEFAULT 'default',
+            message TEXT NOT NULL,
+            schedule_type TEXT NOT NULL,
+            run_at INTEGER,
+            cron_expr TEXT,
+            repeat_rule_json TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            last_run_at INTEGER,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_enabled ON scheduled_tasks(enabled);
+
+          CREATE TABLE IF NOT EXISTS scheduled_task_executions (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            ran_at INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            session_id TEXT,
+            user_message TEXT NOT NULL,
+            assistant_content TEXT,
+            error_message TEXT,
+            created_at INTEGER NOT NULL,
+            FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_task_executions_task_id ON scheduled_task_executions(task_id);
         `);
+        // Add session type column if missing (scheduled vs chat)
+        try {
+            const info = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+            if (!info.some((c) => c.name === 'type')) {
+                db.exec(`ALTER TABLE sessions ADD COLUMN type TEXT DEFAULT 'chat'`);
+            }
+        } catch (_) {
+            // ignore
+        }
     }
 
     run(sql: string, params: unknown[] = []): Database.RunResult {

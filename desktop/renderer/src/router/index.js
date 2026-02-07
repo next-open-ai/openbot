@@ -4,8 +4,10 @@ import AgentChat from '@/views/AgentChat.vue';
 import Sessions from '@/views/Sessions.vue';
 import Skills from '@/views/Skills.vue';
 import Workspace from '@/views/Workspace.vue';
+import WorkResults from '@/views/WorkResults.vue';
 import Agents from '@/views/Agents.vue';
 import AgentDetail from '@/views/AgentDetail.vue';
+import Tasks from '@/views/Tasks.vue';
 import Settings from '@/views/Settings.vue';
 
 const routes = [
@@ -45,9 +47,19 @@ const routes = [
         component: AgentDetail,
     },
     {
+        path: '/tasks',
+        name: 'Tasks',
+        component: Tasks,
+    },
+    {
         path: '/workspace',
         name: 'Workspace',
         component: Workspace,
+    },
+    {
+        path: '/work-results',
+        name: 'WorkResults',
+        component: WorkResults,
     },
     {
         path: '/settings',

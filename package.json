@@ -25,6 +25,7 @@
     },
 "dependencies": {
     "better-sqlite3": "^11.6.0",
+    "croner": "^9.1.0",
     "@mariozechner/pi-ai": "^0.51.2",
         "@mariozechner/pi-coding-agent": "^0.51.2",
         "@nestjs/common": "^10.3.0",

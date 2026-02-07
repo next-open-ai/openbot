@@ -1,3 +1,19 @@
+/**
+ * Avoid MaxListenersExceededWarning when Browser Tool is used repeatedly.
+ * Playwright/agent-browser attach abort listeners to the same AbortSignal per action;
+ * Node's default EventTarget maxListeners is 10.
+ */
+const Et = (globalThis as any).EventTarget;
+if (Et?.prototype?.addEventListener && Et.prototype.setMaxListeners) {
+    const add = Et.prototype.addEventListener;
+    Et.prototype.addEventListener = function (this: any, type: string, listener: any, options?: any) {
+        if (type === "abort" && typeof this.setMaxListeners === "function") {
+            this.setMaxListeners(32);
+        }
+        return add.call(this, type, listener, options);
+    };
+}
+
 import { WebSocketServer } from "ws";
 import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse, type RequestOptions } from "http";
 import { handleConnection } from "./connection-handler.js";
@@ -6,6 +22,7 @@ import { join, extname } from "path";
 import { existsSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
+import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 
 /**
  * Find an available port starting from startPort
@@ -122,6 +139,13 @@ export async function startGatewayServer(port: number = 3000): Promise<{
         if (req.url === "/health") {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ status: "ok", timestamp: Date.now() }));
+            return;
+        }
+
+        // Scheduled task: run agent and POST assistant message back to Nest
+        const pathname = req.url?.split("?")[0] || "";
+        if (req.method === "POST" && pathname === "/run-scheduled-task") {
+            await handleRunScheduledTask(req, res);
             return;
         }
 

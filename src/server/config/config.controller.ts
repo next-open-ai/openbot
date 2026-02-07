@@ -8,18 +8,20 @@ export class ConfigController {
     @Get()
     async getConfig() {
         const config = await this.configService.getConfig();
+        const { loginPassword, ...rest } = config as AppConfig & { loginPassword?: string };
         return {
             success: true,
-            data: config,
+            data: { ...rest, loginPasswordSet: !!loginPassword },
         };
     }
 
     @Put()
     async updateConfig(@Body() updates: Partial<AppConfig>) {
         const config = await this.configService.updateConfig(updates);
+        const { loginPassword, ...rest } = config as AppConfig & { loginPassword?: string };
         return {
             success: true,
-            data: config,
+            data: { ...rest, loginPasswordSet: !!loginPassword },
         };
     }
 

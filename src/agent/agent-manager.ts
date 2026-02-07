@@ -41,6 +41,8 @@ const MAX_SKILL_DESC_IN_PROMPT = 250;
  */
 export class AgentManager {
     private sessions = new Map<string, AgentSession>();
+    /** 每个 session 最后被使用的时间戳，用于 LRU 淘汰 */
+    private sessionLastActiveAt = new Map<string, number>();
     private agentDir: string;
     private workspaceDir: string;
     private skillPaths: string[] = [];
@@ -175,15 +177,34 @@ For downloads, provide either a direct URL or a selector to click.`;
     }
 
     /**
-     * Get or create an agent session
+     * Get or create an agent session.
+     * @param options.maxSessions 若提供且当前 session 数 >= 该值，会先淘汰最后调用时间最早的 session 再创建新的（仅对 chat 生效，定时任务不传）
      */
     public async getOrCreateSession(sessionId: string, options: {
         provider?: string;
         modelId?: string;
         apiKey?: string;
+        maxSessions?: number;
     } = {}): Promise<AgentSession> {
+        const now = Date.now();
         if (this.sessions.has(sessionId)) {
+            this.sessionLastActiveAt.set(sessionId, now);
             return this.sessions.get(sessionId)!;
+        }
+
+        const { maxSessions } = options;
+        if (typeof maxSessions === "number" && maxSessions > 0 && this.sessions.size >= maxSessions) {
+            let oldestId: string | null = null;
+            let oldestAt = Infinity;
+            for (const [id, at] of this.sessionLastActiveAt) {
+                if (this.sessions.has(id) && at < oldestAt) {
+                    oldestAt = at;
+                    oldestId = id;
+                }
+            }
+            if (oldestId != null) {
+                this.deleteSession(oldestId);
+            }
         }
 
         const {
@@ -265,6 +286,7 @@ For downloads, provide either a direct URL or a selector to click.`;
         }
 
         this.sessions.set(sessionId, session);
+        this.sessionLastActiveAt.set(sessionId, now);
         return session;
     }
 
@@ -273,11 +295,13 @@ For downloads, provide either a direct URL or a selector to click.`;
     }
 
     public deleteSession(sessionId: string): boolean {
+        this.sessionLastActiveAt.delete(sessionId);
         return this.sessions.delete(sessionId);
     }
 
     public clearAll(): void {
         this.sessions.clear();
+        this.sessionLastActiveAt.clear();
     }
 }
 

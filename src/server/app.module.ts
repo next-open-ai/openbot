@@ -4,7 +4,10 @@ import { AgentsModule } from './agents/agents.module.js';
 import { AgentConfigModule } from './agent-config/agent-config.module.js';
 import { SkillsModule } from './skills/skills.module.js';
 import { ConfigModule } from './config/config.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { UsersModule } from './users/users.module.js';
 import { WorkspaceModule } from './workspace/workspace.module.js';
+import { TasksModule } from './tasks/tasks.module.js';
 
 @Module({
     imports: [
@@ -13,7 +16,10 @@ import { WorkspaceModule } from './workspace/workspace.module.js';
         AgentConfigModule,
         SkillsModule,
         ConfigModule,
+        AuthModule,
+        UsersModule,
         WorkspaceModule,
+        TasksModule,
     ],
 })
 export class AppModule {}
