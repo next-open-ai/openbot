@@ -1,5 +1,6 @@
 import type { GatewayClient, AgentChatParams } from "../types.js";
 import { agentManager } from "../../agent/agent-manager.js";
+import { getExperienceContextForUserMessage } from "../../memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
 
@@ -82,8 +83,13 @@ export async function handleAgentChat(
     });
 
     try {
-        // Send user message to agent
-        await session.sendUserMessage(message);
+        const experienceBlock = await getExperienceContextForUserMessage();
+        const userMessageToSend =
+            experienceBlock.trim().length > 0
+                ? `${experienceBlock}\n\n用户问题：\n${message}`
+                : message;
+
+        await session.sendUserMessage(userMessageToSend);
 
         console.log(`Agent chat completed for session ${targetSessionId}`);
 

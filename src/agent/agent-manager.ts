@@ -15,7 +15,9 @@ import {
 import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import { join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
-import { createBrowserTool } from "../tools/index.js";
+import { createCompactionMemoryExtensionFactory } from "../memory/compaction-extension.js";
+import { getCompactionContextForSystemPrompt } from "../memory/index.js";
+import { createBrowserTool, createSaveExperienceTool } from "../tools/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
 import { getFreebotAgentDir, getFreebotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
 import { formatSkillsForPrompt } from "./skills.js";
@@ -129,17 +131,19 @@ For downloads, provide either a direct URL or a selector to click.`;
         return { systemPrompt, skills: loadedSkills };
     }
 
-    private createResourceLoader(): DefaultResourceLoader {
+    private createResourceLoader(sessionId?: string, compactionBlock?: string): DefaultResourceLoader {
         const loader = new DefaultResourceLoader({
             cwd: this.workspaceDir,
             agentDir: this.agentDir,
             noSkills: true, // Disable SDK's built-in skills logic to take full control
             additionalSkillPaths: this.resolveSkillPaths(),
+            extensionFactories: sessionId ? [createCompactionMemoryExtensionFactory(sessionId)] : [],
             systemPromptOverride: (base) => {
                 const loadedSkills = loader.getSkills().skills;
-                const customPrompt = this.buildSystemPrompt(loadedSkills);
-                // We DON'T use base here to avoid inheriting SDK's default system prompt instructions
-                // if they include references to built-ins we don't want.
+                let customPrompt = this.buildSystemPrompt(loadedSkills);
+                if (compactionBlock?.trim()) {
+                    customPrompt = customPrompt + "\n\n" + compactionBlock.trim();
+                }
                 return customPrompt;
             },
         });
@@ -224,7 +228,8 @@ For downloads, provide either a direct URL or a selector to click.`;
 
         const systemPrompt = this.buildSystemPrompt(this.preLoadedSkills);
 
-        const loader = this.createResourceLoader();
+        const compactionBlock = await getCompactionContextForSystemPrompt(sessionId);
+        const loader = this.createResourceLoader(sessionId, compactionBlock);
         await loader.reload();
 
         const coreTools: Record<string, any> = {
@@ -244,7 +249,10 @@ For downloads, provide either a direct URL or a selector to click.`;
             modelRegistry,
             cwd: this.workspaceDir,
             resourceLoader: loader,
-            customTools: [createBrowserTool(this.workspaceDir)],
+            customTools: [
+                createBrowserTool(this.workspaceDir),
+                createSaveExperienceTool(sessionId),
+            ],
             // @ts-ignore - Strictly scope tools to the workspace
             baseToolsOverride: coreTools,
         } as any);

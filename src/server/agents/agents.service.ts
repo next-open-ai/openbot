@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { agentManager } from '../../agent/agent-manager.js';
+import { DatabaseService } from '../database/database.service.js';
 
 export interface AgentSession {
     id: string;
@@ -23,15 +25,37 @@ export interface ChatMessage {
     toolCalls?: any[];
 }
 
+interface SessionRow {
+    id: string;
+    created_at: number;
+    last_active_at: number;
+    message_count: number;
+    status: string;
+    workspace: string | null;
+    provider: string | null;
+    model: string | null;
+    title: string | null;
+    preview: string | null;
+}
+
+interface MessageRow {
+    id: string;
+    session_id: string;
+    role: string;
+    content: string;
+    timestamp: number;
+    tool_calls_json: string | null;
+}
+
 /**
- * Agents service: session + history storage only.
+ * Agents service: session + history storage in SQLite.
  * Conversation is done via frontend -> Gateway (WebSocket) -> agent; NestJS is not in the chat path.
  */
 @Injectable()
 export class AgentsService {
-    private sessions = new Map<string, AgentSession>();
-    private messageHistory = new Map<string, ChatMessage[]>();
     private eventListeners = new Map<string, Set<(data: any) => void>>();
+
+    constructor(private readonly db: DatabaseService) {}
 
     addEventListener(event: string, listener: (data: any) => void): () => void {
         if (!this.eventListeners.has(event)) {
@@ -49,6 +73,37 @@ export class AgentsService {
         if (listeners) listeners.forEach((l) => l(payload));
     }
 
+    private rowToSession(r: SessionRow): AgentSession {
+        return {
+            id: r.id,
+            createdAt: r.created_at,
+            lastActiveAt: r.last_active_at,
+            messageCount: r.message_count,
+            status: r.status as AgentSession['status'],
+            workspace: r.workspace ?? undefined,
+            provider: r.provider ?? undefined,
+            model: r.model ?? undefined,
+            title: r.title ?? undefined,
+            preview: r.preview ?? undefined,
+        };
+    }
+
+    private rowToMessage(r: MessageRow): ChatMessage {
+        const msg: ChatMessage = {
+            id: r.id,
+            sessionId: r.session_id,
+            role: r.role as ChatMessage['role'],
+            content: r.content,
+            timestamp: r.timestamp,
+        };
+        if (r.tool_calls_json) {
+            try {
+                msg.toolCalls = JSON.parse(r.tool_calls_json);
+            } catch (_) {}
+        }
+        return msg;
+    }
+
     async createSession(options?: {
         workspace?: string;
         provider?: string;
@@ -56,10 +111,11 @@ export class AgentsService {
         title?: string;
     }): Promise<AgentSession> {
         const sessionId = randomUUID();
+        const now = Date.now();
         const session: AgentSession = {
             id: sessionId,
-            createdAt: Date.now(),
-            lastActiveAt: Date.now(),
+            createdAt: now,
+            lastActiveAt: now,
             messageCount: 0,
             status: 'idle',
             workspace: options?.workspace,
@@ -68,73 +124,82 @@ export class AgentsService {
             title: options?.title,
             preview: '',
         };
-        this.sessions.set(sessionId, session);
-        this.messageHistory.set(sessionId, []);
+        this.db.run(
+            `INSERT INTO sessions (id, created_at, last_active_at, message_count, status, workspace, provider, model, title, preview)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                session.id,
+                session.createdAt,
+                session.lastActiveAt,
+                session.messageCount,
+                session.status,
+                session.workspace ?? null,
+                session.provider ?? null,
+                session.model ?? null,
+                session.title ?? null,
+                session.preview ?? null,
+            ],
+        );
         return session;
     }
 
     getSessions(): AgentSession[] {
-        return Array.from(this.sessions.values());
+        const rows = this.db.all<SessionRow>('SELECT * FROM sessions ORDER BY last_active_at DESC');
+        return rows.map((r) => this.rowToSession(r));
     }
 
     getSession(sessionId: string): AgentSession | undefined {
-        return this.sessions.get(sessionId);
+        const r = this.db.get<SessionRow>('SELECT * FROM sessions WHERE id = ?', [sessionId]);
+        return r ? this.rowToSession(r) : undefined;
     }
 
     async deleteSession(sessionId: string): Promise<boolean> {
-        this.sessions.delete(sessionId);
-        this.messageHistory.delete(sessionId);
-        return true;
+        agentManager.deleteSession(sessionId);
+        const result = this.db.run('DELETE FROM sessions WHERE id = ?', [sessionId]);
+        return result.changes > 0;
     }
 
     getMessageHistory(sessionId: string): ChatMessage[] {
-        return this.messageHistory.get(sessionId) || [];
+        const rows = this.db.all<MessageRow>(
+            'SELECT * FROM chat_messages WHERE session_id = ? ORDER BY timestamp ASC',
+            [sessionId],
+        );
+        return rows.map((r) => this.rowToMessage(r));
     }
 
     addAssistantMessage(sessionId: string, content: string): void {
-        const history = this.messageHistory.get(sessionId) || [];
-        const assistantMessage: ChatMessage = {
-            id: randomUUID(),
-            sessionId,
-            role: 'assistant',
-            content,
-            timestamp: Date.now(),
-        };
-        history.push(assistantMessage);
-        this.messageHistory.set(sessionId, history);
-
-        const session = this.sessions.get(sessionId);
-        if (session) {
-            session.status = 'idle';
-            session.lastActiveAt = Date.now();
-        }
+        const id = randomUUID();
+        const now = Date.now();
+        this.db.run(
+            `INSERT INTO chat_messages (id, session_id, role, content, timestamp, tool_calls_json) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, sessionId, 'assistant', content, now, null],
+        );
+        this.db.run(
+            'UPDATE sessions SET last_active_at = ?, status = ?, message_count = message_count + 1 WHERE id = ?',
+            [now, 'idle', sessionId],
+        );
     }
 
-    /**
-     * Append a message to session history (frontend syncs after talking via Gateway WebSocket).
-     */
     appendMessage(
         sessionId: string,
         role: 'user' | 'assistant',
         content: string,
         options?: { toolCalls?: any[]; contentParts?: any[] },
     ): void {
-        const session = this.sessions.get(sessionId);
+        const session = this.getSession(sessionId);
         if (!session) return;
 
-        const history = this.messageHistory.get(sessionId) || [];
-        const msg: ChatMessage = {
-            id: randomUUID(),
-            sessionId,
-            role,
-            content,
-            timestamp: Date.now(),
-        };
-        if (role === 'assistant' && options?.toolCalls) msg.toolCalls = options.toolCalls;
-        history.push(msg);
-        this.messageHistory.set(sessionId, history);
-
-        session.lastActiveAt = Date.now();
-        if (role === 'assistant') session.status = 'idle';
+        const id = randomUUID();
+        const now = Date.now();
+        const toolCallsJson = role === 'assistant' && options?.toolCalls ? JSON.stringify(options.toolCalls) : null;
+        this.db.run(
+            `INSERT INTO chat_messages (id, session_id, role, content, timestamp, tool_calls_json) VALUES (?, ?, ?, ?, ?, ?)`,
+            [id, sessionId, role, content, now, toolCallsJson],
+        );
+        this.db.run(
+            'UPDATE sessions SET last_active_at = ?, status = ?, message_count = message_count + 1 WHERE id = ?',
+            [now, role === 'assistant' ? 'idle' : session.status, sessionId],
+        );
     }
 }
+
