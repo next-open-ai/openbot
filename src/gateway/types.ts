@@ -73,4 +73,6 @@ export interface ConnectParams {
 export interface AgentChatParams {
     message: string;
     sessionId?: string;
+    /** 对话/安装目标：具体 agentId，或 "global"|"all" 表示全局；用于 install_skill 等隔离 */
+    targetAgentId?: string;
 }

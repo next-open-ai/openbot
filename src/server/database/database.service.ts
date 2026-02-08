@@ -38,6 +38,7 @@ export class DatabaseService implements OnModuleDestroy {
             last_active_at INTEGER NOT NULL,
             message_count INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'idle',
+            agent_id TEXT DEFAULT 'default',
             workspace TEXT,
             provider TEXT,
             model TEXT,
@@ -84,12 +85,29 @@ export class DatabaseService implements OnModuleDestroy {
             FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
           );
           CREATE INDEX IF NOT EXISTS idx_task_executions_task_id ON scheduled_task_executions(task_id);
+
+          CREATE TABLE IF NOT EXISTS token_usage (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            source TEXT NOT NULL,
+            task_id TEXT,
+            execution_id TEXT,
+            prompt_tokens INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            total_tokens INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id);
+          CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at);
         `);
         // Add session type column if missing (scheduled vs chat)
         try {
             const info = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
             if (!info.some((c) => c.name === 'type')) {
                 db.exec(`ALTER TABLE sessions ADD COLUMN type TEXT DEFAULT 'chat'`);
+            }
+            if (!info.some((c) => c.name === 'agent_id')) {
+                db.exec(`ALTER TABLE sessions ADD COLUMN agent_id TEXT DEFAULT 'default'`);
             }
         } catch (_) {
             // ignore

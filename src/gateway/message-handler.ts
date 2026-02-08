@@ -3,6 +3,7 @@ import type { GatewayClient, GatewayRequest } from "./types.js";
 import { parseMessage, send, createErrorResponse, createSuccessResponse } from "./utils.js";
 import { handleConnect } from "./methods/connect.js";
 import { handleAgentChat } from "./methods/agent-chat.js";
+import { handleAgentCancel } from "./methods/agent-cancel.js";
 
 /**
  * Handle incoming WebSocket message
@@ -39,6 +40,13 @@ export async function handleMessage(client: GatewayClient, data: Buffer | string
                     throw new Error("Not authenticated. Call 'connect' first.");
                 }
                 result = await handleAgentChat(client, params || {});
+                break;
+
+            case "agent.cancel":
+                if (!client.authenticated) {
+                    throw new Error("Not authenticated. Call 'connect' first.");
+                }
+                result = await handleAgentCancel(client, params || {});
                 break;
 
             case "subscribe_session":

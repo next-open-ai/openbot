@@ -31,14 +31,22 @@ export const agentConfigAPI = {
 
 // Skills API
 export const skillsAPI = {
-    getSkills: (workspace) =>
-        apiClient.get('/skills', workspace ? { params: { workspace } } : {}),
+    getSkills: (workspace, scope) =>
+        apiClient.get('/skills', { params: scope ? { scope } : workspace ? { workspace } : {} }),
     getSkill: (name) => apiClient.get(`/skills/${name}`),
     getSkillContent: (name, workspace) =>
         apiClient.get(`/skills/${name}/content`, workspace ? { params: { workspace } } : {}),
     addSkill: (body) => apiClient.post('/skills', body),
-    deleteSkill: (workspace, name) =>
-        apiClient.delete(`/skills/${encodeURIComponent(name)}`, { params: { workspace } }),
+    deleteSkill: (workspace, name, scope) =>
+        apiClient.delete(`/skills/${encodeURIComponent(name)}`, {
+            params: scope ? { scope } : { workspace },
+        }),
+    installSkill: (url, options) =>
+        apiClient.post('/skills/install', {
+            url,
+            scope: options?.scope,
+            workspace: options?.workspace,
+        }),
 };
 
 // Config API
@@ -72,6 +80,11 @@ export const tasksAPI = {
     listExecutions: (taskId) => apiClient.get(`/tasks/${taskId}/executions`),
     getExecution: (eid) => apiClient.get(`/tasks/executions/${eid}`),
     clearExecutions: (taskId) => apiClient.delete(`/tasks/${taskId}/executions`),
+};
+
+// Usage API (token 统计)
+export const usageAPI = {
+    getTotal: () => apiClient.get('/usage/total'),
 };
 
 // Workspace API

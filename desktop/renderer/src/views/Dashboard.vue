@@ -18,7 +18,7 @@
         </div>
         <div class="stat-divider"></div>
         <div class="stat-item">
-          <span class="stat-val">12.5k</span>
+          <span class="stat-val">{{ formatTokens(totalTokens) }}</span>
           <span class="stat-lbl">{{ t('dashboard.tokensUsed') }}</span>
         </div>
       </div>
@@ -104,11 +104,11 @@
             <div class="token-stats">
               <div class="token-stat">
                 <span class="token-label">{{ t('dashboard.totalTokens') }}</span>
-                <span class="token-value">124,592</span>
+                <span class="token-value">{{ formatTokens(totalTokens) }}</span>
               </div>
               <div class="token-stat">
                 <span class="token-label">{{ t('dashboard.cost') }}</span>
-                <span class="token-value">≈ $0.25</span>
+                <span class="token-value">—</span>
               </div>
             </div>
           </div>
@@ -138,11 +138,12 @@
 </template>
 
 <script>
-import { computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
 import { useAgentStore } from '@/store/modules/agent';
 import { useSkillStore } from '@/store/modules/skill';
+import { usageAPI } from '@/api';
 
 export default {
   name: 'Dashboard',
@@ -152,6 +153,8 @@ export default {
     const skillStore = useSkillStore();
     const { t } = useI18n();
 
+    const totalTokens = ref(0);
+
     const sessions = computed(() => agentStore.sessions);
     const activeSessions = computed(() => agentStore.activeSessions.length);
     const totalSkills = computed(() => skillStore.skills.length);
@@ -159,6 +162,11 @@ export default {
 
     const formatDate = (timestamp) => {
       return new Date(timestamp).toLocaleString();
+    };
+
+    const formatTokens = (n) => {
+      if (n == null || n === 0) return '0';
+      return Number(n).toLocaleString();
     };
 
     const createNewSession = async () => {
@@ -174,8 +182,20 @@ export default {
       router.push(`/chat/${sessionId}`);
     };
 
+    const fetchTokenTotal = async () => {
+      try {
+        const res = await usageAPI.getTotal();
+        if (res?.data?.success && res?.data?.data) {
+          totalTokens.value = res.data.data.totalTokens ?? 0;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch token usage:', e);
+      }
+    };
+
     onMounted(() => {
       skillStore.fetchSkills();
+      fetchTokenTotal();
     });
 
     return {
@@ -183,7 +203,9 @@ export default {
       activeSessions,
       totalSkills,
       recentSessions,
+      totalTokens,
       formatDate,
+      formatTokens,
       createNewSession,
       openSession,
       t,

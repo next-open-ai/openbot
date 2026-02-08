@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { readdir, stat, rm } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 import { existsSync } from 'fs';
-import { homedir } from 'os';
+import { getFreebotWorkspaceDir } from '../../agent/agent-dir.js';
 
 export interface WorkspaceItem {
     name: string;
@@ -15,14 +15,12 @@ export interface WorkspaceItem {
 @Injectable()
 export class WorkspaceService {
     private getWorkspaceRoot(name: string): string {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-        return resolve(homeDir, '.freebot', 'workspace', name);
+        return join(getFreebotWorkspaceDir(), name);
     }
 
-    /** List workspace names (directories under ~/.freebot/workspace) */
+    /** List workspace names (directories under FREEBOT_WORKSPACE_DIR, default ~/.freebot/workspace) */
     async listWorkspaces(): Promise<string[]> {
-        const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-        const base = resolve(homeDir, '.freebot', 'workspace');
+        const base = getFreebotWorkspaceDir();
         if (!existsSync(base)) {
             return [];
         }
@@ -48,11 +46,17 @@ export class WorkspaceService {
         for (const e of entries) {
             const fullPath = join(dirNormalized, e.name);
             const rel = relative(rootNormalized, fullPath);
-            const st = await stat(fullPath);
+            let st: Awaited<ReturnType<typeof stat>>;
+            try {
+                st = await stat(fullPath);
+            } catch (err: any) {
+                if (err?.code === 'ENOENT') continue;
+                throw err;
+            }
             items.push({
                 name: e.name,
                 path: rel,
-                isDirectory: e.isDirectory(),
+                isDirectory: st.isDirectory(),
                 size: st.isFile() ? st.size : undefined,
                 mtime: st.mtimeMs,
             });

@@ -29,6 +29,14 @@
         </div>
         <div 
           class="nav-item" 
+          :class="{ active: activeTab === 'skills' }"
+          @click="activeTab = 'skills'"
+        >
+          <span class="nav-icon">🎯</span>
+          {{ t('nav.skills') }}
+        </div>
+        <div 
+          class="nav-item" 
           :class="{ active: activeTab === 'about' }"
           @click="activeTab = 'about'"
         >
@@ -82,6 +90,14 @@
                 >
                   <div class="theme-preview cosmic"></div>
                   <span>{{ t('settings.cosmic') }}</span>
+                </button>
+                <button 
+                  class="theme-card" 
+                  :class="{ active: config.theme === 'neon' }"
+                  @click="setTheme('neon')"
+                >
+                  <div class="theme-preview neon"></div>
+                  <span>{{ t('settings.neon') }}</span>
                 </button>
               </div>
             </div>
@@ -204,6 +220,11 @@
               </table>
             </div>
           </div>
+        </div>
+
+        <!-- Skills Tab -->
+        <div v-show="activeTab === 'skills'" class="tab-content">
+          <SettingsSkills />
         </div>
 
         <!-- About Tab -->
@@ -360,21 +381,42 @@
 
 <script>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useLocaleStore } from '@/store/modules/locale';
 import { useAuthStore } from '@/store/modules/auth';
 import { useI18n } from '@/composables/useI18n';
 import { usersAPI } from '@/api';
+import SettingsSkills from '@/components/SettingsSkills.vue';
+
+const SETTINGS_TABS = ['general', 'agent', 'users', 'skills', 'about'];
 
 export default {
   name: 'Settings',
+  components: { SettingsSkills },
   setup() {
+    const route = useRoute();
+    const router = useRouter();
     const settingsStore = useSettingsStore();
     const localeStore = useLocaleStore();
     const authStore = useAuthStore();
     const { t } = useI18n();
 
-    const activeTab = ref('general');
+    const tabFromQuery = () => {
+      const q = route.query?.tab;
+      return SETTINGS_TABS.includes(q) ? q : 'general';
+    };
+    const activeTab = ref(tabFromQuery());
+
+    watch(() => route.query?.tab, (q) => {
+      if (SETTINGS_TABS.includes(q)) activeTab.value = q;
+    });
+    watch(activeTab, (tab) => {
+      if (route.query?.tab !== tab) {
+        router.replace({ path: '/settings', query: { ...route.query, tab } });
+      }
+      if (tab === 'users') loadUsers();
+    });
     const localConfig = ref({});
 
     const usersList = ref([]);
@@ -404,11 +446,7 @@ export default {
     });
 
     const setTheme = (theme) => {
-      settingsStore.toggleTheme(theme); // Assuming toggleTheme handles sets or just toggles
-      // Ideally settingsStore should have setTheme, checking implementation
-      if (settingsStore.config.theme !== theme) {
-         settingsStore.toggleTheme();
-      }
+      settingsStore.setTheme(theme);
     };
 
     const loadAgentConfig = () => {
@@ -579,11 +617,8 @@ export default {
       }
     }
 
-    watch(activeTab, (tab) => {
-      if (tab === 'users') loadUsers();
-    });
-
     onMounted(async () => {
+      activeTab.value = tabFromQuery();
       await settingsStore.loadProviders();
       loadAgentConfig();
     });
@@ -809,7 +844,8 @@ export default {
 }
 
 .theme-preview.light {
-  background: #f8fafc;
+  background: linear-gradient(145deg, #fefcf9 0%, #f5efe6 100%);
+  border: 1px solid rgba(180, 168, 152, 0.3);
 }
 
 .theme-preview.dark {
@@ -819,6 +855,12 @@ export default {
 .theme-preview.cosmic {
   background: #fdfdfd;
   border: 1px solid #e5e5e5;
+}
+
+.theme-preview.neon {
+  background: linear-gradient(145deg, #1a0b2e 0%, #2d1b4e 50%, #0d0221 100%);
+  border: 1px solid rgba(5, 217, 232, 0.4);
+  box-shadow: inset 0 0 20px rgba(5, 217, 232, 0.1), 0 0 12px rgba(255, 42, 109, 0.15);
 }
 
 /* Actions */

@@ -44,14 +44,13 @@ import { useRoute } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
 import IconChat from '@/components/icons/IconChat.vue';
 import IconAgents from '@/components/icons/IconAgents.vue';
-import IconSkills from '@/components/icons/IconSkills.vue';
 import IconTasks from '@/components/icons/IconTasks.vue';
 import IconWorkResults from '@/components/icons/IconWorkResults.vue';
 import IconSettings from '@/components/icons/IconSettings.vue';
 
 export default {
   name: 'Sidebar',
-  components: { IconChat, IconAgents, IconSkills, IconTasks, IconWorkResults, IconSettings },
+  components: { IconChat, IconAgents, IconTasks, IconWorkResults, IconSettings },
   setup() {
     const route = useRoute();
     const { t } = useI18n();
@@ -59,7 +58,6 @@ export default {
     const navItems = computed(() => [
       { path: '/chat', label: t('nav.agentChat'), iconComponent: IconChat },
       { path: '/agents', label: t('nav.agents'), iconComponent: IconAgents },
-      { path: '/skills', label: t('nav.skills'), iconComponent: IconSkills },
       { path: '/tasks', label: t('nav.tasks'), iconComponent: IconTasks },
       { path: '/work-results', label: t('nav.workResults'), iconComponent: IconWorkResults },
     ]);

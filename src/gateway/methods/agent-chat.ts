@@ -4,6 +4,33 @@ import { getExperienceContextForUserMessage } from "../../memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
 import { getDesktopConfig } from "../desktop-config.js";
+import { getBackendBaseUrl } from "../backend-url.js";
+
+/**
+ * Report token usage to Desktop Server (persist to DB). No-op if backend URL not set.
+ */
+async function reportTokenUsage(
+    sessionId: string,
+    source: "chat" | "scheduled_task",
+    tokens: { promptTokens: number; completionTokens: number },
+    options?: { taskId?: string; executionId?: string },
+): Promise<void> {
+    const base = getBackendBaseUrl();
+    if (!base) return;
+    const url = `${base.replace(/\/$/, "")}/server-api/usage`;
+    await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            sessionId,
+            source,
+            taskId: options?.taskId ?? undefined,
+            executionId: options?.executionId ?? undefined,
+            promptTokens: tokens.promptTokens,
+            completionTokens: tokens.completionTokens,
+        }),
+    });
+}
 
 /**
  * Broadcast message to all clients subscribed to a session
@@ -23,7 +50,7 @@ export async function handleAgentChat(
     client: GatewayClient,
     params: AgentChatParams
 ): Promise<{ status: string; sessionId: string }> {
-    const { message, sessionId } = params;
+    const { message, sessionId, targetAgentId } = params;
 
     if (!message || !message.trim()) {
         throw new Error("Message is required");
@@ -37,9 +64,60 @@ export async function handleAgentChat(
 
     console.log(`Agent chat request for session ${targetSessionId}: ${message.substring(0, 50)}...`);
 
-    // Get or create agent session（超过上限时淘汰最久未用的）
+    return handleAgentChatInner(client, targetSessionId, message, targetAgentId);
+}
+
+async function handleAgentChatInner(
+    client: GatewayClient,
+    targetSessionId: string,
+    message: string,
+    targetAgentId: string | undefined,
+): Promise<{ status: string; sessionId: string }> {
+    // 根据 session 绑定的 agent 拉取 workspace、provider、model、type
+    let workspace = "default";
+    let provider: string | undefined;
+    let modelId: string | undefined;
+    let sessionType: string | undefined;
+    let sessionAgentId = "default";
+    const base = getBackendBaseUrl();
+    if (base) {
+        try {
+            const sessionRes = await fetch(`${base.replace(/\/$/, "")}/server-api/agents/sessions/${targetSessionId}`);
+            if (sessionRes.ok) {
+                const sessionData = (await sessionRes.json()) as { success?: boolean; data?: { agentId?: string; type?: string } };
+                sessionType = sessionData?.data?.type;
+                sessionAgentId = sessionData?.data?.agentId ?? "default";
+                const agentRes = await fetch(`${base.replace(/\/$/, "")}/server-api/agent-config/${encodeURIComponent(sessionAgentId)}`);
+                if (agentRes.ok) {
+                    const agentData = (await agentRes.json()) as { success?: boolean; data?: { workspace?: string; provider?: string; model?: string } };
+                    const agent = agentData?.data;
+                    if (agent?.workspace) workspace = agent.workspace;
+                    if (agent?.provider) provider = agent.provider;
+                    if (agent?.model) modelId = agent.model;
+                }
+            }
+        } catch (e) {
+            console.warn("[agent-chat] Failed to fetch session/agent config, using default:", e);
+        }
+    }
+
+    // system / scheduled：每次对话前先删再建，对话结束马上关闭，节省资源
+    const isEphemeralSession = sessionType === "system" || sessionType === "scheduled";
+    if (isEphemeralSession) {
+        agentManager.deleteSession(targetSessionId);
+    }
+
+    // system 会话用请求里的 targetAgentId；chat/scheduled 用 session 对应的 agentId 传给 install_skill
+    const effectiveTargetAgentId = sessionType === "system" ? targetAgentId : sessionAgentId;
+
     const { maxAgentSessions } = getDesktopConfig();
-    const session = await agentManager.getOrCreateSession(targetSessionId, { maxSessions: maxAgentSessions });
+    const session = await agentManager.getOrCreateSession(targetSessionId, {
+        workspace,
+        provider,
+        modelId,
+        maxSessions: maxAgentSessions,
+        targetAgentId: effectiveTargetAgentId,
+    });
 
     // Set up event listener for streaming
     const unsubscribe = session.subscribe((event: any) => {
@@ -73,14 +151,24 @@ export async function handleAgentChat(
             // Explicit completion event required for frontend to stop loading state
             // Only send on turn_end to avoid duplicate empty messages from message_end
             wsMessage = createEvent("message_complete", { sessionId: targetSessionId, content: "" });
+            // Record token usage for this turn (message may have usage.input / usage.output)
+            const usage = (event as any).message?.usage;
+            if (usage) {
+                const promptTokens = Number(usage.input ?? usage.input_tokens ?? 0) || 0;
+                const completionTokens = Number(usage.output ?? usage.output_tokens ?? 0) || 0;
+                if (promptTokens > 0 || completionTokens > 0) {
+                    reportTokenUsage(targetSessionId, "chat", { promptTokens, completionTokens }).catch((err) =>
+                        console.error("[agent-chat] reportTokenUsage failed:", err)
+                    );
+                }
+            }
         }
 
         if (wsMessage) {
-            // Import connectedClients dynamically to avoid circular dependency issues if any,
-            // or just assume it's imported at top.
-            // Better to pass it or import it.
-            // Let's rely on module import.
             broadcastToSession(targetSessionId, wsMessage);
+        }
+        if (event.type === "turn_end" && isEphemeralSession) {
+            agentManager.deleteSession(targetSessionId);
         }
     });
 
@@ -91,7 +179,8 @@ export async function handleAgentChat(
                 ? `${experienceBlock}\n\n用户问题：\n${message}`
                 : message;
 
-        await session.sendUserMessage(userMessageToSend);
+        // 若 agent 正在流式输出，deliverAs: 'followUp' 将本条消息排队，避免抛出 "Agent is already processing"
+        await session.sendUserMessage(userMessageToSend, { deliverAs: "followUp" });
 
         console.log(`Agent chat completed for session ${targetSessionId}`);
 

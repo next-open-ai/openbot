@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { agentManager } from '../../agent/agent-manager.js';
 import { DatabaseService } from '../database/database.service.js';
 
-export type SessionType = 'scheduled' | 'chat';
+export type SessionType = 'scheduled' | 'chat' | 'system';
 
 export interface AgentSession {
     id: string;
@@ -11,6 +11,8 @@ export interface AgentSession {
     lastActiveAt: number;
     messageCount: number;
     status: 'idle' | 'active' | 'error';
+    /** 绑定的智能体 ID，不选则为 default（主智能体） */
+    agentId?: string;
     workspace?: string;
     provider?: string;
     model?: string;
@@ -34,6 +36,7 @@ interface SessionRow {
     last_active_at: number;
     message_count: number;
     status: string;
+    agent_id: string | null;
     workspace: string | null;
     provider: string | null;
     model: string | null;
@@ -84,12 +87,13 @@ export class AgentsService {
             lastActiveAt: r.last_active_at,
             messageCount: r.message_count,
             status: r.status as AgentSession['status'],
+            agentId: r.agent_id ?? undefined,
             workspace: r.workspace ?? undefined,
             provider: r.provider ?? undefined,
             model: r.model ?? undefined,
             title: r.title ?? undefined,
             preview: r.preview ?? undefined,
-            type: (r.type === 'scheduled' || r.type === 'chat' ? r.type : 'chat') as SessionType,
+            type: (r.type === 'scheduled' || r.type === 'chat' || r.type === 'system' ? r.type : 'chat') as SessionType,
         };
     }
 
@@ -111,6 +115,7 @@ export class AgentsService {
 
     async createSession(options?: {
         id?: string;
+        agentId?: string;
         workspace?: string;
         provider?: string;
         model?: string;
@@ -123,6 +128,7 @@ export class AgentsService {
         if (existing) return existing;
 
         const now = Date.now();
+        const agentId = options?.agentId ?? 'default';
         const workspace = options?.workspace ?? 'default';
         const session: AgentSession = {
             id: sessionId,
@@ -130,6 +136,7 @@ export class AgentsService {
             lastActiveAt: now,
             messageCount: 0,
             status: 'idle',
+            agentId,
             workspace,
             provider: options?.provider,
             model: options?.model,
@@ -138,14 +145,15 @@ export class AgentsService {
             type: sessionType,
         };
         this.db.run(
-            `INSERT INTO sessions (id, created_at, last_active_at, message_count, status, workspace, provider, model, title, preview, type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO sessions (id, created_at, last_active_at, message_count, status, agent_id, workspace, provider, model, title, preview, type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 session.id,
                 session.createdAt,
                 session.lastActiveAt,
                 session.messageCount,
                 session.status,
+                agentId,
                 workspace,
                 session.provider ?? null,
                 session.model ?? null,
@@ -160,7 +168,7 @@ export class AgentsService {
     /** 获取或创建会话（指定 id 时复用同一会话，用于定时任务固定 sessionId） */
     async getOrCreateSession(
         sessionId: string,
-        options?: { workspace?: string; title?: string; type?: SessionType },
+        options?: { agentId?: string; workspace?: string; title?: string; type?: SessionType },
     ): Promise<AgentSession> {
         const existing = this.getSession(sessionId);
         if (existing) {
@@ -174,6 +182,7 @@ export class AgentsService {
         }
         return this.createSession({
             id: sessionId,
+            agentId: options?.agentId ?? 'default',
             workspace: options?.workspace ?? 'default',
             title: options?.title,
             type: options?.type ?? 'chat',

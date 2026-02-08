@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { WorkspaceModule } from './workspace/workspace.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
+import { UsageModule } from './usage/usage.module.js';
 
 @Module({
     imports: [
@@ -20,6 +21,7 @@ import { TasksModule } from './tasks/tasks.module.js';
         UsersModule,
         WorkspaceModule,
         TasksModule,
+        UsageModule,
     ],
 })
 export class AppModule {}

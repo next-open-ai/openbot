@@ -64,11 +64,24 @@ export const useSettingsStore = defineStore('settings', {
         },
 
         applyTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.setAttribute('data-theme', theme || 'dark');
         },
 
+        /** 直接设置为指定主题（用于配置页点击某一主题卡片） */
+        async setTheme(theme) {
+            const valid = ['light', 'dark', 'cosmic', 'neon'].includes(theme);
+            if (!valid) return;
+            this.applyTheme(theme);
+            try {
+                await this.updateConfig({ theme });
+            } catch (e) {
+                console.error('Failed to save theme', e);
+            }
+        },
+
+        /** 按顺序切换到下一主题（用于右上角图标点击）：专业 → 浅色 → 炫酷 → 深色 */
         toggleTheme() {
-            const themes = ['light', 'dark', 'cosmic'];
+            const themes = ['cosmic', 'light', 'neon', 'dark'];
             const currentTheme = this.config.theme || 'dark';
             const nextIndex = (themes.indexOf(currentTheme) + 1) % themes.length;
             this.updateConfig({ theme: themes[nextIndex] });

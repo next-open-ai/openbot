@@ -2,6 +2,28 @@ import type { IncomingMessage, ServerResponse } from "http";
 import { agentManager } from "../../agent/agent-manager.js";
 import { getExperienceContextForUserMessage } from "../../memory/index.js";
 
+async function reportTokenUsage(
+    backendBaseUrl: string,
+    sessionId: string,
+    source: "chat" | "scheduled_task",
+    tokens: { promptTokens: number; completionTokens: number },
+    options?: { taskId?: string; executionId?: string },
+): Promise<void> {
+    const url = `${backendBaseUrl.replace(/\/$/, "")}/server-api/usage`;
+    await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            sessionId,
+            source,
+            taskId: options?.taskId ?? undefined,
+            executionId: options?.executionId ?? undefined,
+            promptTokens: tokens.promptTokens,
+            completionTokens: tokens.completionTokens,
+        }),
+    });
+}
+
 export interface RunScheduledTaskBody {
     sessionId: string;
     message: string;
@@ -41,7 +63,7 @@ export async function handleRunScheduledTask(
         res.end(JSON.stringify({ error: "Invalid JSON body" }));
         return;
     }
-    const { sessionId, message, workspace, backendBaseUrl } = body;
+    const { sessionId, message, workspace, backendBaseUrl, taskId } = body;
     if (!sessionId || !message || !workspace) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "sessionId, message, workspace required" }));
@@ -49,15 +71,22 @@ export async function handleRunScheduledTask(
     }
 
     try {
-        agentManager.configure({ workspace });
-        const session = await agentManager.getOrCreateSession(sessionId);
+        const session = await agentManager.getOrCreateSession(sessionId, { workspace });
         let assistantContent = "";
+        let turnPromptTokens = 0;
+        let turnCompletionTokens = 0;
 
         const unsubscribe = session.subscribe((event: any) => {
             if (event.type === "message_update" && event.assistantMessageEvent) {
                 const ev = event.assistantMessageEvent;
                 if (ev.type === "text_delta" && ev.delta) {
                     assistantContent += ev.delta;
+                }
+            } else if (event.type === "turn_end") {
+                const usage = event.message?.usage;
+                if (usage) {
+                    turnPromptTokens += Number(usage.input ?? usage.input_tokens ?? 0) || 0;
+                    turnCompletionTokens += Number(usage.output ?? usage.output_tokens ?? 0) || 0;
                 }
             }
         });
@@ -89,6 +118,13 @@ export async function handleRunScheduledTask(
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ role: "assistant", content: assistantContent }),
             }).catch((err) => console.error("[run-scheduled-task] POST assistant message failed:", err));
+        }
+
+        if (backendBaseUrl && (turnPromptTokens > 0 || turnCompletionTokens > 0)) {
+            reportTokenUsage(backendBaseUrl, sessionId, "scheduled_task", {
+                promptTokens: turnPromptTokens,
+                completionTokens: turnCompletionTokens,
+            }, { taskId }).catch((err) => console.error("[run-scheduled-task] reportTokenUsage failed:", err));
         }
 
         res.writeHead(200, { "Content-Type": "application/json" });

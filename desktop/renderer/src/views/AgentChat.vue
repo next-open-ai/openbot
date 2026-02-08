@@ -65,14 +65,24 @@
             rows="3"
             :disabled="isStreaming"
           ></textarea>
+          <!-- 非 streaming 时显示发送，streaming 时显示中止 -->
           <button
+            v-if="!isStreaming"
             @click="sendMessage"
-            :disabled="!inputMessage.trim() || isStreaming"
+            :disabled="!inputMessage.trim()"
             class="send-button"
-            :title="isStreaming ? t('common.sending') : t('common.send')"
+            :title="t('common.send')"
           >
-            <svg v-if="!isStreaming" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-            <svg v-else class="pulse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+          <button
+            v-else
+            @click="cancelCurrentTurn"
+            type="button"
+            class="send-button abort-button"
+            :title="t('common.abort')"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><rect x="6" y="6" width="12" height="12" rx="1"></rect></svg>
           </button>
         </div>
       </div>
@@ -112,7 +122,7 @@ export default {
 
     const routeSessionId = computed(() => route.params.sessionId || null);
     const currentSession = computed(() => agentStore.currentSession);
-    const sessions = computed(() => agentStore.sessions);
+    const sessions = computed(() => (agentStore.sessions || []).filter(s => s.type !== 'system'));
     const messages = computed(() => agentStore.messages);
     const isStreaming = computed(() => agentStore.isStreaming);
     const currentMessage = computed(() => agentStore.currentMessage);
@@ -167,6 +177,23 @@ export default {
 
     watch(() => messages.value.length, scrollToBottom);
     watch(() => currentMessage.value, scrollToBottom);
+
+    // 智能安装：从智能体配置跳转过来时预填输入框
+    watch(
+      () => currentSession.value,
+      (session) => {
+        if (session?.type === 'system') {
+          try {
+            const prompt = sessionStorage.getItem('openbot.smartInstallPrompt');
+            if (prompt) {
+              sessionStorage.removeItem('openbot.smartInstallPrompt');
+              inputMessage.value = prompt;
+            }
+          } catch (_) {}
+        }
+      },
+      { immediate: true },
+    );
 
     // Sync Route -> Session
     watch(
@@ -228,6 +255,7 @@ export default {
       createNewSession,
       selectSession,
       sendMessage,
+      cancelCurrentTurn: () => agentStore.cancelCurrentTurn(),
       Date,
     };
   },
@@ -346,6 +374,15 @@ export default {
   cursor: pointer;
   transition: all var(--transition-fast);
   opacity: 0.8;
+}
+
+.send-button.abort-button {
+  color: var(--color-error, #dc2626);
+}
+
+.send-button.abort-button:hover {
+  opacity: 1;
+  background: rgba(220, 38, 38, 0.1);
 }
 
 .send-button:hover:not(:disabled) {

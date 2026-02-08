@@ -22,7 +22,7 @@
         v-for="session in sortedSessions"
         :key="session.id"
         class="session-row card-glass"
-        @click="openSession(session.id)"
+        @click="openSession(session)"
       >
         <!-- Status & Time Col -->
         <div class="row-prefix">
@@ -52,10 +52,10 @@
 
         <!-- Actions Col -->
         <div class="row-actions" @click.stop>
-          <button @click="openSession(session.id)" class="btn-action continue-btn" :title="t('common.continue') || 'Continue'">
+          <button @click="openSession(session)" class="btn-action continue-btn" :title="t('common.continue') || 'Continue'">
             <span>{{ t('common.continue') || 'Continue' }}</span>
           </button>
-          <button @click="openSession(session.id)" class="btn-action details-btn" :title="t('common.details') || 'Details'">
+          <button @click="openSession(session)" class="btn-action details-btn" :title="t('common.details') || 'Details'">
              <span>{{ t('common.details') || 'Details' }}</span>
           </button>
           <button @click="deleteSession(session.id)" class="btn-action delete-btn" :title="t('common.delete') || 'Delete'">
@@ -111,8 +111,14 @@ export default {
       agentStore.clearCurrentSession();
     };
 
-    const openSession = (sessionId) => {
-      router.push(`/chat/${sessionId}`);
+    const openSession = (session) => {
+      const id = typeof session === 'string' ? session : session?.id;
+      if (!id) return;
+      if (session?.type === 'system') {
+        router.push({ path: '/agents/default', query: { smartInstallSession: id } });
+      } else {
+        router.push(`/chat/${id}`);
+      }
     };
 
     const deleteSession = async (sessionId) => {

@@ -23,6 +23,7 @@ import { existsSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
+import { setBackendBaseUrl } from "./backend-url.js";
 
 /**
  * Find an available port starting from startPort
@@ -100,6 +101,7 @@ export async function startGatewayServer(port: number = 3000): Promise<{
     // 1. Find available port for Desktop Server
     const backendPort = await findAvailablePort(3001);
     console.log(`Found available port for Desktop Server: ${backendPort}`);
+    setBackendBaseUrl(`http://localhost:${backendPort}`);
 
     // 2. Start Desktop Server
     let backendProcess: ChildProcess | null = null;

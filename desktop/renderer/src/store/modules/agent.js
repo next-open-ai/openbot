@@ -30,10 +30,12 @@ export const useAgentStore = defineStore('agent', {
 
         async createSession(options = {}) {
             try {
-                const payload = { workspace: 'default', ...options };
+                const payload = { agentId: 'default', workspace: 'default', ...options };
                 const response = await agentAPI.createSession(payload);
                 const session = response.data.data;
-                this.sessions.push(session);
+                if (!this.sessions.find((s) => s.id === session.id)) {
+                    this.sessions.push(session);
+                }
                 return session;
             } catch (error) {
                 console.error('Failed to create session:', error);
@@ -90,7 +92,20 @@ export const useAgentStore = defineStore('agent', {
             this.messages = [];
         },
 
-        async sendMessage(message) {
+        async cancelCurrentTurn() {
+            if (!this.currentSession?.id || !this.isStreaming) return;
+            try {
+                await socketService.cancelAgent(this.currentSession.id);
+            } catch (error) {
+                console.error('Failed to cancel agent turn:', error);
+            }
+        },
+
+        /**
+         * @param {string} message
+         * @param {{ targetAgentId?: string }} [options] - targetAgentId: 具体 agentId 或 "global"|"all"；不传则用 currentSession.agentId
+         */
+        async sendMessage(message, options = {}) {
             if (!message.trim()) return;
 
             // Lazy Session Creation: If no current session, create one now
@@ -127,8 +142,8 @@ export const useAgentStore = defineStore('agent', {
                 // Persist user message to NestJS (for history)
                 agentAPI.appendMessage(this.currentSession.id, 'user', message).catch(() => {});
 
-                // Send to agent via Gateway WebSocket (no NestJS in path)
-                await socketService.sendMessage(this.currentSession.id, message);
+                const targetAgentId = options?.targetAgentId ?? this.currentSession?.agentId ?? 'default';
+                await socketService.sendMessage(this.currentSession.id, message, targetAgentId);
             } catch (error) {
                 console.error('Failed to send message:', error);
                 this.isStreaming = false;

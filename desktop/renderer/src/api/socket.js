@@ -95,9 +95,23 @@ class SocketService {
 
     /**
      * Send user message to agent via Gateway (full-duplex: no NestJS in path).
+     * @param {string} sessionId
+     * @param {string} message
+     * @param {string} [targetAgentId] - 对话/安装目标：具体 agentId，或 "global"|"all" 表示全局
      */
-    async sendMessage(sessionId, message) {
-        return this.call('agent.chat', { sessionId, message }, 120000);
+    async sendMessage(sessionId, message, targetAgentId) {
+        const params = { sessionId, message };
+        if (targetAgentId !== undefined && targetAgentId !== null) {
+            params.targetAgentId = targetAgentId;
+        }
+        return this.call('agent.chat', params, 120000);
+    }
+
+    /**
+     * Abort the current agent turn for the given session.
+     */
+    async cancelAgent(sessionId) {
+        return this.call('agent.cancel', { sessionId }, 10000);
     }
 
     async unsubscribeFromSession() {

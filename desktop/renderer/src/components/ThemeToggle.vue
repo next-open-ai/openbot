@@ -17,6 +17,7 @@ export default {
       const theme = settingsStore.config.theme;
       if (theme === 'light') return '☀️';
       if (theme === 'cosmic') return '🪐';
+      if (theme === 'neon') return '✨';
       return '🌙';
     });
 

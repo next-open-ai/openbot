@@ -16,7 +16,7 @@ export class AgentsController {
 
     @Post('sessions')
     async createSession(
-        @Body() body: { workspace?: string; provider?: string; model?: string; title?: string },
+        @Body() body: { id?: string; agentId?: string; workspace?: string; provider?: string; model?: string; title?: string; type?: 'chat' | 'scheduled' | 'system' },
     ) {
         try {
             const session = await this.agentsService.createSession(body);

@@ -2,7 +2,6 @@ import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '@/views/Dashboard.vue';
 import AgentChat from '@/views/AgentChat.vue';
 import Sessions from '@/views/Sessions.vue';
-import Skills from '@/views/Skills.vue';
 import Workspace from '@/views/Workspace.vue';
 import WorkResults from '@/views/WorkResults.vue';
 import Agents from '@/views/Agents.vue';
@@ -33,8 +32,7 @@ const routes = [
     },
     {
         path: '/skills',
-        name: 'Skills',
-        component: Skills,
+        redirect: () => ({ path: '/settings', query: { tab: 'skills' } }),
     },
     {
         path: '/agents',

@@ -78,13 +78,18 @@
             </button>
           </div>
 
-          <!-- Skills 配置 -->
+          <!-- Skills 配置：仅当前智能体的 skills，支持删除 -->
           <div v-show="activeTab === 'skills'" class="tab-panel skills-panel">
             <div class="panel-header">
               <h2 class="panel-title">{{ t('agents.skillsConfig') }}</h2>
-              <button class="btn-primary" @click="showAddSkillModal = true">
-                + {{ t('agents.addSkill') }}
-              </button>
+              <div class="panel-header-buttons">
+                <button class="btn-secondary" @click="openSmartInstallModal">
+                  {{ t('agents.installSmart') }}
+                </button>
+                <button class="btn-primary" @click="openManualInstallModal">
+                  {{ t('agents.installManual') }}
+                </button>
+              </div>
             </div>
             <div v-if="skillsLoading" class="loading-state">
               <div class="spinner"></div>
@@ -93,9 +98,10 @@
             <div v-else-if="agentSkills.length === 0" class="empty-state">
               <div class="empty-icon">🎯</div>
               <p>{{ t('skills.noSkills') }}</p>
-              <button class="btn-secondary mt-4" @click="showAddSkillModal = true">
-                {{ t('agents.addSkill') }}
-              </button>
+              <div class="empty-actions">
+                <button class="btn-secondary" @click="openSmartInstallModal">{{ t('agents.installSmart') }}</button>
+                <button class="btn-primary" @click="openManualInstallModal">{{ t('agents.installManual') }}</button>
+              </div>
             </div>
             <div v-else class="skills-grid">
               <div
@@ -108,7 +114,7 @@
                 <span class="skill-card-name">{{ skill.name }}</span>
                 <p class="skill-card-desc">{{ skill.description }}</p>
                 <button
-                  v-if="!agent.isDefault"
+                  v-if="canDeleteWorkspaceSkill"
                   type="button"
                   class="link-btn danger skill-delete"
                   @click.stop="confirmDeleteSkill(skill)"
@@ -122,39 +128,39 @@
           </div>
       </div>
 
-      <!-- 新增 Skill 弹窗 -->
+      <!-- 智能安装：复用 SmartInstallDialog，传当前智能体 id 安装到其工作区 -->
+      <SmartInstallDialog
+        v-if="showSmartInstallModal"
+        :target-agent-id="agent?.id ?? 'default'"
+        session-id="skill-install"
+        @close="closeSmartInstallModal"
+        @installed="loadSkills"
+      />
+
+      <!-- 手工新增 Skill 弹窗 -->
       <transition name="fade">
-        <div v-if="showAddSkillModal" class="modal-backdrop" @click.self="showAddSkillModal = false">
-          <div class="modal-content card-glass">
+        <div v-if="showManualInstallModal" class="modal-backdrop" @click.self="showManualInstallModal = false">
+          <div class="modal-content card-glass add-skill-modal">
             <div class="modal-header">
-              <h2>{{ t('agents.addSkill') }}</h2>
-              <button type="button" class="close-btn" @click="showAddSkillModal = false">✕</button>
+              <h2>{{ t('agents.installManual') }}</h2>
+              <button type="button" class="close-btn" @click="showManualInstallModal = false">✕</button>
             </div>
             <div class="modal-body">
+              <p class="form-hint">{{ t('agents.installManualHint') }}</p>
               <div class="form-group">
-                <label>{{ t('agents.skillName') }}</label>
+                <label>{{ t('agents.skillGitUrl') }}</label>
                 <input
-                  v-model="addSkillForm.name"
+                  v-model="manualInstallUrl"
                   type="text"
                   class="form-input"
-                  placeholder="my-skill"
-                />
-                <p class="form-hint">{{ t('agents.workspaceNameHint') }}</p>
-              </div>
-              <div class="form-group">
-                <label>{{ t('agents.skillDescription') }}</label>
-                <input
-                  v-model="addSkillForm.description"
-                  type="text"
-                  class="form-input"
-                  :placeholder="t('agents.skillDescriptionPlaceholder')"
+                  :placeholder="t('agents.skillGitUrlPlaceholder')"
                 />
               </div>
-              <p v-if="addSkillError" class="form-error">{{ addSkillError }}</p>
+              <p v-if="installError" class="form-error">{{ installError }}</p>
               <div class="modal-footer-actions">
-                <button type="button" class="btn-secondary" @click="showAddSkillModal = false">{{ t('common.close') }}</button>
-                <button type="button" class="btn-primary" :disabled="addSkillSaving" @click="doAddSkill">
-                  {{ addSkillSaving ? t('common.loading') : t('agents.create') }}
+                <button type="button" class="btn-secondary" @click="showManualInstallModal = false">{{ t('common.close') }}</button>
+                <button type="button" class="btn-primary" :disabled="installManualSaving" @click="doManualInstall">
+                  {{ installManualSaving ? t('common.loading') : t('agents.installConfirm') }}
                 </button>
               </div>
             </div>
@@ -201,20 +207,26 @@
 </template>
 
 <script>
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
-import { agentConfigAPI, skillsAPI, configAPI } from '@/api';
+import { useAgentStore } from '@/store/modules/agent';
+import { agentConfigAPI, skillsAPI, configAPI, agentAPI } from '@/api';
 import { marked } from 'marked';
+import ChatMessage from '@/components/ChatMessage.vue';
+import SmartInstallDialog from '@/components/SmartInstallDialog.vue';
 
 /** 主智能体兜底：工作空间为 workspace/default，API 失败时仍可显示管理界面 */
 const MAIN_AGENT_FALLBACK = { id: 'default', name: '主智能体', workspace: 'default', isDefault: true };
 
 export default {
   name: 'AgentDetail',
+  components: { ChatMessage, SmartInstallDialog },
   setup() {
     const route = useRoute();
+    const router = useRouter();
     const { t } = useI18n();
+    const agentStore = useAgentStore();
     const agentId = computed(() => route.params.id);
 
     const agent = ref(null);
@@ -232,14 +244,16 @@ export default {
 
     const agentSkills = ref([]);
     const skillsLoading = ref(false);
-    const showAddSkillModal = ref(false);
-    const addSkillForm = ref({ name: '', description: '' });
-    const addSkillError = ref('');
-    const addSkillSaving = ref(false);
+    const showSmartInstallModal = ref(false);
+    const showManualInstallModal = ref(false);
+    const manualInstallUrl = ref('');
+    const installError = ref('');
+    const installManualSaving = ref(false);
     const selectedSkill = ref(null);
     const skillDetailContent = ref('');
     const deleteSkillTarget = ref(null);
 
+    const canDeleteWorkspaceSkill = computed(() => agent.value && !agent.value.isDefault && agent.value.workspace !== 'default');
     const renderedSkillContent = computed(() => (skillDetailContent.value ? marked(skillDetailContent.value) : ''));
 
     async function loadAgent() {
@@ -348,45 +362,82 @@ export default {
       deleteSkillTarget.value = skill;
     }
     async function doDeleteSkill() {
-      if (!agent.value || !deleteSkillTarget.value) return;
+      const target = deleteSkillTarget.value;
+      if (!agent.value || !target) return;
       try {
-        await skillsAPI.deleteSkill(agent.value.workspace, deleteSkillTarget.value.name);
+        await skillsAPI.deleteSkill(agent.value.workspace, target.name);
         deleteSkillTarget.value = null;
         await loadSkills();
       } catch (e) {
         console.error('Delete skill failed', e);
       }
     }
-    function doAddSkill() {
-      const name = (addSkillForm.value.name || '').trim();
-      if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
-        addSkillError.value = t('agents.workspaceNameFormat');
+    function openSmartInstallModal() {
+      if (!agent.value) return;
+      agentStore.clearCurrentSession();
+      showSmartInstallModal.value = true;
+    }
+    function closeSmartInstallModal() {
+      showSmartInstallModal.value = false;
+      installError.value = '';
+    }
+    function openManualInstallModal() {
+      manualInstallUrl.value = '';
+      installError.value = '';
+      showManualInstallModal.value = true;
+    }
+    async function doManualInstall() {
+      const url = (manualInstallUrl.value || '').trim();
+      if (!url) {
+        installError.value = t('agents.skillGitUrl');
         return;
       }
-      addSkillError.value = '';
-      addSkillSaving.value = true;
-      skillsAPI
-        .addSkill({
-          workspace: agent.value.workspace,
-          name,
-          description: addSkillForm.value.description?.trim() || 'No description',
-        })
-        .then(() => {
-          showAddSkillModal.value = false;
-          addSkillForm.value = { name: '', description: '' };
-          loadSkills();
-        })
-        .catch((e) => {
-          addSkillError.value = e.response?.data?.message || e.message || 'Failed';
-        })
-        .finally(() => {
-          addSkillSaving.value = false;
+      installError.value = '';
+      installManualSaving.value = true;
+      try {
+        await skillsAPI.installSkill(url, {
+          scope: 'workspace',
+          workspace: agent.value?.workspace ?? 'default',
         });
+        showManualInstallModal.value = false;
+        manualInstallUrl.value = '';
+        await loadSkills();
+      } catch (e) {
+        installError.value = e.response?.data?.message || e.message || t('agents.installFailed');
+      } finally {
+        installManualSaving.value = false;
+      }
     }
 
     watch(agentId, loadAgent);
     watch([agent, activeTab], () => {
       if (agent.value && activeTab.value === 'skills') loadSkills();
+    });
+    watch(
+      () => route.query.smartInstallSession,
+      async (sessionId) => {
+        if (!sessionId) return;
+        showSmartInstallModal.value = true;
+        try {
+          await agentStore.selectSession(sessionId);
+          router.replace({ path: route.path, query: {} });
+        } catch (e) {
+          installError.value = e.response?.data?.message || e.message || 'Failed';
+        }
+      },
+      { immediate: true },
+    );
+    watch(showSmartInstallModal, (open) => {
+      if (open) {
+        document.body.style.overflow = 'hidden';
+      } else {
+        document.body.style.overflow = '';
+      }
+    });
+    onBeforeUnmount(() => {
+      if (showSmartInstallModal.value) {
+        document.body.style.overflow = '';
+      }
     });
     onMounted(() => {
       loadAgent();
@@ -405,11 +456,15 @@ export default {
       saveConfig,
       agentSkills,
       skillsLoading,
-      showAddSkillModal,
-      addSkillForm,
-      addSkillError,
-      addSkillSaving,
-      doAddSkill,
+      canDeleteWorkspaceSkill,
+      showSmartInstallModal,
+      showManualInstallModal,
+      manualInstallUrl,
+      installError,
+      installManualSaving,
+      openSmartInstallModal,
+      openManualInstallModal,
+      closeSmartInstallModal,
       selectedSkill,
       skillDetailContent,
       renderedSkillContent,
@@ -551,6 +606,276 @@ export default {
   margin: 0;
 }
 
+.panel-header-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.empty-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+
+/* 智能安装：严格模态，点击背板不关闭，仅通过关闭按钮退出 */
+.smart-install-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop, 1040);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  box-sizing: border-box;
+}
+
+.smart-install-dialog-backdrop.smart-install-expanded {
+  padding: 0;
+}
+
+.smart-install-dialog {
+  position: relative;
+  z-index: var(--z-modal, 1050);
+  max-width: 680px;
+  width: 100%;
+  min-width: 360px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  background: var(--color-bg-primary);
+}
+
+.smart-install-dialog.expanded {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+}
+
+.smart-install-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--color-bg-secondary);
+}
+
+.smart-install-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.smart-install-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.btn-icon-header {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.btn-icon-header:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-primary);
+}
+
+.btn-icon-text {
+  white-space: nowrap;
+}
+
+.smart-install-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.smart-install-close-btn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+
+.smart-install-dialog.expanded .smart-install-messages {
+  max-height: none;
+  flex: 1;
+}
+
+.smart-install-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.smart-install-body.loading-inline {
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-2xl);
+  color: var(--color-text-secondary);
+}
+
+.smart-install-messages {
+  flex: 1;
+  min-height: 280px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: var(--spacing-lg) var(--spacing-xl);
+  background: var(--color-bg-primary);
+}
+
+.smart-install-dialog.expanded .smart-install-messages {
+  max-height: none;
+}
+
+.empty-chat-inline {
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.smart-install-messages .chat-message {
+  margin-bottom: var(--spacing-md);
+}
+
+.smart-install-messages .streaming-message {
+  margin-bottom: var(--spacing-md);
+}
+
+/* 输入区：一个圆角框内，左侧输入框 + 右侧发送/中止按钮，视觉一体 */
+.smart-install-input-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border-top: 1px solid var(--glass-border);
+}
+
+.smart-install-input-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 8px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-primary);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.smart-install-input-wrap:focus-within {
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.smart-install-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  font-family: var(--font-family-base);
+  resize: none;
+  min-height: 44px;
+  outline: none;
+}
+
+.smart-install-input::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.smart-install-input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.smart-install-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, transform 0.1s;
+}
+
+.smart-install-btn .btn-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.smart-install-btn-send {
+  background: var(--color-accent-primary);
+  color: white;
+}
+
+.smart-install-btn-send:hover:not(:disabled) {
+  opacity: 0.95;
+  transform: scale(1.02);
+}
+
+.smart-install-btn-send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.smart-install-btn-abort {
+  background: rgba(220, 38, 38, 0.14);
+  color: var(--color-error, #dc2626);
+}
+
+.smart-install-btn-abort:hover {
+  background: rgba(220, 38, 38, 0.22);
+  transform: scale(1.02);
+}
+
+.smart-install-error {
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  flex-shrink: 0;
+}
+
 .form-group {
   margin-bottom: var(--spacing-lg);
 }
@@ -648,6 +973,10 @@ export default {
 
 .skill-delete {
   font-size: var(--font-size-sm);
+}
+
+.add-skill-modal .form-hint {
+  margin-bottom: var(--spacing-md);
 }
 
 .doc-toolbar {
