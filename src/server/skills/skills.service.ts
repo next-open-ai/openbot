@@ -1,7 +1,7 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DEFAULT_AGENT_ID } from '../agent-config/agent-config.service.js';
 import { readdir, readFile, stat, mkdir, writeFile, rm, cp, realpath } from 'fs/promises';
-import { join, resolve } from 'path';
+import { join, resolve, basename } from 'path';
 import { existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
@@ -149,6 +149,54 @@ export class SkillsService {
 
         console.log(`[install_skill] 安装完成: 最终目录=${targetDir}, 技能名=${copiedNames.join(', ') || '(无)'}`);
         return { stdout, stderr, installDir: targetDir };
+    }
+
+    /**
+     * 从本地目录安装技能：将指定目录复制到目标 skills 目录。
+     * @param localPath 本地技能目录绝对路径（须包含 SKILL.md）
+     * @param options.scope 'global' 安装到全局；'workspace' 安装到指定工作区
+     * @param options.workspace 当 scope 为 'workspace' 时的工作区名
+     */
+    async installSkillFromPath(
+        localPath: string,
+        options?: { scope?: 'global' | 'workspace'; workspace?: string },
+    ): Promise<{ installDir: string; name: string }> {
+        const pathToUse = resolve(localPath.trim());
+        if (!existsSync(pathToUse)) {
+            throw new BadRequestException('本地路径不存在');
+        }
+        const pathStat = await stat(pathToUse);
+        if (!pathStat.isDirectory()) {
+            throw new BadRequestException('请选择技能目录');
+        }
+        const skillMdPath = join(pathToUse, 'SKILL.md');
+        if (!existsSync(skillMdPath)) {
+            throw new BadRequestException('该目录下未找到 SKILL.md，不是有效的技能目录');
+        }
+        const scope = options?.scope ?? 'global';
+        const workspaceName = options?.workspace ?? 'default';
+        const targetDir =
+            scope === 'workspace'
+                ? this.getWorkspaceSkillsDir(workspaceName)
+                : this.getGlobalSkillsDir();
+        const baseName = basename(pathToUse) || 'skill';
+        if (!baseName || !SKILL_NAME_REGEX.test(baseName)) {
+            throw new BadRequestException('技能目录名须为英文、数字、下划线或连字符');
+        }
+        const destPath = join(targetDir, baseName);
+        try {
+            await mkdir(targetDir, { recursive: true });
+            if (existsSync(destPath)) {
+                await rm(destPath, { recursive: true });
+            }
+            const srcResolved = await realpath(pathToUse).catch(() => pathToUse);
+            await cp(srcResolved, destPath, { recursive: true });
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            throw new BadRequestException(`复制失败: ${msg}`);
+        }
+        console.log(`[install_skill_from_path] 已安装: ${pathToUse} -> ${destPath}`);
+        return { installDir: targetDir, name: baseName };
     }
 
     async getSkills(): Promise<Skill[]> {

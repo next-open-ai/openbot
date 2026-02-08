@@ -47,6 +47,13 @@ export const skillsAPI = {
             scope: options?.scope,
             workspace: options?.workspace,
         }),
+    /** 从本地目录安装技能。path 为本地绝对路径（桌面端通过目录选择器获得） */
+    installSkillFromPath: (path, options) =>
+        apiClient.post('/skills/install-from-path', {
+            path,
+            scope: options?.scope,
+            workspace: options?.workspace,
+        }),
 };
 
 // Config API

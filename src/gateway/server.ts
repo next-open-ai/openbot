@@ -23,6 +23,7 @@ import { existsSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
+import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { setBackendBaseUrl } from "./backend-url.js";
 
 /**
@@ -148,6 +149,32 @@ export async function startGatewayServer(port: number = 3000): Promise<{
         const pathname = req.url?.split("?")[0] || "";
         if (req.method === "POST" && pathname === "/run-scheduled-task") {
             await handleRunScheduledTask(req, res);
+            return;
+        }
+
+        // 本地技能目录安装：在 Gateway 层直接处理，不依赖 Nest，保证桌面端稳定可用
+        if (req.method === "POST" && pathname === "/server-api/skills/install-from-path") {
+            const body = await new Promise<string>((resolve, reject) => {
+                const chunks: Buffer[] = [];
+                req.on("data", (chunk) => chunks.push(chunk));
+                req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+                req.on("error", reject);
+            });
+            try {
+                const parsed = JSON.parse(body || "{}") as { path?: string; scope?: string; workspace?: string };
+                const result = await handleInstallSkillFromPath({
+                    path: parsed.path ?? "",
+                    scope: parsed.scope === "workspace" ? "workspace" : "global",
+                    workspace: parsed.workspace,
+                });
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify(result));
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                const code = message.includes("required") || message.includes("不存在") || message.includes("SKILL.md") || message.includes("目录名") ? 400 : 500;
+                res.writeHead(code, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ success: false, message }));
+            }
             return;
         }
 

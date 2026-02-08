@@ -26,29 +26,7 @@ export class SkillsController {
         return { success: true, data: skills };
     }
 
-    @Get(':name')
-    async getSkill(@Param('name') name: string) {
-        const skill = await this.skillsService.getSkill(name);
-        if (!skill) {
-            throw new HttpException('Skill not found', HttpStatus.NOT_FOUND);
-        }
-        return { success: true, data: skill };
-    }
-
-    @Get(':name/content')
-    async getSkillContent(
-        @Param('name') name: string,
-        @Query('workspace') workspace?: string,
-    ) {
-        const content = workspace
-            ? await this.skillsService.getSkillContentForWorkspace(workspace, name)
-            : await this.skillsService.getSkillContent(name);
-        if (!content) {
-            throw new HttpException('Skill not found', HttpStatus.NOT_FOUND);
-        }
-        return { success: true, data: { content } };
-    }
-
+    /** 静态 POST 路由放在 :name 等参数路由之前，确保能被正确匹配 */
     @Post('install')
     async installSkill(
         @Body()
@@ -93,6 +71,65 @@ export class SkillsController {
             workspace: scope === 'workspace' ? workspace ?? 'default' : undefined,
         });
         return { success: true, data: result };
+    }
+
+    @Post('install-from-path')
+    async installSkillFromPath(
+        @Body()
+        body: {
+            path: string;
+            scope?: 'global' | 'workspace';
+            workspace?: string;
+            targetAgentId?: string;
+        },
+    ) {
+        const localPath = body?.path?.trim();
+        if (!localPath) {
+            throw new HttpException('path is required', HttpStatus.BAD_REQUEST);
+        }
+        let scope: 'global' | 'workspace' = body?.scope ?? 'global';
+        let workspace: string | undefined = body?.workspace;
+
+        const tid = (body?.targetAgentId ?? '').trim().toLowerCase();
+        if (tid === 'global' || tid === 'all') {
+            scope = 'global';
+            workspace = undefined;
+        } else if (body?.targetAgentId?.trim()) {
+            const agent = await this.agentConfigService.getAgent(body.targetAgentId!.trim());
+            if (agent?.workspace) {
+                scope = 'workspace';
+                workspace = agent.workspace;
+            }
+        }
+
+        const result = await this.skillsService.installSkillFromPath(localPath, {
+            scope,
+            workspace: scope === 'workspace' ? workspace ?? 'default' : undefined,
+        });
+        return { success: true, data: result };
+    }
+
+    @Get(':name')
+    async getSkill(@Param('name') name: string) {
+        const skill = await this.skillsService.getSkill(name);
+        if (!skill) {
+            throw new HttpException('Skill not found', HttpStatus.NOT_FOUND);
+        }
+        return { success: true, data: skill };
+    }
+
+    @Get(':name/content')
+    async getSkillContent(
+        @Param('name') name: string,
+        @Query('workspace') workspace?: string,
+    ) {
+        const content = workspace
+            ? await this.skillsService.getSkillContentForWorkspace(workspace, name)
+            : await this.skillsService.getSkillContent(name);
+        if (!content) {
+            throw new HttpException('Skill not found', HttpStatus.NOT_FOUND);
+        }
+        return { success: true, data: { content } };
     }
 
     @Post()

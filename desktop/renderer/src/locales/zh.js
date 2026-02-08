@@ -124,6 +124,9 @@ export default {
     skillsWorkspace: '当前工作区技能',
     installSmart: '智能安装',
     installManual: '手工安装',
+    installLocal: '本地文件安装',
+    installLocalHint: '选择包含 SKILL.md 的技能目录，将复制到当前目标（工作区或全局）',
+    installLocalDesktopOnly: '仅桌面端支持，请使用 OpenBot 桌面应用',
     installSmartHint: '通过对话让智能体帮你搜索并安装技能（会话不会出现在左侧列表）',
     installManualHint: '输入技能的 Git 地址，将调用 npx skills add 安装',
     skillGitUrl: 'Skill 安装地址',
@@ -170,6 +173,8 @@ export default {
     noDocumentation: '暂无文档',
     install: '安装新技能',
     installHint: '浏览技能市场 (即将推出)',
+    selectFolder: '未选择目录',
+    chooseFolder: '选择目录',
   },
   sessions: {
     noSessions: '暂无活动记录',

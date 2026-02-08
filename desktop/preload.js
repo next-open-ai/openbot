@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     maximizeWindow: () => ipcRenderer.invoke('maximize-window'),
     closeWindow: () => ipcRenderer.invoke('close-window'),
     getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
+    /** 打开目录选择对话框，返回选中目录的绝对路径，取消返回 null */
+    showOpenDirectoryDialog: () => ipcRenderer.invoke('show-open-directory-dialog'),
     platform: process.platform,
 });

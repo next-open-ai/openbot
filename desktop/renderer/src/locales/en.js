@@ -124,6 +124,9 @@ export default {
     skillsWorkspace: 'Workspace skills',
     installSmart: 'Smart install',
     installManual: 'Manual install',
+    installLocal: 'Install from local folder',
+    installLocalHint: 'Select a skill directory containing SKILL.md; it will be copied to the target (workspace or global)',
+    installLocalDesktopOnly: 'Only supported in desktop app. Please use OpenBot Desktop.',
     installSmartHint: 'Use chat to search and install skills (session will not appear in the list)',
     installManualHint: 'Enter skill Git URL; runs npx skills add to install',
     skillGitUrl: 'Skill install URL',
@@ -170,6 +173,8 @@ export default {
     noDocumentation: 'No documentation available',
     install: 'Install New Skill',
     installHint: 'Browse Skill Marketplace (Coming Soon)',
+    selectFolder: 'No folder selected',
+    chooseFolder: 'Choose folder',
   },
   sessions: {
     noSessions: 'No Sessions Yet',

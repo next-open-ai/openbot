@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -98,10 +98,36 @@ async function createWindow() {
     });
 }
 
+// IPC handlers (register in whenReady so they are bound to the same main process that creates the window)
+function registerIpcHandlers() {
+    ipcMain.handle('get-app-version', () => app.getVersion());
+    ipcMain.handle('minimize-window', () => {
+        if (mainWindow) mainWindow.minimize();
+    });
+    ipcMain.handle('maximize-window', () => {
+        if (mainWindow) {
+            if (mainWindow.isMaximized()) mainWindow.unmaximize();
+            else mainWindow.maximize();
+        }
+    });
+    ipcMain.handle('close-window', () => {
+        if (mainWindow) mainWindow.close();
+    });
+    ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
+    ipcMain.handle('show-open-directory-dialog', async () => {
+        const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow || null, {
+            title: '选择技能目录',
+            properties: ['openDirectory'],
+        });
+        if (canceled || !filePaths || filePaths.length === 0) return null;
+        return filePaths[0];
+    });
+}
+
 // App lifecycle
 app.whenReady().then(() => {
+    registerIpcHandlers();
     startGateway();
-    // No need to startServer(), gateway does it.
     createWindow();
 
     app.on('activate', () => {
@@ -122,35 +148,4 @@ app.on('before-quit', () => {
         console.log('Killing Gateway process...');
         gatewayProcess.kill();
     }
-});
-
-// IPC handlers
-ipcMain.handle('get-app-version', () => {
-    return app.getVersion();
-});
-
-ipcMain.handle('minimize-window', () => {
-    if (mainWindow) {
-        mainWindow.minimize();
-    }
-});
-
-ipcMain.handle('maximize-window', () => {
-    if (mainWindow) {
-        if (mainWindow.isMaximized()) {
-            mainWindow.unmaximize();
-        } else {
-            mainWindow.maximize();
-        }
-    }
-});
-
-ipcMain.handle('close-window', () => {
-    if (mainWindow) {
-        mainWindow.close();
-    }
-});
-
-ipcMain.handle('get-user-data-path', () => {
-    return app.getPath('userData');
 });

@@ -86,6 +86,9 @@
                 <button class="btn-secondary" @click="openSmartInstallModal">
                   {{ t('agents.installSmart') }}
                 </button>
+                <button class="btn-secondary" @click="showLocalInstallModal = true">
+                  {{ t('agents.installLocal') }}
+                </button>
                 <button class="btn-primary" @click="openManualInstallModal">
                   {{ t('agents.installManual') }}
                 </button>
@@ -100,6 +103,7 @@
               <p>{{ t('skills.noSkills') }}</p>
               <div class="empty-actions">
                 <button class="btn-secondary" @click="openSmartInstallModal">{{ t('agents.installSmart') }}</button>
+                <button class="btn-secondary" @click="showLocalInstallModal = true">{{ t('agents.installLocal') }}</button>
                 <button class="btn-primary" @click="openManualInstallModal">{{ t('agents.installManual') }}</button>
               </div>
             </div>
@@ -134,6 +138,13 @@
         :target-agent-id="agent?.id ?? 'default'"
         session-id="skill-install"
         @close="closeSmartInstallModal"
+        @installed="loadSkills"
+      />
+      <LocalInstallSkillDialog
+        :show="showLocalInstallModal"
+        scope="workspace"
+        :workspace="agent?.workspace ?? 'default'"
+        @close="showLocalInstallModal = false"
         @installed="loadSkills"
       />
 
@@ -215,13 +226,14 @@ import { agentConfigAPI, skillsAPI, configAPI, agentAPI } from '@/api';
 import { marked } from 'marked';
 import ChatMessage from '@/components/ChatMessage.vue';
 import SmartInstallDialog from '@/components/SmartInstallDialog.vue';
+import LocalInstallSkillDialog from '@/components/LocalInstallSkillDialog.vue';
 
 /** 主智能体兜底：工作空间为 workspace/default，API 失败时仍可显示管理界面 */
 const MAIN_AGENT_FALLBACK = { id: 'default', name: '主智能体', workspace: 'default', isDefault: true };
 
 export default {
   name: 'AgentDetail',
-  components: { ChatMessage, SmartInstallDialog },
+  components: { ChatMessage, SmartInstallDialog, LocalInstallSkillDialog },
   setup() {
     const route = useRoute();
     const router = useRouter();
@@ -245,6 +257,7 @@ export default {
     const agentSkills = ref([]);
     const skillsLoading = ref(false);
     const showSmartInstallModal = ref(false);
+    const showLocalInstallModal = ref(false);
     const showManualInstallModal = ref(false);
     const manualInstallUrl = ref('');
     const installError = ref('');
@@ -458,6 +471,7 @@ export default {
       skillsLoading,
       canDeleteWorkspaceSkill,
       showSmartInstallModal,
+      showLocalInstallModal,
       showManualInstallModal,
       manualInstallUrl,
       installError,

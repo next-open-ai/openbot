@@ -43,6 +43,7 @@
         <p class="panel-desc">{{ t('skills.sources.globalDesc') }}</p>
         <div class="panel-actions">
           <button type="button" class="btn-secondary" @click="openSmartInstall">{{ t('agents.installSmart') }}</button>
+          <button type="button" class="btn-secondary" @click="showLocalInstallModal = true">{{ t('agents.installLocal') }}</button>
           <button type="button" class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
         </div>
       </div>
@@ -51,6 +52,7 @@
         <p>{{ t('skills.noSkills') }}</p>
         <div class="empty-actions">
           <button class="btn-secondary" @click="openSmartInstall">{{ t('agents.installSmart') }}</button>
+          <button class="btn-secondary" @click="showLocalInstallModal = true">{{ t('agents.installLocal') }}</button>
           <button class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
         </div>
       </div>
@@ -135,6 +137,13 @@
       @close="closeSmartInstall"
       @installed="loadAllSkills"
     />
+    <!-- 本地文件安装：选择目录安装到全局 -->
+    <LocalInstallSkillDialog
+      :show="showLocalInstallModal"
+      scope="global"
+      @close="showLocalInstallModal = false"
+      @installed="loadAllSkills"
+    />
   </div>
 </template>
 
@@ -146,10 +155,11 @@ import { skillsAPI } from '@/api';
 import { marked } from 'marked';
 import SkillCard from '@/components/SkillCard.vue';
 import SmartInstallDialog from '@/components/SmartInstallDialog.vue';
+import LocalInstallSkillDialog from '@/components/LocalInstallSkillDialog.vue';
 
 export default {
   name: 'SettingsSkills',
-  components: { SkillCard, SmartInstallDialog },
+  components: { SkillCard, SmartInstallDialog, LocalInstallSkillDialog },
   setup() {
     const { t } = useI18n();
     const agentStore = useAgentStore();
@@ -167,6 +177,7 @@ export default {
     const deleteTarget = ref(null);
     const deleteSaving = ref(false);
     const showSmartModal = ref(false);
+    const showLocalInstallModal = ref(false);
 
     const systemSkills = computed(() => allSkills.value.filter((s) => (s.source || 'system') === 'system'));
     const globalSkills = computed(() => allSkills.value.filter((s) => (s.source || 'global') === 'global'));
@@ -288,6 +299,7 @@ export default {
       confirmDelete,
       doDelete,
       showSmartModal,
+      showLocalInstallModal,
       openSmartInstall,
       closeSmartInstall,
       smartInstallDialogTitle,
