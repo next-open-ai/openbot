@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { readdir, stat, rm } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 import { existsSync } from 'fs';
-import { getFreebotWorkspaceDir } from '../../agent/agent-dir.js';
+import { getOpenbotWorkspaceDir } from '../../agent/agent-dir.js';
 
 export interface WorkspaceItem {
     name: string;
@@ -15,12 +15,12 @@ export interface WorkspaceItem {
 @Injectable()
 export class WorkspaceService {
     private getWorkspaceRoot(name: string): string {
-        return join(getFreebotWorkspaceDir(), name);
+        return join(getOpenbotWorkspaceDir(), name);
     }
 
-    /** List workspace names (directories under FREEBOT_WORKSPACE_DIR, default ~/.freebot/workspace) */
+    /** List workspace names (directories under OPENBOT_WORKSPACE_DIR, default ~/.openbot/workspace) */
     async listWorkspaces(): Promise<string[]> {
-        const base = getFreebotWorkspaceDir();
+        const base = getOpenbotWorkspaceDir();
         if (!existsSync(base)) {
             return [];
         }
@@ -43,7 +43,9 @@ export class WorkspaceService {
         }
         const entries = await readdir(dirNormalized, { withFileTypes: true });
         const items: WorkspaceItem[] = [];
+        const hiddenDirNames = new Set(['skills', '.skills']);
         for (const e of entries) {
+            if (e.isDirectory() && hiddenDirNames.has(e.name)) continue;
             const fullPath = join(dirNormalized, e.name);
             const rel = relative(rootNormalized, fullPath);
             let st: Awaited<ReturnType<typeof stat>>;
@@ -79,10 +81,13 @@ export class WorkspaceService {
         return { absolutePath: absolute, safe: ok };
     }
 
-    /** Delete a file or directory (recursive) under workspace. Returns true if deleted. */
+    /** Delete a file or directory (recursive) under workspace. Returns true if deleted. skills 与 .skills 目录禁止删除。 */
     async deletePath(workspaceName: string, relativePath: string): Promise<boolean> {
-        const { absolutePath, safe } = this.resolveFilePath(workspaceName, relativePath);
-        if (!safe || !existsSync(absolutePath)) return false;
+        const safe = this.safeRelativePath(relativePath);
+        const topDir = safe.split('/')[0];
+        if (topDir === 'skills' || topDir === '.skills') return false;
+        const { absolutePath, safe: resolved } = this.resolveFilePath(workspaceName, relativePath);
+        if (!resolved || !existsSync(absolutePath)) return false;
         await rm(absolutePath, { recursive: true });
         return true;
     }

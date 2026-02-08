@@ -10,12 +10,12 @@ export class DatabaseService implements OnModuleDestroy {
 
     getDb(): Database.Database {
         if (!this.db) {
-            const pathEnv = process.env.FREEBOT_DB_PATH;
-            const defaultDir = join(homedir(), '.freebot', 'desktop', 'data');
+            const pathEnv = process.env.OPENBOT_DB_PATH;
+            const defaultDir = join(homedir(), '.openbot', 'desktop', 'data');
             const path =
                 pathEnv === ':memory:' || pathEnv === ''
                     ? ':memory:'
-                    : pathEnv ?? join(process.env.FREEBOT_DB_DIR ?? defaultDir, 'freebot.db');
+                    : pathEnv ?? join(process.env.OPENBOT_DB_DIR ?? defaultDir, 'openbot.db');
             if (path !== ':memory:') {
                 const dir = path.endsWith('.db') ? join(path, '..') : path;
                 if (!existsSync(dir)) {

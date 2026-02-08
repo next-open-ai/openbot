@@ -3,19 +3,19 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
- * 获取 freebot agent 配置目录（默认 ~/.freebot/agent）
- * 可通过环境变量 FREEBOT_AGENT_DIR 覆盖
+ * 获取 openbot agent 配置目录（默认 ~/.openbot/agent）
+ * 可通过环境变量 OPENBOT_AGENT_DIR 覆盖
  */
-export function getFreebotAgentDir(): string {
-    return process.env.FREEBOT_AGENT_DIR ?? join(homedir(), ".freebot", "agent");
+export function getOpenbotAgentDir(): string {
+    return process.env.OPENBOT_AGENT_DIR ?? join(homedir(), ".openbot", "agent");
 }
 
 /**
- * 获取 freebot 工作空间根目录（默认 ~/.freebot/workspace）
- * 可通过环境变量 FREEBOT_WORKSPACE_DIR 覆盖
+ * 获取 openbot 工作空间根目录（默认 ~/.openbot/workspace）
+ * 可通过环境变量 OPENBOT_WORKSPACE_DIR 覆盖
  */
-export function getFreebotWorkspaceDir(): string {
-    return process.env.FREEBOT_WORKSPACE_DIR ?? join(homedir(), ".freebot", "workspace");
+export function getOpenbotWorkspaceDir(): string {
+    return process.env.OPENBOT_WORKSPACE_DIR ?? join(homedir(), ".openbot", "workspace");
 }
 
 /**

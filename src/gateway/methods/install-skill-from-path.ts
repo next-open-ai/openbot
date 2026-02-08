@@ -5,16 +5,16 @@
 import { cp, mkdir, realpath, rm, stat } from "fs/promises";
 import { existsSync } from "fs";
 import { basename, join, resolve } from "path";
-import { getFreebotAgentDir, getFreebotWorkspaceDir } from "../../agent/agent-dir.js";
+import { getOpenbotAgentDir, getOpenbotWorkspaceDir } from "../../agent/agent-dir.js";
 
 const SKILL_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 function getGlobalSkillsDir(): string {
-    return join(getFreebotAgentDir(), "skills");
+    return join(getOpenbotAgentDir(), "skills");
 }
 
 function getWorkspaceSkillsDir(workspaceName: string): string {
-    return join(getFreebotWorkspaceDir(), workspaceName, "skills");
+    return join(getOpenbotWorkspaceDir(), workspaceName, "skills");
 }
 
 export interface InstallFromPathBody {

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { AuthStorage } from "@mariozechner/pi-coding-agent";
-import { getFreebotAgentDir, ensureDefaultAgentDir } from "./agent-dir.js";
+import { getOpenbotAgentDir, ensureDefaultAgentDir } from "./agent-dir.js";
 
 export interface ConfigInfo {
     provider: string;
@@ -16,7 +16,7 @@ export class ConfigManager {
     private agentDir: string;
     private authStorage: AuthStorage;
 
-    constructor(agentDir: string = getFreebotAgentDir()) {
+    constructor(agentDir: string = getOpenbotAgentDir()) {
         this.agentDir = agentDir;
         ensureDefaultAgentDir(this.agentDir);
         const authPath = join(this.agentDir, "auth.json");

@@ -3,10 +3,11 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { getFreebotAgentDir } from "./agent/agent-dir.js";
+import { getOpenbotAgentDir } from "./agent/agent-dir.js";
 import { loadSkillsFromPaths, type Skill } from "./agent/skills.js";
 import { run } from "./agent/run.js";
 import { ConfigManager } from "./agent/config-manager.js";
+import { loadDesktopAgentConfig, getBoundAgentIdForCli } from "./agent/desktop-config.js";
 
 const require = createRequire(import.meta.url);
 const PKG = require("../package.json") as { version: string };
@@ -25,13 +26,18 @@ async function runAction(
         model?: string;
         provider?: string;
         agentDir?: string;
+        agent?: string;
         apiKey?: string;
         timing?: boolean;
         maxToolTurns?: number;
     },
 ): Promise<void> {
     const skillPaths = opts.skillPath || [];
-    const workspace = opts.workspace || "default";
+    // 指定智能体：-a/--agent 优先，其次 -w/--workspace（且非 default）；不提供则使用配置中的缺省智能体
+    const explicitAgent =
+        (opts.agent && String(opts.agent).trim()) ||
+        (opts.workspace && opts.workspace !== "default" ? opts.workspace : "");
+    const workspace = explicitAgent ? explicitAgent.trim() : await getBoundAgentIdForCli();
     const prompt = (opts.prompt ?? positionalPrompt ?? "").trim();
 
     if (!prompt) {
@@ -39,10 +45,20 @@ async function runAction(
         process.exit(1);
     }
 
-    console.error(`[freebot] Using workspace: ${workspace}`);
+    console.error(`[openbot] Using agent: ${workspace}${!explicitAgent ? " (default from config)" : ""}`);
 
-    const apiKey = opts.apiKey ?? process.env.OPENAI_API_KEY ?? "";
-    if (opts.timing) process.env.FREEBOT_TIMING = "1";
+    // 未传 --api-key / --provider / --model 时从桌面配置（~/.openbot/desktop）读取
+    const needDesktop =
+        opts.apiKey === undefined || opts.provider === undefined || opts.model === undefined;
+    const desktopConfig = needDesktop ? await loadDesktopAgentConfig(workspace) : null;
+    const provider = opts.provider ?? desktopConfig?.provider ?? "deepseek";
+    const model = opts.model ?? desktopConfig?.model ?? "deepseek-chat";
+    const apiKey =
+        opts.apiKey ?? process.env.OPENAI_API_KEY ?? desktopConfig?.apiKey ?? "";
+    if (desktopConfig && (desktopConfig.provider || desktopConfig.model)) {
+        console.error(`[openbot] Using model: ${provider}/${model} (from desktop config)`);
+    }
+    if (opts.timing) process.env.OPENBOT_TIMING = "1";
 
     try {
         const result = await run({
@@ -50,9 +66,9 @@ async function runAction(
             skillPaths,
             userPrompt: prompt,
             dryRun: opts.dryRun ?? false,
-            model: opts.model ?? "deepseek-chat",
-            provider: opts.provider ?? "deepseek",
-            agentDir: opts.agentDir ?? getFreebotAgentDir(),
+            model,
+            provider,
+            agentDir: opts.agentDir ?? getOpenbotAgentDir(),
             apiKey: apiKey || undefined,
         });
 
@@ -82,14 +98,15 @@ async function runAction(
 const program = new Command();
 
 program
-    .name("freebot")
+    .name("openbot")
     .description("CLI to run prompts with skill paths (Agent Skills style)")
     .version(PKG.version, "-v, --version", "显示版本号")
     .option(
         "-s, --skill-path <paths...>",
         "Additional skill paths to load",
     )
-    .option("-w, --workspace <name>", "Workspace name", "default")
+    .option("-a, --agent <id>", "指定智能体 ID，不传则使用配置中的缺省智能体")
+    .option("-w, --workspace <name>", "Workspace/Agent 名称（同 --agent，兼容旧用法）", "default")
     .option("-p, --prompt <text>", "用户提示词（与位置参数二选一）")
     .option("--dry-run", "只输出组装的 system/user 内容，不调用 LLM")
     .option("--model <id>", "模型 ID", "deepseek-chat")
@@ -100,14 +117,14 @@ program
     )
     .option(
         "--agent-dir <path>",
-        "Agent 配置目录（默认 ~/.freebot/agent）",
-        getFreebotAgentDir(),
+        "Agent 配置目录（默认 ~/.openbot/agent）",
+        getOpenbotAgentDir(),
     )
     .option("--api-key <key>", "API Key（不传则使用环境变量 OPENAI_API_KEY）")
     .option("--timing", "打印每轮 LLM 与 tool 耗时到 stderr")
     .option(
         "--max-tool-turns <n>",
-        "最大工具调用轮数（默认 30）；可设环境变量 FREEBOT_MAX_TOOL_TURNS",
+        "最大工具调用轮数（默认 30）；可设环境变量 OPENBOT_MAX_TOOL_TURNS",
         (v: string) => parseInt(v, 10) || 0,
         0,
     )
@@ -124,15 +141,16 @@ Environment:
   OPENAI_API_KEY            通用 API Key（可被 --api-key 覆盖）
   DASHSCOPE_API_KEY         provider=dashscope 时使用；不设时回退 OPENAI_API_KEY
   OPENAI_BASE_URL           可选，在 pi 未找到模型时使用的 endpoint
-  FREEBOT_AGENT_DIR         缺省 agent 目录（默认 ~/.freebot/agent）
-  FREEBOT_TIMING=1          等同 --timing
-  FREEBOT_ALLOW_RUN_CODE    缺省 1（启用 run_python）；设为 0 关闭
-  FREEBOT_MAX_TOOL_TURNS    最大工具轮数（默认 30）
+  OPENBOT_AGENT_DIR         缺省 agent 目录（默认 ~/.openbot/agent）
+  OPENBOT_TIMING=1          等同 --timing
+  OPENBOT_ALLOW_RUN_CODE    缺省 1（启用 run_python）；设为 0 关闭
+  OPENBOT_MAX_TOOL_TURNS    最大工具轮数（默认 30）
 
 Examples:
-  freebot "总结一下当前有哪些技能"
-  freebot -s ./skills "总结一下当前有哪些技能"
-  freebot -s ./my-skills --prompt "用 weather 技能查北京天气" --dry-run
+  openbot "总结一下当前有哪些技能"
+  openbot -a my-agent "总结一下当前有哪些技能"  使用指定智能体
+  openbot -s ./skills "总结一下当前有哪些技能"
+  openbot -s ./my-skills --prompt "用 weather 技能查北京天气" --dry-run
 `,
 );
 

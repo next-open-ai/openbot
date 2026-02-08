@@ -73,12 +73,13 @@ async function handleAgentChatInner(
     message: string,
     targetAgentId: string | undefined,
 ): Promise<{ status: string; sessionId: string }> {
-    // 根据 session 绑定的 agent 拉取 workspace、provider、model、type
+    // 通过 sessionId 获取归属的 agentId，再通过 agentId 获取该智能体配置的 provider/model，用于创建 Agent Session
     let workspace = "default";
     let provider: string | undefined;
     let modelId: string | undefined;
     let sessionType: string | undefined;
     let sessionAgentId = "default";
+    let apiKey: string | undefined;
     const base = getBackendBaseUrl();
     if (base) {
         try {
@@ -96,6 +97,14 @@ async function handleAgentChatInner(
                     if (agent?.model) modelId = agent.model;
                 }
             }
+            // 从桌面端全局配置读取当前 provider 的 API Key（设置里配置的会生效）
+            const configRes = await fetch(`${base.replace(/\/$/, "")}/server-api/config`);
+            if (configRes.ok) {
+                const configData = (await configRes.json()) as { success?: boolean; data?: { providers?: Record<string, { apiKey?: string }> } };
+                const prov = provider ?? "deepseek";
+                const key = configData?.data?.providers?.[prov]?.apiKey;
+                if (key && typeof key === "string" && key.trim()) apiKey = key.trim();
+            }
         } catch (e) {
             console.warn("[agent-chat] Failed to fetch session/agent config, using default:", e);
         }
@@ -111,13 +120,26 @@ async function handleAgentChatInner(
     const effectiveTargetAgentId = sessionType === "system" ? targetAgentId : sessionAgentId;
 
     const { maxAgentSessions } = getDesktopConfig();
-    const session = await agentManager.getOrCreateSession(targetSessionId, {
-        workspace,
-        provider,
-        modelId,
-        maxSessions: maxAgentSessions,
-        targetAgentId: effectiveTargetAgentId,
-    });
+    let session;
+    try {
+        session = await agentManager.getOrCreateSession(targetSessionId, {
+            workspace,
+            provider,
+            modelId,
+            apiKey,
+            maxSessions: maxAgentSessions,
+            targetAgentId: effectiveTargetAgentId,
+        });
+    } catch (err: any) {
+        const msg = err?.message ?? String(err);
+        if (msg.includes("No API key") || msg.includes("API key")) {
+            const prov = provider ?? "deepseek";
+            throw new Error(
+                `未配置 ${prov} 的 API Key。请在桌面端「设置」-「模型/API」中配置，或运行：openbot login ${prov} <你的API Key>`
+            );
+        }
+        throw err;
+    }
 
     // Set up event listener for streaming
     const unsubscribe = session.subscribe((event: any) => {

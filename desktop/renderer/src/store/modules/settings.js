@@ -7,7 +7,7 @@ export const useSettingsStore = defineStore('settings', {
             gatewayUrl: 'ws://localhost:3000',
             defaultProvider: 'deepseek',
             defaultModel: 'deepseek-chat',
-            defaultWorkspace: 'default',
+            defaultAgentId: 'default',
             theme: 'dark',
             maxAgentSessions: 5,
             loginUsername: '',

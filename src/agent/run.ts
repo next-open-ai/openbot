@@ -1,5 +1,5 @@
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import { getFreebotAgentDir } from "./agent-dir.js";
+import { getOpenbotAgentDir } from "./agent-dir.js";
 import type { Skill } from "./skills.js";
 import { AgentManager } from "./agent-manager.js";
 
@@ -18,7 +18,7 @@ export interface RunOptions {
     model?: string;
     /** Provider（如 deepseek、dashscope、openai） */
     provider?: string;
-    /** Agent 配置目录，默认 ~/.freebot/agent */
+    /** Agent 配置目录，默认 ~/.openbot/agent */
     agentDir?: string;
 }
 
@@ -39,7 +39,7 @@ export async function run(options: RunOptions): Promise<RunResult> {
         apiKey,
         model: modelId = "deepseek-chat",
         provider = "deepseek",
-        agentDir = getFreebotAgentDir(),
+        agentDir = getOpenbotAgentDir(),
     } = options;
 
     const manager = new AgentManager({ agentDir, workspace, skillPaths });

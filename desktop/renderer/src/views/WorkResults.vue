@@ -41,46 +41,107 @@
             </button>
           </span>
         </nav>
+        <div class="doc-view-toggle">
+          <button
+            type="button"
+            class="toggle-btn"
+            :class="{ active: docViewMode === 'list' }"
+            @click="docViewMode = 'list'"
+          >
+            {{ t('workResults.viewList') }}
+          </button>
+          <button
+            type="button"
+            class="toggle-btn"
+            :class="{ active: docViewMode === 'cards' }"
+            @click="docViewMode = 'cards'"
+          >
+            {{ t('workResults.viewCards') }}
+          </button>
+        </div>
       </div>
       <div v-if="docLoading" class="loading-state">
         <div class="spinner"></div>
         <p>{{ t('common.loading') }}</p>
       </div>
-      <div v-else-if="documents.length === 0" class="empty-state">
+      <div v-else-if="filteredDocuments.length === 0" class="empty-state">
         <div class="empty-icon">📂</div>
         <p>{{ t('workspace.emptyDocs') }}</p>
       </div>
-      <div v-else class="doc-list">
-        <div
-          v-for="item in documents"
-          :key="item.path"
-          class="doc-item"
-          :class="{ folder: item.isDirectory }"
-        >
-          <template v-if="item.isDirectory">
-            <span class="doc-icon">📁</span>
-            <button class="doc-name" @click="docPath = item.path">{{ item.name }}</button>
-            <span class="doc-actions">
-              <button type="button" class="link-btn danger" @click="confirmDelete(item)">{{ t('common.delete') }}</button>
-            </span>
-          </template>
-          <template v-else>
-            <span class="doc-icon">📄</span>
-            <span class="doc-name">{{ item.name }}</span>
-            <span class="doc-actions">
-              <template v-if="isPreviewable(item.name)">
-                <button type="button" class="link-btn" @click="openPreview(item)">
-                  {{ t('workspace.preview') }}
-                </button>
-                <span class="sep">|</span>
-              </template>
-              <a :href="fileServeUrl(item.path, true)" download class="link-btn">{{ t('workspace.download') }}</a>
-              <span class="sep">|</span>
-              <button type="button" class="link-btn danger" @click="confirmDelete(item)">{{ t('common.delete') }}</button>
-            </span>
-          </template>
+      <template v-else>
+        <!-- 卡片视图：仅图片文件以卡片展示 -->
+        <div v-if="docViewMode === 'cards'" class="doc-cards-view">
+          <div v-if="imageFiles.length > 0" class="image-cards-grid">
+            <div
+              v-for="item in imageFiles"
+              :key="item.path"
+              class="image-card"
+              @click="openPreview(item)"
+            >
+              <img :src="fileServeUrl(item.path, false)" :alt="item.name" class="image-card-thumb" loading="lazy" />
+              <span class="image-card-name">{{ item.name }}</span>
+            </div>
+          </div>
+          <div v-else class="empty-state small">
+            <p>{{ t('workResults.noImagesHere') }}</p>
+          </div>
+          <div v-if="nonImageItems.length > 0" class="other-files-section">
+            <p class="other-files-label">{{ t('workResults.otherFiles') }}</p>
+            <div class="doc-list">
+              <div
+                v-for="item in nonImageItems"
+                :key="item.path"
+                class="doc-item"
+                :class="{ folder: item.isDirectory }"
+              >
+                <template v-if="item.isDirectory">
+                  <span class="doc-icon">📁</span>
+                  <button class="doc-name" @click="docPath = item.path">{{ item.name }}</button>
+                </template>
+                <template v-else>
+                  <span class="doc-icon">📄</span>
+                  <span class="doc-name">{{ item.name }}</span>
+                  <span class="doc-actions">
+                    <a :href="fileServeUrl(item.path, true)" download class="link-btn">{{ t('workspace.download') }}</a>
+                  </span>
+                </template>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+        <!-- 列表视图 -->
+        <div v-else class="doc-list">
+          <div
+            v-for="item in filteredDocuments"
+            :key="item.path"
+            class="doc-item"
+            :class="{ folder: item.isDirectory }"
+          >
+            <template v-if="item.isDirectory">
+              <span class="doc-icon">📁</span>
+              <button class="doc-name" @click="docPath = item.path">{{ item.name }}</button>
+              <span class="doc-actions">
+                <button type="button" class="link-btn danger" @click="confirmDelete(item)">{{ t('common.delete') }}</button>
+              </span>
+            </template>
+            <template v-else>
+              <span class="doc-icon">📄</span>
+              <span class="doc-name">{{ item.name }}</span>
+              <span class="doc-actions">
+                <template v-if="isPreviewable(item.name)">
+                  <button type="button" class="link-btn" @click="openPreview(item)">
+                    {{ t('workspace.preview') }}
+                  </button>
+                  <span class="sep">|</span>
+                </template>
+                <a :href="fileServeUrl(item.path, true)" download class="link-btn">{{ t('workspace.download') }}</a>
+                <span class="sep">|</span>
+                <button type="button" class="link-btn danger" @click="confirmDelete(item)">{{ t('common.delete') }}</button>
+              </span>
+            </template>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- 新闻 Tab -->
@@ -203,6 +264,7 @@ export default {
     const docPath = ref('');
     const documents = ref([]);
     const docLoading = ref(false);
+    const docViewMode = ref('list');
     const previewItem = ref(null);
     const previewTextContent = ref(null);
     const previewHtmlContent = ref(null);
@@ -210,6 +272,23 @@ export default {
 
     const docPathParts = computed(() =>
       docPath.value ? docPath.value.split('/').filter(Boolean) : []
+    );
+
+    const HIDDEN_DIR_NAMES = new Set(['skills', '.skills']);
+    const filteredDocuments = computed(() =>
+      documents.value.filter(
+        (item) => !item.isDirectory || !HIDDEN_DIR_NAMES.has(item.name)
+      )
+    );
+    const imageFiles = computed(() =>
+      filteredDocuments.value.filter(
+        (item) => !item.isDirectory && getPreviewType(item.name) === 'image'
+      )
+    );
+    const nonImageItems = computed(() =>
+      filteredDocuments.value.filter(
+        (item) => item.isDirectory || getPreviewType(item.name) !== 'image'
+      )
     );
 
     const showPreviewModal = computed(() => !!previewItem.value);
@@ -305,7 +384,7 @@ export default {
         const res = await workspaceAPI.getCurrentWorkspace();
         currentWorkspace.value = res.data?.data ?? 'default';
       } catch (e) {
-        currentWorkspace.value = settingsStore.config?.defaultWorkspace ?? 'default';
+        currentWorkspace.value = settingsStore.config?.defaultAgentId ?? 'default';
       }
     }
 
@@ -324,7 +403,7 @@ export default {
 
     async function switchWorkspace(name) {
       try {
-        await configAPI.updateConfig({ defaultWorkspace: name });
+        await configAPI.updateConfig({ defaultAgentId: name });
         currentWorkspace.value = name;
         showSwitchModal.value = false;
         await settingsStore.loadConfig();
@@ -349,7 +428,11 @@ export default {
       showSwitchModal,
       docPath,
       docPathParts,
+      docViewMode,
       documents,
+      filteredDocuments,
+      imageFiles,
+      nonImageItems,
       docLoading,
       previewItem,
       previewType,
@@ -438,7 +521,101 @@ export default {
 }
 
 .doc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
+}
+
+.doc-view-toggle {
+  display: flex;
+  gap: 2px;
+}
+
+.doc-view-toggle .toggle-btn {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.doc-view-toggle .toggle-btn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+
+.doc-view-toggle .toggle-btn.active {
+  background: var(--color-accent-primary);
+  color: white;
+  border-color: var(--color-accent-primary);
+}
+
+.doc-cards-view {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.image-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.image-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--spacing-sm);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.image-card:hover {
+  border-color: var(--color-accent-primary);
+  background: var(--color-bg-elevated);
+}
+
+.image-card-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-xs);
+}
+
+.image-card-name {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  text-align: center;
+  word-break: break-all;
+  line-height: 1.3;
+}
+
+.other-files-section {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--glass-border);
+}
+
+.other-files-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--spacing-md);
+}
+
+.empty-state.small {
+  padding: var(--spacing-lg);
 }
 
 .breadcrumb {

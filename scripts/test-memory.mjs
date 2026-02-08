@@ -1,14 +1,14 @@
 /**
  * 测试 memory 模块：initMemory、addMemory、searchMemory
- * 使用临时目录，不污染 ~/.freebot/agent
+ * 使用临时目录，不污染 ~/.openbot/agent
  * 运行：npm run build && node scripts/test-memory.mjs
  */
 import path from "node:path";
 import os from "node:os";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
-const testDir = path.join(os.tmpdir(), `freebot-memory-test-${Date.now()}`);
-process.env.FREEBOT_AGENT_DIR = testDir;
+const testDir = path.join(os.tmpdir(), `openbot-memory-test-${Date.now()}`);
+process.env.OPENBOT_AGENT_DIR = testDir;
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const memoryPath = path.join(scriptDir, "..", "dist", "memory", "index.js");
@@ -24,7 +24,7 @@ const {
 
 async function run() {
     let ok = true;
-    console.log("FREEBOT_AGENT_DIR =", testDir);
+    console.log("OPENBOT_AGENT_DIR =", testDir);
 
     console.log("\n--- 1. 初始化与写入 ---");
     console.log("1.1 initMemory()...");

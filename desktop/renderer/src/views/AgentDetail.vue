@@ -32,7 +32,7 @@
         </div>
 
         <div class="detail-content">
-          <!-- 基本配置 -->
+          <!-- 基本配置（含显示名、工作空间、模型配置） -->
           <div v-show="activeTab === 'config'" class="tab-panel config-panel">
             <h2 class="panel-title">{{ t('agents.basicConfig') }}</h2>
             <div class="form-group">
@@ -59,19 +59,35 @@
               />
               <p class="form-hint">{{ t('agents.workspaceReadonly') }}</p>
             </div>
-            <div class="form-group">
-              <label>{{ t('settings.provider') }} (LLM)</label>
-              <select v-model="configForm.provider" class="form-input">
-                <option value="">—</option>
-                <option v-for="p in providers" :key="p" :value="p">{{ p }}</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>{{ t('settings.model') }}</label>
-              <select v-model="configForm.model" class="form-input">
-                <option value="">—</option>
-                <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
-              </select>
+            <!-- 模型配置：从已配置的 providers 中选 -->
+            <div class="config-section model-section">
+              <h3 class="config-section-title">{{ t('agents.modelConfig') }}</h3>
+              <p class="form-hint">{{ t('agents.modelConfigHint') }}</p>
+              <div v-if="modelConfigLoading" class="loading-state small">
+                <div class="spinner"></div>
+                <p>{{ t('common.loading') }}</p>
+              </div>
+              <template v-else>
+                <p v-if="configuredProviders.length === 0" class="form-hint form-hint-warn">
+                  {{ t('settings.noConfiguredProvider') }}
+                </p>
+                <template v-else>
+                  <div class="form-group">
+                    <label>{{ t('settings.provider') }}</label>
+                    <select v-model="modelForm.provider" class="form-input" @change="onModelProviderChange">
+                      <option value="">—</option>
+                      <option v-for="p in configuredProviders" :key="p" :value="p">{{ p }}</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>{{ t('settings.model') }}</label>
+                    <select v-model="modelForm.model" class="form-input">
+                      <option value="">—</option>
+                      <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                  </div>
+                </template>
+              </template>
             </div>
             <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
               {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
@@ -222,7 +238,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
 import { useAgentStore } from '@/store/modules/agent';
-import { agentConfigAPI, skillsAPI, configAPI, agentAPI } from '@/api';
+import { agentConfigAPI, skillsAPI, agentAPI, configAPI } from '@/api';
 import { marked } from 'marked';
 import ChatMessage from '@/components/ChatMessage.vue';
 import SmartInstallDialog from '@/components/SmartInstallDialog.vue';
@@ -249,10 +265,13 @@ export default {
       { id: 'skills', label: t('agents.skillsConfig'), icon: '🎯' },
     ]);
 
-    const configForm = ref({ name: '', provider: '', model: '' });
-    const providers = ref([]);
-    const modelOptions = ref([]);
+    const configForm = ref({ name: '' });
     const configSaving = ref(false);
+
+    const modelForm = ref({ provider: '', model: '' });
+    const configuredProviders = ref([]);
+    const modelOptions = ref([]);
+    const modelConfigLoading = ref(false);
 
     const agentSkills = ref([]);
     const skillsLoading = ref(false);
@@ -276,23 +295,21 @@ export default {
         const res = await agentConfigAPI.getAgent(agentId.value);
         agent.value = res.data?.data ?? null;
         if (agent.value) {
-          configForm.value = {
-            name: agent.value.name,
+          configForm.value = { name: agent.value.name };
+          modelForm.value = {
             provider: agent.value.provider ?? '',
             model: agent.value.model ?? '',
           };
-          await loadProviders();
-          if (agent.value.provider) await loadModels(agent.value.provider);
         } else if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
-          configForm.value = { name: agent.value.name, provider: '', model: '' };
-          await loadProviders();
+          configForm.value = { name: agent.value.name };
+          modelForm.value = { provider: '', model: '' };
         }
       } catch (e) {
         if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
-          configForm.value = { name: agent.value.name, provider: '', model: '' };
-          loadProviders();
+          configForm.value = { name: agent.value.name };
+          modelForm.value = { provider: '', model: '' };
         } else {
           agent.value = null;
         }
@@ -300,55 +317,72 @@ export default {
         loading.value = false;
       }
     }
-    async function loadProviders() {
+    async function saveConfig() {
+      if (!agent.value) return;
+      configSaving.value = true;
       try {
-        const res = await configAPI.getProviders();
-        providers.value = res.data?.data ?? [];
-      } catch {
-        providers.value = [];
+        const payload = {};
+        if (!agent.value.isDefault) {
+          payload.name = configForm.value.name || agent.value.workspace;
+        }
+        payload.provider = modelForm.value.provider || undefined;
+        payload.model = modelForm.value.model || undefined;
+        await agentConfigAPI.updateAgent(agent.value.id, payload);
+        if (!agent.value.isDefault) {
+          agent.value.name = configForm.value.name || agent.value.workspace;
+        }
+        agent.value = { ...agent.value, provider: modelForm.value.provider, model: modelForm.value.model };
+      } catch (e) {
+        console.error('Save config failed', e);
+      } finally {
+        configSaving.value = false;
       }
     }
-    async function loadModels(provider) {
+
+    async function loadModelConfig() {
+      modelConfigLoading.value = true;
+      try {
+        const configRes = await configAPI.getConfig();
+        const cfg = configRes.data?.data ?? {};
+        const prov = cfg.providers && typeof cfg.providers === 'object' ? cfg.providers : {};
+        configuredProviders.value = Object.keys(prov).filter(
+          (p) => prov[p] && typeof prov[p].apiKey === 'string' && prov[p].apiKey.trim() !== '',
+        );
+        const provider = modelForm.value.provider || agent.value?.provider;
+        if (provider && configuredProviders.value.includes(provider)) {
+          const modelsRes = await configAPI.getModels(provider);
+          modelOptions.value = modelsRes.data?.data ?? [];
+          if (!modelForm.value.model && agent.value?.model && modelOptions.value.includes(agent.value.model)) {
+            modelForm.value.model = agent.value.model;
+          } else if (!modelOptions.value.includes(modelForm.value.model)) {
+            modelForm.value.model = modelOptions.value[0] || '';
+          }
+        } else {
+          modelOptions.value = [];
+        }
+      } catch (e) {
+        configuredProviders.value = [];
+        modelOptions.value = [];
+      } finally {
+        modelConfigLoading.value = false;
+      }
+    }
+
+    async function onModelProviderChange() {
+      const provider = modelForm.value.provider;
       if (!provider) {
         modelOptions.value = [];
+        modelForm.value.model = '';
         return;
       }
       try {
         const res = await configAPI.getModels(provider);
         modelOptions.value = res.data?.data ?? [];
+        const current = modelForm.value.model;
+        modelForm.value.model = modelOptions.value.includes(current) ? current : (modelOptions.value[0] || '');
       } catch {
         modelOptions.value = [];
-      }
-    }
-    watch(() => configForm.value.provider, (p) => {
-      if (p) loadModels(p);
-      else modelOptions.value = [];
-    });
-
-    async function saveConfig() {
-      if (!agent.value) return;
-      configSaving.value = true;
-      try {
-        const payload = {
-          provider: configForm.value.provider || undefined,
-          model: configForm.value.model || undefined,
-        };
-        if (!agent.value.isDefault) {
-          payload.name = configForm.value.name || agent.value.workspace;
-        }
-        await agentConfigAPI.updateAgent(agent.value.id, payload);
-        agent.value = {
-          ...agent.value,
-          provider: configForm.value.provider,
-          model: configForm.value.model,
-        };
-        if (!agent.value.isDefault) {
-          agent.value.name = configForm.value.name || agent.value.workspace;
-        }
-      } catch (e) {
-        console.error('Save config failed', e);
-      } finally {
-        configSaving.value = false;
+        modelForm.value.model = '';
       }
     }
 
@@ -425,6 +459,7 @@ export default {
     watch(agentId, loadAgent);
     watch([agent, activeTab], () => {
       if (agent.value && activeTab.value === 'skills') loadSkills();
+      if (agent.value && activeTab.value === 'config') loadModelConfig();
     });
     watch(
       () => route.query.smartInstallSession,
@@ -463,10 +498,14 @@ export default {
       activeTab,
       tabs,
       configForm,
-      providers,
-      modelOptions,
       configSaving,
       saveConfig,
+      modelForm,
+      configuredProviders,
+      modelOptions,
+      modelConfigLoading,
+      loadModelConfig,
+      onModelProviderChange,
       agentSkills,
       skillsLoading,
       canDeleteWorkspaceSkill,
@@ -607,6 +646,25 @@ export default {
   font-size: var(--font-size-xl);
   margin: 0 0 var(--spacing-lg) 0;
   color: var(--color-text-primary);
+}
+
+.config-section {
+  margin-top: var(--spacing-xl);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--glass-border);
+}
+.config-section-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-text-primary);
+}
+.loading-state.small {
+  padding: var(--spacing-md) 0;
+}
+.loading-state.small .spinner {
+  width: 20px;
+  height: 20px;
 }
 
 .panel-header {
@@ -920,6 +978,9 @@ export default {
 .form-hint {
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
+}
+.form-hint-warn {
+  color: var(--color-warning, #b8860b);
   margin: var(--spacing-xs) 0 0 0;
 }
 

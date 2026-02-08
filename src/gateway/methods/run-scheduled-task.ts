@@ -70,8 +70,48 @@ export async function handleRunScheduledTask(
         return;
     }
 
+    // 与对话一致：仅通过 sessionId 获取 session，用 session.agentId 拉取 agent 配置与 API Key；未取到时用 "default"，不依赖 body.workspace
+    let resolvedWorkspace = "default";
+    let provider: string | undefined;
+    let modelId: string | undefined;
+    let apiKey: string | undefined;
+    let sessionAgentId = "default";
+    const base = (backendBaseUrl ?? "").replace(/\/$/, "");
+    if (base) {
+        try {
+            const sessionRes = await fetch(`${base}/server-api/agents/sessions/${encodeURIComponent(sessionId)}`);
+            if (sessionRes.ok) {
+                const sessionData = (await sessionRes.json()) as { success?: boolean; data?: { agentId?: string; workspace?: string } };
+                sessionAgentId = sessionData?.data?.agentId ?? "default";
+                if (sessionData?.data?.workspace) resolvedWorkspace = sessionData.data.workspace;
+            }
+            const agentRes = await fetch(`${base}/server-api/agent-config/${encodeURIComponent(sessionAgentId)}`);
+            if (agentRes.ok) {
+                const agentData = (await agentRes.json()) as { success?: boolean; data?: { workspace?: string; provider?: string; model?: string } };
+                const agent = agentData?.data;
+                if (agent?.workspace) resolvedWorkspace = agent.workspace;
+                if (agent?.provider) provider = agent.provider;
+                if (agent?.model) modelId = agent.model;
+            }
+            const configRes = await fetch(`${base}/server-api/config`);
+            if (configRes.ok) {
+                const configData = (await configRes.json()) as { success?: boolean; data?: { providers?: Record<string, { apiKey?: string }> } };
+                const prov = provider ?? "deepseek";
+                const key = configData?.data?.providers?.[prov]?.apiKey;
+                if (key && typeof key === "string" && key.trim()) apiKey = key.trim();
+            }
+        } catch (e) {
+            console.warn("[run-scheduled-task] Failed to fetch session/agent/config, using default:", e);
+        }
+    }
+
     try {
-        const session = await agentManager.getOrCreateSession(sessionId, { workspace });
+        const session = await agentManager.getOrCreateSession(sessionId, {
+            workspace: resolvedWorkspace,
+            provider,
+            modelId,
+            apiKey,
+        });
         let assistantContent = "";
         let turnPromptTokens = 0;
         let turnCompletionTokens = 0;
@@ -131,8 +171,13 @@ export async function handleRunScheduledTask(
         res.end(JSON.stringify({ success: true, sessionId, assistantContent: assistantContent ?? "" }));
     } catch (error: any) {
         console.error("[run-scheduled-task] error:", error);
+        const msg = error?.message ?? String(error);
+        const friendlyError =
+            msg.includes("No API key") || msg.includes("API key")
+                ? "未配置大模型 API Key。请在桌面端「设置」-「模型配置」中为当前智能体选择 Provider 并保存，并确保在「Provider 配置」中已填写对应 API Key。"
+                : msg || "Internal server error";
         res.writeHead(500, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: false, error: error?.message || "Internal server error" }));
+        res.end(JSON.stringify({ success: false, error: friendlyError }));
     } finally {
         // 执行完成（成功或失败）后立即关闭并移除该 AgentSession，避免空悬占用内存/连接等资源
         agentManager.deleteSession(sessionId);

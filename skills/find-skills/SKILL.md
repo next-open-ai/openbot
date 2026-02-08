@@ -18,9 +18,9 @@ Use this skill when the user:
 - Wants to search for tools, templates, or workflows
 - Mentions they wish they had help with a specific domain (design, testing, deployment, etc.)
 
-## OpenBot/FreeBot: Install to Correct Path
+## OpenBot: Install to Correct Path
 
-When you have the **install_skill** tool available, you are in OpenBot/FreeBot. Always use **install_skill** with the skill URL to install—do not run `npx skills add` in the terminal. The tool installs to the **current agent's workspace** (the same place as "手动安装" in that agent's config). For global installs, the user should use the app's global skills management and manual install there.
+When you have the **install_skill** tool available, you are in OpenBot. Always use **install_skill** with the skill URL to install—do not run `npx skills add` in the terminal. The tool installs to the **current agent's workspace** (the same place as "手动安装" in that agent's config). For global installs, the user should use the app's global skills management and manual install there.
 
 ## What is the Skills CLI?
 
@@ -92,7 +92,7 @@ Learn more: https://skills.sh/vercel-labs/agent-skills/vercel-react-best-practic
 
 If the user wants to proceed, install the skill:
 
-- **In OpenBot/FreeBot**: Use the **install_skill** tool with the skill URL (e.g. `owner/repo@skillName` or `owner/repo`). This installs to the **current agent's workspace** skills directory. Do **not** run `npx skills add` for installation in this app.
+- **In OpenBot**: Use the **install_skill** tool with the skill URL (e.g. `owner/repo@skillName` or `owner/repo`). This installs to the **current agent's workspace** skills directory. Do **not** run `npx skills add` for installation in this app.
 - **In other agents (Cursor, Codex, etc.)**: Run in the terminal:
 
 ```bash

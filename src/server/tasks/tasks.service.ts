@@ -358,6 +358,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             this.markRunStarted(task.id);
             try {
                 const session = await this.agentsService.getOrCreateSession(fixedSessionId, {
+                    agentId: task.workspace,
                     workspace: task.workspace,
                     title: `定时: ${task.message.slice(0, 30)}${task.message.length > 30 ? '…' : ''}`,
                     type: 'scheduled',

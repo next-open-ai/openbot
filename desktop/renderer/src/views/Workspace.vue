@@ -349,7 +349,7 @@ export default {
         const res = await workspaceAPI.getCurrentWorkspace();
         currentWorkspace.value = res.data?.data ?? 'default';
       } catch (e) {
-        currentWorkspace.value = settingsStore.config?.defaultWorkspace ?? 'default';
+        currentWorkspace.value = settingsStore.config?.defaultAgentId ?? 'default';
       }
     }
 
@@ -368,7 +368,7 @@ export default {
 
     async function switchWorkspace(name) {
       try {
-        await configAPI.updateConfig({ defaultWorkspace: name });
+        await configAPI.updateConfig({ defaultAgentId: name });
         currentWorkspace.value = name;
         showSwitchModal.value = false;
         await settingsStore.loadConfig();

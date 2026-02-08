@@ -19,7 +19,7 @@ import { createCompactionMemoryExtensionFactory } from "../memory/compaction-ext
 import { getCompactionContextForSystemPrompt } from "../memory/index.js";
 import { createBrowserTool, createSaveExperienceTool, createInstallSkillTool } from "../tools/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
-import { getFreebotAgentDir, getFreebotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
+import { getOpenbotAgentDir, getOpenbotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
 import { formatSkillsForPrompt } from "./skills.js";
 import type { Skill } from "./skills.js";
 
@@ -49,10 +49,10 @@ export class AgentManager {
     private preLoadedSkills: Skill[] = [];
 
     constructor(options: AgentManagerOptions = {}) {
-        this.agentDir = options.agentDir || getFreebotAgentDir();
+        this.agentDir = options.agentDir || getOpenbotAgentDir();
 
-        // Centralized workspace root: ~/.freebot/workspace/
-        const workspaceRoot = getFreebotWorkspaceDir();
+        // Centralized workspace root: ~/.openbot/workspace/
+        const workspaceRoot = getOpenbotWorkspaceDir();
         const workspaceName = options.workspace || "default";
         this.workspaceDir = join(workspaceRoot, workspaceName);
 
@@ -71,7 +71,7 @@ export class AgentManager {
     public configure(options: AgentManagerOptions): void {
         if (options.agentDir) this.agentDir = options.agentDir;
         if (options.workspace) {
-            const workspaceRoot = getFreebotWorkspaceDir();
+            const workspaceRoot = getOpenbotWorkspaceDir();
             this.workspaceDir = join(workspaceRoot, options.workspace);
             if (!existsSync(this.workspaceDir)) {
                 mkdirSync(this.workspaceDir, { recursive: true });
@@ -160,7 +160,7 @@ For downloads, provide either a direct URL or a selector to click.`;
         const paths = new Set<string>();
         const wsDir = workspaceDir ?? this.workspaceDir;
 
-        // 1. Managed skills (Global: ~/.freebot/agent/skills)
+        // 1. Managed skills (Global: ~/.openbot/agent/skills)
         const managedSkillsDir = join(this.agentDir, "skills");
         if (existsSync(managedSkillsDir)) paths.add(managedSkillsDir);
 
@@ -214,15 +214,15 @@ For downloads, provide either a direct URL or a selector to click.`;
             }
         }
 
-        const workspaceRoot = getFreebotWorkspaceDir();
+        const workspaceRoot = getOpenbotWorkspaceDir();
         const workspaceName = options.workspace ?? "default";
         const sessionWorkspaceDir = join(workspaceRoot, workspaceName);
         if (!existsSync(sessionWorkspaceDir)) {
             mkdirSync(sessionWorkspaceDir, { recursive: true });
         }
 
-        const provider = options.provider ?? process.env.FREEBOT_PROVIDER ?? "deepseek";
-        const modelId = options.modelId ?? process.env.FREEBOT_MODEL ?? "deepseek-chat";
+        const provider = options.provider ?? process.env.OPENBOT_PROVIDER ?? "deepseek";
+        const modelId = options.modelId ?? process.env.OPENBOT_MODEL ?? "deepseek-chat";
         const apiKey = options.apiKey;
 
         ensureDefaultAgentDir(this.agentDir);

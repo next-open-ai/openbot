@@ -11,7 +11,7 @@ describe('AgentsService (e2e, SQLite)', () => {
     let service: AgentsService;
 
     beforeAll(async () => {
-        process.env.FREEBOT_DB_PATH = ':memory:';
+        process.env.OPENBOT_DB_PATH = ':memory:';
         const module: TestingModule = await Test.createTestingModule({
             imports: [DatabaseModule, AgentsModule],
         }).compile();

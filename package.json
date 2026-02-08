@@ -1,10 +1,10 @@
 {
-    "name": "@freebot/openbot",
+    "name": "@next-open-ai/openbot",
     "publishConfig": {
         "access": "public"
     },
-    "version": "1.0.0",
-    "description": "CLI and library to run prompts with skill paths (Agent Skills style). Use as npm package or freebot CLI.",
+    "version": "0.1.1",
+    "description": "CLI and library to run prompts with skill paths (Agent Skills style). Use as npm package or openbot CLI.",
     "type": "module",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -21,7 +21,7 @@
         "README.md"
     ],
     "bin": {
-        "freebot": "./dist/cli.js"
+        "openbot": "./dist/cli.js"
     },
 "dependencies": {
     "better-sqlite3": "^11.6.0",
@@ -64,7 +64,7 @@
         "desktop:install": "cd desktop && npm install",
         "test": "jest --config test/jest.config.cjs",
         "test:memory": "node test/run-memory.mjs",
-        "test:e2e": "FREEBOT_DB_PATH=:memory: jest --config test/jest.config.cjs --testPathPattern=e2e"
+        "test:e2e": "OPENBOT_DB_PATH=:memory: jest --config test/jest.config.cjs --testPathPattern=e2e"
     },
     "engines": {
         "node": ">=20.0.0"
@@ -74,7 +74,7 @@
         "agent",
         "cli",
         "llm",
-        "freebot"
+        "openbot"
     ],
     "license": "MIT"
 }

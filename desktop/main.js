@@ -13,7 +13,7 @@ function startGateway() {
 
     if (process.env.NODE_ENV !== 'production') {
         // In development, gateway might be running separately, but we can also spawn it if needed.
-        // For now, let's assume dev runs it separately or we rely on the one spawned by CLI if we run `freebot gateway`
+        // For now, let's assume dev runs it separately or we rely on the one spawned by CLI if we run `openbot gateway`
         console.log('Development mode: Gateway should be started separately or via CLI');
         return;
     }

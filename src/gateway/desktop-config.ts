@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
-const CONFIG_DIR = join(homedir(), ".freebot", "desktop");
+const CONFIG_DIR = join(homedir(), ".openbot", "desktop");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
 const DEFAULT_MAX_AGENT_SESSIONS = 5;

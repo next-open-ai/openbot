@@ -8,7 +8,8 @@
         <div class="content-area" :class="{ 'chat-full-height': isChatRoute }">
           <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
-              <component :is="Component" />
+              <component v-if="Component" :is="Component" :key="route.fullPath" />
+              <div v-else class="view-fallback">加载中…</div>
             </transition>
           </router-view>
         </div>
@@ -40,13 +41,19 @@ export default {
     Header,
     Login,
   },
+  errorCaptured(err, instance, info) {
+    console.error('[App] errorCaptured', err, info);
+    return true;
+  },
   setup() {
     const route = useRoute();
     const settingsStore = useSettingsStore();
     const agentStore = useAgentStore();
     const authStore = useAuthStore();
 
-    const isChatRoute = computed(() => route.name === 'AgentChat');
+    const isChatRoute = computed(
+      () => route.name === 'AgentChat' || route.path === '/'
+    );
 
     onMounted(() => {
       authStore.initFromStorage();
@@ -61,7 +68,7 @@ export default {
       },
     );
 
-    return { isChatRoute, authStore };
+    return { route, isChatRoute, authStore };
   },
 };
 </script>
@@ -89,6 +96,20 @@ export default {
   overflow: hidden;
   padding: var(--spacing-lg);
   background: var(--color-bg-primary);
+}
+
+/* 保证任意路由下，主内容区子节点都能占满可用高度，避免白屏 */
+.content-area > * {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.view-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
 }
 
 /* 聊天页：只传递尺寸，不设 flex-direction，避免覆盖 AgentChat 的 row 布局（会话列 | 对话区 左右排列） */

@@ -23,7 +23,7 @@ export class UsersService {
 
     constructor() {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        const configDir = join(homeDir, '.freebot', 'desktop');
+        const configDir = join(homeDir, '.openbot', 'desktop');
         this.usersPath = join(configDir, 'users.json');
         if (!existsSync(configDir)) {
             mkdir(configDir, { recursive: true });

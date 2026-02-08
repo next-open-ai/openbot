@@ -1,5 +1,5 @@
 {
-    "name": "@freebot/openbot-desktop",
+    "name": "@openbot/openbot-desktop",
     "version": "1.0.0",
     "description": "OpenBot Desktop - Professional agent management application",
     "main": "main.js",
@@ -27,7 +27,7 @@
         "wait-on": "^7.2.0"
     },
     "build": {
-        "appId": "com.freebot.openbot",
+        "appId": "com.openbot.openbot",
         "productName": "OpenBot Desktop",
         "directories": {
             "output": "dist"

@@ -7,11 +7,11 @@ import { homedir } from 'os';
 /** 工作空间名仅允许英文、数字、下划线、连字符 */
 const WORKSPACE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
-/** 缺省智能体 ID / 工作空间名，不可删除；对应目录 ~/.freebot/workspace/default */
+/** 缺省智能体 ID / 工作空间名，不可删除；对应目录 ~/.openbot/workspace/default */
 export const DEFAULT_AGENT_ID = 'default';
 
 /**
- * 智能体列表与配置使用文件存储（~/.freebot/desktop/agents.json），不使用 SQLite。
+ * 智能体列表与配置使用文件存储（~/.openbot/desktop/agents.json），不使用 SQLite。
  * 会话与消息历史使用 SQLite；Skills、工作空间文档为目录文件管理。
  */
 export interface AgentConfigItem {
@@ -38,7 +38,7 @@ export class AgentConfigService {
 
     constructor() {
         const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-        this.configDir = join(homeDir, '.freebot', 'desktop');
+        this.configDir = join(homeDir, '.openbot', 'desktop');
         this.agentsPath = join(this.configDir, 'agents.json');
     }
 
@@ -70,7 +70,7 @@ export class AgentConfigService {
     /** 确保 default 工作空间目录存在 */
     private async ensureDefaultWorkspace(): Promise<void> {
         const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-        const workspaceRoot = join(homeDir, '.freebot', 'workspace', DEFAULT_AGENT_ID);
+        const workspaceRoot = join(homeDir, '.openbot', 'workspace', DEFAULT_AGENT_ID);
         const skillsDir = join(workspaceRoot, 'skills');
         if (!existsSync(workspaceRoot)) {
             await mkdir(skillsDir, { recursive: true });
@@ -127,7 +127,7 @@ export class AgentConfigService {
         }
 
         const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
-        const workspaceRoot = join(homeDir, '.freebot', 'workspace', workspace);
+        const workspaceRoot = join(homeDir, '.openbot', 'workspace', workspace);
         const skillsDir = join(workspaceRoot, 'skills');
         if (!existsSync(workspaceRoot)) {
             await mkdir(skillsDir, { recursive: true });

@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFreebotAgentDir, getFreebotWorkspaceDir } from '../../agent/agent-dir.js';
+import { getOpenbotAgentDir, getOpenbotWorkspaceDir } from '../../agent/agent-dir.js';
 
 const execAsync = promisify(exec);
 
@@ -23,7 +23,7 @@ export interface Skill {
 /** 工作区技能名仅允许英文、数字、下划线、连字符 */
 const SKILL_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
-/** 技能目录与来源：全局=FREEBOT_AGENT_DIR/skills，系统=项目根/skills，工作区=FREEBOT_WORKSPACE_DIR/xxx/skills */
+/** 技能目录与来源：全局=OPENBOT_AGENT_DIR/skills，系统=项目根/skills，工作区=OPENBOT_WORKSPACE_DIR/xxx/skills */
 @Injectable()
 export class SkillsService {
     /** 待扫描的目录列表 */
@@ -31,14 +31,14 @@ export class SkillsService {
 
     constructor() {
         const cwd = process.cwd();
-        const workspaceName = process.env.FREEBOT_WORKSPACE || 'default';
+        const workspaceName = process.env.OPENBOT_WORKSPACE || 'default';
 
-        // 全局技能：FREEBOT_AGENT_DIR/skills（默认 ~/.freebot/agent/skills）
-        const globalSkillsDir = join(getFreebotAgentDir(), 'skills');
+        // 全局技能：OPENBOT_AGENT_DIR/skills（默认 ~/.openbot/agent/skills）
+        const globalSkillsDir = join(getOpenbotAgentDir(), 'skills');
         // 系统技能：当前项目代码根目录下的 skills
         const systemSkillsDir = resolve(cwd, 'skills');
-        // 工作区技能：FREEBOT_WORKSPACE_DIR/<name>/skills（默认 ~/.freebot/workspace/xxx/skills）
-        const workspaceSkillsDir = join(getFreebotWorkspaceDir(), workspaceName, 'skills');
+        // 工作区技能：OPENBOT_WORKSPACE_DIR/<name>/skills（默认 ~/.openbot/workspace/xxx/skills）
+        const workspaceSkillsDir = join(getOpenbotWorkspaceDir(), workspaceName, 'skills');
 
         if (existsSync(globalSkillsDir)) {
             this.skillPaths.push({ path: globalSkillsDir, source: 'global' });
@@ -51,17 +51,17 @@ export class SkillsService {
         }
     }
 
-    /** 指定工作区的 skills 目录绝对路径（受 FREEBOT_WORKSPACE_DIR 影响） */
+    /** 指定工作区的 skills 目录绝对路径（受 OPENBOT_WORKSPACE_DIR 影响） */
     getWorkspaceSkillsDir(workspaceName: string): string {
-        return join(getFreebotWorkspaceDir(), workspaceName, 'skills');
+        return join(getOpenbotWorkspaceDir(), workspaceName, 'skills');
     }
 
-    /** 全局技能目录（受 FREEBOT_AGENT_DIR 影响，默认 ~/.freebot/agent/skills） */
+    /** 全局技能目录（受 OPENBOT_AGENT_DIR 影响，默认 ~/.openbot/agent/skills） */
     getGlobalSkillsDir(): string {
-        return join(getFreebotAgentDir(), 'skills');
+        return join(getOpenbotAgentDir(), 'skills');
     }
 
-    /** 仅返回全局技能（FREEBOT_AGENT_DIR/skills） */
+    /** 仅返回全局技能（OPENBOT_AGENT_DIR/skills） */
     async getGlobalSkills(): Promise<Skill[]> {
         const skillPath = this.getGlobalSkillsDir();
         if (!existsSync(skillPath)) return [];
@@ -97,8 +97,8 @@ export class SkillsService {
     /**
      * 通过 npx skills add 安装技能到指定目录。
      * @param url 安装地址（Git 简写、URL 或 owner/repo@skill）
-     * @param options.scope 'global' 安装到 FREEBOT_AGENT_DIR/skills；'workspace' 安装到指定工作区的 skills
-     * @param options.workspace 当 scope 为 'workspace' 时的工作区名（对应 FREEBOT_WORKSPACE_DIR/<workspace>/skills）
+     * @param options.scope 'global' 安装到 OPENBOT_AGENT_DIR/skills；'workspace' 安装到指定工作区的 skills
+     * @param options.workspace 当 scope 为 'workspace' 时的工作区名（对应 OPENBOT_WORKSPACE_DIR/<workspace>/skills）
      */
     async installSkillByUrl(
         url: string,
@@ -116,7 +116,7 @@ export class SkillsService {
 
         console.log(`[install_skill] 开始安装: url=${url.trim()}, scope=${scope}, workspace=${workspaceName}, 目标目录=${targetDir}`);
 
-        const tempDir = join(tmpdir(), `freebot-skills-${randomUUID()}`);
+        const tempDir = join(tmpdir(), `openbot-skills-${randomUUID()}`);
         // skills CLI 实际安装到 tempDir/.agents/skills，-a pi 时可能用 .pi/skills，两处都尝试
         const tempAgentsSkills = join(tempDir, '.agents', 'skills');
         const tempPiSkills = join(tempDir, '.pi', 'skills');

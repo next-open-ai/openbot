@@ -21,6 +21,14 @@
         </div>
         <div 
           class="nav-item" 
+          :class="{ active: activeTab === 'models' }"
+          @click="activeTab = 'models'"
+        >
+          <span class="nav-icon">🧠</span>
+          {{ t('settings.modelsNav') }}
+        </div>
+        <div 
+          class="nav-item" 
           :class="{ active: activeTab === 'users' }"
           @click="activeTab = 'users'"
         >
@@ -104,31 +112,15 @@
           </div>
         </div>
 
-        <!-- Agent Tab (Merged Configuration) -->
+        <!-- Agent Tab (Merged Configuration)：不含模型配置（在「模型配置」Tab）、不含用户密码 -->
         <div v-show="activeTab === 'agent'" class="tab-content">
           <h2 class="tab-title">{{ t('settings.agentConfig') }}</h2>
-          
-          <div class="settings-group">
-            <h3>{{ t('settings.modelConfig') }}</h3>
-            <div class="form-group">
-              <label>{{ t('settings.provider') }}</label>
-              <select v-model="localConfig.defaultProvider" class="input select-input">
-                <option v-for="provider in providers" :key="provider" :value="provider">
-                  {{ provider }}
-                </option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>{{ t('settings.model') }}</label>
-              <input v-model="localConfig.defaultModel" class="input" placeholder="e.g., deepseek-chat" />
-            </div>
-          </div>
 
           <div class="settings-group">
             <h3>{{ t('settings.workspace') }}</h3>
             <div class="form-group">
-              <label>{{ t('settings.defaultWorkspace') }}</label>
-              <input v-model="localConfig.defaultWorkspace" class="input" placeholder="default" />
+              <label>{{ t('settings.defaultAgent') }}</label>
+              <input v-model="localConfig.defaultAgentId" class="input" placeholder="default" />
             </div>
           </div>
 
@@ -149,22 +141,6 @@
             </div>
           </div>
 
-          <div class="settings-group">
-            <h3>{{ t('settings.userPassword') }}</h3>
-            <div class="form-group">
-              <label>{{ t('settings.loginUsername') }}</label>
-              <input v-model="localConfig.loginUsername" type="text" class="input" :placeholder="t('settings.loginUsernamePlaceholder')" />
-            </div>
-            <div class="form-group">
-              <label>{{ t('settings.loginPassword') }}</label>
-              <input v-model="localConfig.loginPassword" type="password" class="input" :placeholder="t('settings.loginPasswordPlaceholder')" autocomplete="new-password" />
-              <p v-if="config.loginPasswordSet" class="form-hint">{{ t('settings.loginPasswordSet') }}</p>
-            </div>
-            <div class="form-group">
-              <button type="button" class="btn-secondary" @click="logout">{{ t('login.logout') }}</button>
-            </div>
-          </div>
-
           <div class="actions">
             <button @click="saveAgentConfig" class="btn-primary">
               {{ t('common.save') }}
@@ -172,6 +148,149 @@
             <button @click="resetAgentConfig" class="btn-secondary">
               {{ t('common.reset') }}
             </button>
+          </div>
+        </div>
+
+        <!-- 模型配置 Tab（顶部子 Tab：Provider 配置 / 模型配置） -->
+        <div v-show="activeTab === 'models'" class="tab-content">
+          <h2 class="tab-title">{{ t('settings.modelsNav') }}</h2>
+          <div class="model-config-tabs">
+            <button
+              class="model-config-tab"
+              :class="{ active: modelConfigSubTab === 'provider' }"
+              @click="modelConfigSubTab = 'provider'"
+            >
+              {{ t('settings.providerConfig') }}
+            </button>
+            <button
+              class="model-config-tab"
+              :class="{ active: modelConfigSubTab === 'default' }"
+              @click="modelConfigSubTab = 'default'; onDefaultProviderChange(config.defaultProvider || localDefaultProvider)"
+            >
+              {{ t('settings.defaultModelConfig') }}
+            </button>
+          </div>
+
+          <!-- Provider 配置：新增方式——下拉选 Provider + API Key 保存为一行；已配置列表可编辑 Base URL、删除 -->
+          <div v-show="modelConfigSubTab === 'provider'" class="settings-group">
+            <p class="form-hint">{{ t('settings.providerConfigHint') }}</p>
+            <div class="provider-add-form">
+              <h4 class="subsection-title">{{ t('settings.addProviderKey') }}</h4>
+              <div class="form-row form-row-flex">
+                <div class="form-group flex-1">
+                  <label>{{ t('settings.selectProvider') }}</label>
+                  <select v-model="addProviderForm.provider" class="input select-input">
+                    <option value="">—</option>
+                    <option v-for="p in supportedProviders" :key="p" :value="p">{{ p }}</option>
+                  </select>
+                </div>
+                <div class="form-group flex-1">
+                  <label>{{ t('settings.apiKey') }}</label>
+                  <input
+                    v-model="addProviderForm.apiKey"
+                    type="password"
+                    class="input"
+                    :placeholder="t('settings.apiKeyPlaceholder')"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group flex-1">
+                  <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
+                  <input
+                    v-model="addProviderForm.baseUrl"
+                    type="text"
+                    class="input"
+                    :placeholder="t('settings.baseUrlPlaceholder')"
+                  />
+                </div>
+                <div class="form-group form-group-actions">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn-primary" :disabled="!addProviderForm.provider || !addProviderForm.apiKey?.trim()" @click="saveAddProvider">
+                    {{ t('common.save') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="provider-configured-list">
+              <h4 class="subsection-title">{{ t('settings.configuredProvidersList') }}</h4>
+              <p v-if="configuredProviders.length === 0" class="form-hint">{{ t('settings.noConfiguredProviderList') }}</p>
+              <div v-else class="provider-cards">
+                <div v-for="prov in configuredProviders" :key="prov" class="provider-card">
+                  <div class="provider-card-header">
+                    <span class="provider-name">{{ prov }}</span>
+                    <span class="provider-badge">{{ t('settings.apiKeyConfigured') }}</span>
+                    <template v-if="editingProvider !== prov">
+                      <button type="button" class="link-btn" @click="startEditProvider(prov)">{{ t('common.edit') }}</button>
+                      <button type="button" class="link-btn danger provider-delete" @click="removeProvider(prov)">{{ t('common.delete') }}</button>
+                    </template>
+                  </div>
+                  <template v-if="editingProvider === prov">
+                    <div class="form-group">
+                      <label>{{ t('settings.apiKey') }}</label>
+                      <input
+                        v-model="localProviderConfig[prov].apiKey"
+                        type="password"
+                        class="input"
+                        :placeholder="t('settings.apiKeyPlaceholder')"
+                        autocomplete="off"
+                      />
+                    </div>
+                    <div class="form-group">
+                      <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
+                      <input
+                        v-model="localProviderConfig[prov].baseUrl"
+                        type="text"
+                        class="input"
+                        :placeholder="t('settings.baseUrlPlaceholder')"
+                      />
+                    </div>
+                    <div class="provider-card-actions">
+                      <button type="button" class="btn-secondary" @click="cancelEditProvider">{{ t('common.cancel') }}</button>
+                      <button type="button" class="btn-primary" @click="saveEditProvider">{{ t('common.save') }}</button>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="provider-readonly">
+                      <p class="provider-readonly-line"><span class="label">{{ t('settings.apiKey') }}:</span> ••••••••</p>
+                      <p v-if="localProviderConfig[prov].baseUrl" class="provider-readonly-line"><span class="label">{{ t('settings.baseUrl') }}:</span> {{ localProviderConfig[prov].baseUrl }}</p>
+                    </div>
+                  </template>
+                </div>
+              </div>
+              <div v-if="configuredProviders.length > 0 && !editingProvider" class="actions">
+                <p class="form-hint action-hint">{{ t('settings.editProviderHint') }}</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 模型配置：仅已配置 Key 的 Provider 可备选，选 Provider 后再选模型，可设默认 -->
+          <div v-show="modelConfigSubTab === 'default'" class="settings-group">
+            <p class="form-hint">{{ t('settings.defaultModelHint') }}</p>
+            <p v-if="configuredProviders.length === 0" class="form-hint form-hint-warn">
+              {{ t('settings.noConfiguredProvider') }}
+            </p>
+            <template v-else>
+              <div class="form-group">
+                <label>{{ t('settings.defaultProvider') }}</label>
+                <select v-model="localDefaultProvider" class="input select-input" @change="onDefaultProviderChange">
+                  <option v-for="p in configuredProviders" :key="p" :value="p">{{ p }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>{{ t('settings.defaultModel') }}</label>
+                <select v-model="localDefaultModel" class="input select-input">
+                  <option v-for="m in (models[localDefaultProvider] || [])" :key="m" :value="m">{{ m }}</option>
+                </select>
+              </div>
+              <p class="form-hint current-default">
+                {{ t('settings.currentDefault') }}: <strong>{{ config.defaultProvider || '—' }} / {{ config.defaultModel || '—' }}</strong>
+              </p>
+              <div class="actions">
+                <button type="button" class="btn-primary" @click="setDefaultModel">
+                  {{ t('settings.setAsDefaultModel') }}
+                </button>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -389,7 +508,7 @@ import { useI18n } from '@/composables/useI18n';
 import { usersAPI } from '@/api';
 import SettingsSkills from '@/components/SettingsSkills.vue';
 
-const SETTINGS_TABS = ['general', 'agent', 'users', 'skills', 'about'];
+const SETTINGS_TABS = ['general', 'agent', 'models', 'users', 'skills', 'about'];
 
 export default {
   name: 'Settings',
@@ -416,8 +535,15 @@ export default {
         router.replace({ path: '/settings', query: { ...route.query, tab } });
       }
       if (tab === 'users') loadUsers();
+      if (tab === 'models') initModelConfigTab();
     });
     const localConfig = ref({});
+    const modelConfigSubTab = ref('provider');
+    const localProviderConfig = ref({});
+    const localDefaultProvider = ref('');
+    const localDefaultModel = ref('');
+    const addProviderForm = ref({ provider: '', apiKey: '', baseUrl: '' });
+    const editingProvider = ref(null);
 
     const usersList = ref([]);
     const usersLoading = ref(false);
@@ -435,7 +561,17 @@ export default {
     const currentUserPasswordForm = ref({ password: '', confirm: '' });
     
     const config = computed(() => settingsStore.config);
-    const providers = computed(() => settingsStore.providers);
+    const providers = computed(() => settingsStore.providers || []);
+    const models = computed(() => settingsStore.models || {});
+    const supportedProviders = computed(() => Array.isArray(providers.value) ? providers.value : []);
+    const configuredProviders = computed(() => {
+      const cfg = localProviderConfig.value;
+      if (!cfg || typeof cfg !== 'object') return [];
+      return Object.keys(cfg).filter((p) => {
+        const entry = cfg[p];
+        return entry && typeof entry.apiKey === 'string' && entry.apiKey.trim() !== '';
+      });
+    });
     const platform = window.electronAPI?.platform || 'web';
     // Mock electron version if not available
     const electronVersion = window.process?.versions?.electron || 'Unknown';
@@ -450,14 +586,22 @@ export default {
     };
 
     const loadAgentConfig = () => {
-      localConfig.value = { ...settingsStore.config, loginPassword: '' };
+      try {
+        const cfg = settingsStore.config || {};
+        const effectiveAgentId = cfg.defaultAgentId ?? 'default';
+        localConfig.value = { ...cfg, defaultAgentId: effectiveAgentId, loginPassword: '' };
+      } catch (err) {
+        console.warn('[Settings] loadAgentConfig error', err);
+        localConfig.value = { loginPassword: '' };
+      }
     };
 
     const saveAgentConfig = async () => {
       const payload = { ...localConfig.value };
       if (payload.loginPassword === '') delete payload.loginPassword;
-      await settingsStore.updateConfig(payload);
-      localConfig.value = { ...settingsStore.config, loginPassword: '' };
+      const agentId = payload.defaultAgentId ?? 'default';
+      await settingsStore.updateConfig({ ...payload, defaultAgentId: agentId });
+      localConfig.value = { ...settingsStore.config, defaultAgentId: settingsStore.config?.defaultAgentId ?? 'default', loginPassword: '' };
       alert(t('common.saved'));
     };
 
@@ -468,6 +612,118 @@ export default {
     const resetAgentConfig = () => {
       loadAgentConfig();
     };
+
+    function initModelConfigTab() {
+      try {
+        const cfg = config.value || {};
+        const prov = cfg.providers && typeof cfg.providers === 'object' ? cfg.providers : {};
+        const next = {};
+        for (const [p, entry] of Object.entries(prov)) {
+          if (p && typeof p === 'string') {
+            next[p] = {
+              apiKey: entry && typeof entry.apiKey === 'string' ? entry.apiKey : '',
+              baseUrl: entry && typeof entry.baseUrl === 'string' ? entry.baseUrl : '',
+            };
+          }
+        }
+        localProviderConfig.value = next;
+        const defProv = cfg.defaultProvider && typeof cfg.defaultProvider === 'string' ? cfg.defaultProvider : 'deepseek';
+        const defModel = cfg.defaultModel && typeof cfg.defaultModel === 'string' ? cfg.defaultModel : 'deepseek-chat';
+        const configured = Object.keys(next).filter((k) => (next[k].apiKey || '').trim() !== '');
+        localDefaultProvider.value = configured.includes(defProv) ? defProv : (configured[0] || 'deepseek');
+        localDefaultModel.value = defModel;
+        ensureModelsLoaded(localDefaultProvider.value).catch((err) => console.warn('[Settings] ensureModelsLoaded', err));
+      } catch (err) {
+        console.error('[Settings] initModelConfigTab error', err);
+        localProviderConfig.value = {};
+        localDefaultProvider.value = 'deepseek';
+        localDefaultModel.value = 'deepseek-chat';
+      }
+    }
+
+    async function ensureModelsLoaded(provider) {
+      if (!provider || typeof provider !== 'string') return;
+      if (settingsStore.models && settingsStore.models[provider]) return;
+      try {
+        await settingsStore.loadModels(provider);
+      } catch (err) {
+        console.warn('[Settings] loadModels failed', provider, err);
+      }
+    }
+
+    function onDefaultProviderChange(provider) {
+      ensureModelsLoaded(provider).catch(() => {});
+    }
+
+    async function saveProviderConfig() {
+      const payload = { providers: { ...localProviderConfig.value } };
+      await settingsStore.updateConfig(payload);
+      alert(t('common.saved'));
+    }
+
+    function saveAddProvider() {
+      const { provider, apiKey, baseUrl } = addProviderForm.value;
+      if (!provider || !(apiKey && apiKey.trim())) return;
+      localProviderConfig.value = {
+        ...localProviderConfig.value,
+        [provider]: {
+          apiKey: apiKey.trim(),
+          baseUrl: (baseUrl || '').trim(),
+        },
+      };
+      saveProviderConfig().then(() => {
+        addProviderForm.value.apiKey = '';
+        addProviderForm.value.baseUrl = '';
+      }).catch(() => {});
+    }
+
+    function removeProvider(prov) {
+      if (!prov) return;
+      if (editingProvider.value === prov) editingProvider.value = null;
+      const next = { ...localProviderConfig.value };
+      delete next[prov];
+      localProviderConfig.value = next;
+      saveProviderConfig().catch(() => {});
+    }
+
+    function startEditProvider(prov) {
+      editingProvider.value = prov;
+    }
+
+    function cancelEditProvider() {
+      const prov = editingProvider.value;
+      if (!prov) return;
+      const fromConfig = config.value?.providers?.[prov];
+      if (fromConfig) {
+        localProviderConfig.value = {
+          ...localProviderConfig.value,
+          [prov]: {
+            apiKey: fromConfig.apiKey ?? '',
+            baseUrl: fromConfig.baseUrl ?? '',
+          },
+        };
+      }
+      editingProvider.value = null;
+    }
+
+    async function saveEditProvider() {
+      await saveProviderConfig();
+      editingProvider.value = null;
+    }
+
+    async function setDefaultModel() {
+      const prov = localDefaultProvider.value;
+      const model = localDefaultModel.value;
+      if (!configuredProviders.value.includes(prov)) {
+        alert(t('settings.noConfiguredProvider'));
+        return;
+      }
+      await settingsStore.updateConfig({
+        defaultProvider: prov,
+        defaultModel: model,
+      });
+      alert(t('common.saved'));
+    }
 
     async function loadUsers() {
       usersLoading.value = true;
@@ -618,9 +874,14 @@ export default {
     }
 
     onMounted(async () => {
-      activeTab.value = tabFromQuery();
-      await settingsStore.loadProviders();
-      loadAgentConfig();
+      try {
+        activeTab.value = tabFromQuery();
+        await settingsStore.loadProviders();
+        loadAgentConfig();
+        initModelConfigTab();
+      } catch (err) {
+        console.error('[Settings] onMounted error', err);
+      }
     });
 
     return {
@@ -629,6 +890,24 @@ export default {
       config,
       localConfig,
       providers,
+      models,
+      modelConfigSubTab,
+      localProviderConfig,
+      localDefaultProvider,
+      localDefaultModel,
+      addProviderForm,
+      supportedProviders,
+      configuredProviders,
+      saveAddProvider,
+      removeProvider,
+      editingProvider,
+      startEditProvider,
+      cancelEditProvider,
+      saveEditProvider,
+      ensureModelsLoaded,
+      onDefaultProviderChange,
+      saveProviderConfig,
+      setDefaultModel,
       currentLocale,
       platform,
       electronVersion,
@@ -750,9 +1029,144 @@ export default {
 
 .tab-title {
   font-size: var(--font-size-2xl);
-  font-weight: 600;
+  font-weight: 700;
   margin-bottom: var(--spacing-xl);
   color: var(--color-text-primary);
+  letter-spacing: -0.02em;
+}
+
+/* 模型配置：子 Tab 与内容区文字层级 */
+.model-config-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: var(--spacing-xl);
+  border-bottom: 1px solid var(--glass-border);
+}
+.model-config-tab {
+  padding: 12px 20px;
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.model-config-tab:hover {
+  color: var(--color-text-secondary);
+}
+.model-config-tab.active {
+  color: var(--color-accent-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent-primary);
+}
+.model-config-tabs + .settings-group .form-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--spacing-md);
+}
+.provider-add-form {
+  margin-bottom: var(--spacing-xl);
+}
+.provider-add-form .subsection-title,
+.provider-configured-list .subsection-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 var(--spacing-sm);
+  letter-spacing: -0.01em;
+}
+.model-config-tabs ~ .settings-group .form-group label {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+.form-row-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  align-items: flex-end;
+}
+.form-row-flex .flex-1 {
+  flex: 1;
+  min-width: 140px;
+}
+.form-group-actions {
+  margin-bottom: 0;
+}
+.provider-configured-list {
+  margin-top: var(--spacing-xl);
+}
+.provider-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+.provider-card {
+  padding: var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+}
+.provider-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+.provider-name {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+.provider-badge {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+.provider-delete {
+  margin-left: auto;
+}
+.provider-readonly {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.provider-readonly-line {
+  margin: 0 0 var(--spacing-xs);
+}
+.provider-readonly-line .label {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-right: var(--spacing-sm);
+}
+.provider-card-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+.current-default {
+  margin-top: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+.form-hint-warn {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning, #b8860b);
+  font-weight: 500;
+}
+.actions .action-hint.form-hint {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .settings-group {
@@ -785,6 +1199,9 @@ export default {
   margin-top: var(--spacing-xs);
   margin-bottom: 0;
 }
+.settings-group .form-hint:first-child {
+  margin-top: 0;
+}
 
 .input {
   width: 100%;
@@ -796,6 +1213,10 @@ export default {
   color: var(--color-text-primary);
   font-size: var(--font-size-base);
   transition: all var(--transition-fast);
+}
+.input::placeholder {
+  color: var(--color-text-tertiary);
+  opacity: 1;
 }
 
 .input:focus {
@@ -866,8 +1287,13 @@ export default {
 /* Actions */
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
+}
+.actions .action-hint {
+  width: 100%;
+  margin-bottom: 0;
 }
 
 .btn-primary, .btn-secondary {

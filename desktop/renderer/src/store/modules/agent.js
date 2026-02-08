@@ -28,6 +28,9 @@ export const useAgentStore = defineStore('agent', {
             }
         },
 
+        /**
+         * 创建会话。options.agentId 决定会话归属的智能体；Gateway 会通过 sessionId 查 session 得到 agentId，再按该智能体的 provider/model 创建 Agent Session。
+         */
         async createSession(options = {}) {
             try {
                 const payload = { agentId: 'default', workspace: 'default', ...options };

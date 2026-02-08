@@ -48,7 +48,7 @@ export class WorkspaceController {
     @Get('current')
     async getCurrentWorkspace() {
         const config = await this.configService.getConfig();
-        return { success: true, data: config.defaultWorkspace || 'default' };
+        return { success: true, data: this.configService.getDefaultAgentId(config) };
     }
 
     @Get('documents')
@@ -56,7 +56,7 @@ export class WorkspaceController {
         @Query('workspace') workspace: string,
         @Query('path') path: string = '',
     ) {
-        const name = workspace || (await this.configService.getConfig()).defaultWorkspace || 'default';
+        const name = workspace || this.configService.getDefaultAgentId(await this.configService.getConfig());
         const items = await this.workspaceService.listDocuments(name, path);
         return { success: true, data: items };
     }
@@ -71,7 +71,7 @@ export class WorkspaceController {
         if (!path) {
             throw new HttpException('path is required', HttpStatus.BAD_REQUEST);
         }
-        const name = workspace || (await this.configService.getConfig()).defaultWorkspace || 'default';
+        const name = workspace || this.configService.getDefaultAgentId(await this.configService.getConfig());
         const { absolutePath, safe } = this.workspaceService.resolveFilePath(name, path);
         if (!safe || !existsSync(absolutePath)) {
             throw new NotFoundException('File not found');
@@ -100,7 +100,7 @@ export class WorkspaceController {
         if (!path) {
             throw new HttpException('path is required', HttpStatus.BAD_REQUEST);
         }
-        const name = workspace || (await this.configService.getConfig()).defaultWorkspace || 'default';
+        const name = workspace || this.configService.getDefaultAgentId(await this.configService.getConfig());
         const deleted = await this.workspaceService.deletePath(name, path);
         if (!deleted) {
             throw new NotFoundException('File or folder not found');

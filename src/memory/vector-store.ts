@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { LocalIndex } from "vectra";
-import { getFreebotAgentDir } from "../agent/agent-dir.js";
+import { getOpenbotAgentDir } from "../agent/agent-dir.js";
 import type { InfoType, MemoryMetadata } from "./types.js";
 
 const INDEX_DIR_NAME = "memory";
@@ -10,7 +10,7 @@ let index: LocalIndex | null = null;
 
 function getIndexDir(): string {
     if (!indexDir) {
-        indexDir = join(getFreebotAgentDir(), INDEX_DIR_NAME);
+        indexDir = join(getOpenbotAgentDir(), INDEX_DIR_NAME);
     }
     return indexDir;
 }

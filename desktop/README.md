@@ -141,17 +141,19 @@ The application uses a professional design system with:
 
 ## 🔧 Configuration
 
-Configuration is stored in `~/.freebot/desktop/config.json`:
+Configuration is stored in `~/.openbot/desktop/config.json`:
 
 ```json
 {
   "gatewayUrl": "ws://localhost:3000",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-chat",
-  "defaultWorkspace": "default",
+  "defaultAgentId": "default",
   "theme": "dark"
 }
 ```
+
+（`defaultAgentId` 表示缺省智能体 id。）
 
 ## 🐛 Troubleshooting
 

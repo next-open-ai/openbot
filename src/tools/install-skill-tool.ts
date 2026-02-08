@@ -14,7 +14,7 @@ type InstallSkillParams = { url: string };
  * 创建 install_skill 工具：通过后端 API 安装技能。
  * 创建时绑定 targetAgentId，安装目标由此决定：
  * - 具体 agentId → 安装到该 agent 的 workspace/skills
- * - "global"|"all" → 安装到全局 FREEBOT_AGENT_DIR/skills
+ * - "global"|"all" → 安装到全局 OPENBOT_AGENT_DIR/skills
  * - 未传则后端按默认/全局处理
  */
 export function createInstallSkillTool(targetAgentId: string | undefined): ToolDefinition {
@@ -22,7 +22,7 @@ export function createInstallSkillTool(targetAgentId: string | undefined): ToolD
         name: "install_skill",
         label: "Install Skill",
         description:
-            "将指定地址的技能安装到当前智能体工作区目录。在 OpenBot/FreeBot 中为用户安装技能时，" +
+            "将指定地址的技能安装到当前智能体工作区目录。在 OpenBot 中为用户安装技能时，" +
             "应使用本工具而非 npx skills add，以保证安装到当前智能体对应的技能目录。",
         parameters: InstallSkillSchema,
         execute: async (

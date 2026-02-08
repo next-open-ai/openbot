@@ -7,7 +7,8 @@ export interface AppConfig {
     gatewayUrl: string;
     defaultProvider: string;
     defaultModel: string;
-    defaultWorkspace: string;
+    /** 缺省智能体 id */
+    defaultAgentId?: string;
     theme: 'light' | 'dark';
     /** 同时存在的聊天 AgentSession 上限，超过时淘汰最久未用的 */
     maxAgentSessions?: number;
@@ -30,7 +31,7 @@ export class ConfigService {
 
     constructor() {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        const configDir = join(homeDir, '.freebot', 'desktop');
+        const configDir = join(homeDir, '.openbot', 'desktop');
         this.configPath = join(configDir, 'config.json');
 
         // Ensure config directory exists
@@ -47,11 +48,17 @@ export class ConfigService {
             gatewayUrl: 'ws://localhost:3000',
             defaultProvider: 'deepseek',
             defaultModel: 'deepseek-chat',
-            defaultWorkspace: 'default',
+            defaultAgentId: 'default',
             theme: 'dark',
             maxAgentSessions: 5,
             providers: {},
         };
+    }
+
+    /** 当前缺省智能体 id */
+    getDefaultAgentId(config?: AppConfig): string {
+        const c = config ?? this.config;
+        return (c.defaultAgentId ?? 'default').trim() || 'default';
     }
 
     private async loadConfig(): Promise<void> {
@@ -59,6 +66,7 @@ export class ConfigService {
             if (existsSync(this.configPath)) {
                 const content = await readFile(this.configPath, 'utf-8');
                 this.config = { ...this.getDefaultConfig(), ...JSON.parse(content) };
+                this.config.defaultAgentId = this.getDefaultAgentId(this.config);
             }
         } catch (error) {
             console.error('Error loading config:', error);
@@ -71,6 +79,7 @@ export class ConfigService {
 
     async updateConfig(updates: Partial<AppConfig>): Promise<AppConfig> {
         this.config = { ...this.config, ...updates };
+        this.config.defaultAgentId = this.getDefaultAgentId(this.config);
         await this.saveConfig();
         return this.config;
     }

@@ -1,5 +1,5 @@
 {
-    "name": "@freebot/openbot-desktop-renderer",
+    "name": "@openbot/openbot-desktop-renderer",
     "version": "1.0.0",
     "description": "OpenBot Desktop Frontend - Vue.js UI",
     "type": "module",
