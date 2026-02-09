@@ -110,14 +110,14 @@ export async function startGatewayServer(port: number = 38080): Promise<{
     console.log(`Found available port for Desktop Server: ${backendPort}`);
     setBackendBaseUrl(`http://localhost:${backendPort}`);
 
-    // 2. Start Desktop Server
+    // 2. Start Desktop Server（从包根目录找 dist/server，npm 全局安装时也能启动）
     let backendProcess: ChildProcess | null = null;
-    const serverPath = join(process.cwd(), "dist/server/main.js");
+    const serverPath = join(PACKAGE_ROOT, "dist", "server", "main.js");
 
     if (existsSync(serverPath)) {
         console.log(`Spawning Desktop Server at ${serverPath}...`);
         backendProcess = spawn("node", [serverPath], {
-            cwd: process.cwd(),
+            cwd: PACKAGE_ROOT,
             env: { ...process.env, PORT: backendPort.toString() },
             stdio: ["ignore", "pipe", "pipe"], // Pipe stdout/stderr to capture logs
         });
