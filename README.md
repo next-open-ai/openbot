@@ -12,7 +12,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| **技能架构** | 基于 Cursor Agent Skills 规范，支持多路径加载、本地安装与动态扩展 |
+| **技能架构** | 基于 Agent Skills 规范，支持多路径加载、本地安装与动态扩展 |
 | **编码智能体** | 集成 [pi-coding-agent](https://www.npmjs.com/package/@mariozechner/pi-coding-agent)，支持多轮工具调用与代码执行 |
 | **浏览器自动化** | 内置 [agent-browser](https://www.npmjs.com/package/agent-browser)，可导航、填表、截图与数据抓取 |
 | **长期记忆** | 向量存储（Vectra）+ 本地嵌入，支持经验总结与会话压缩（compaction） |
@@ -144,7 +144,7 @@
 ### 环境要求
 
 - **Node.js** ≥ 20
-- 可选：`OPENAI_API_KEY` 或 `DEEPSEEK_API_KEY` 等（按所用 provider 配置）
+- 可选：`OPENAI_API_KEY` （按所用 provider 配置）
 
 ### 安装与构建
 
@@ -165,8 +165,42 @@ openbot -s ./skills "用 find-skills 搜一下 PDF 相关技能"
 # 仅打印 system/user prompt，不调 LLM
 openbot --dry-run --prompt "查北京天气"
 
-# 指定模型与 provider
+# 指定模型与 provider（覆盖桌面缺省）
 openbot --model deepseek-chat --provider deepseek "写一段 TypeScript 示例"
+```
+
+### CLI 配置模型选项
+
+CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/config.json`）。未在命令行显式指定 `--provider` / `--model` 时，将使用该配置中的**缺省智能体**对应的 provider 与 model；若该智能体未单独配置模型，则使用全局缺省模型。
+
+| 操作 | 命令 | 说明 |
+|------|------|------|
+| 保存 API Key | `openbot login <provider> <apiKey>` | 将某 Provider 的 API Key 写入桌面配置，供 CLI 与桌面端共用 |
+| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 在桌面配置中设置全局缺省 provider 与 model（如 `deepseek` / `deepseek-chat`） |
+| 查看配置 | `openbot config list` | 列出桌面配置中的 providers 与缺省模型 |
+| 同步到 Agent 目录 | `openbot config sync` | 将桌面配置同步到 `~/.openbot/agent/models.json`，供 pi-agent 使用 |
+
+**常用 Provider 示例**：`deepseek`、`dashscope`、`openai`、`openai-custom`（自定义 OpenAI 兼容端点）、`nvidia`、`kimi`。模型 ID 需与各 Provider 支持的一致（如 DeepSeek 的 `deepseek-chat`、OpenAI 的 `gpt-4o`）；使用 `openai-custom` 时可填写自部署模型的 ID。
+
+**命令行覆盖**：单次执行时可用 `--provider`、`--model`、`--api-key` 覆盖配置或环境变量中的值。
+
+**环境变量**：未在桌面配置中保存 API Key 时，会回退到环境变量，例如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY` 等（详见 `openbot --help` 末尾的 Environment 说明）。
+
+**首次使用建议**：
+
+```bash
+# 1. 保存 API Key（任选其一或多种）
+openbot login deepseek YOUR_DEEPSEEK_API_KEY
+# openbot login openai YOUR_OPENAI_API_KEY
+
+# 2. 设置缺省模型
+openbot config set-model deepseek deepseek-chat
+
+# 3. 可选：同步到 agent 目录（桌面端保存配置后也会自动同步）
+openbot config sync
+
+# 4. 直接对话
+openbot "总结一下当前有哪些技能"
 ```
 
 ### 启动 WebSocket 网关

@@ -1,6 +1,6 @@
 {
     "name": "@openbot/openbot-desktop",
-    "version": "1.0.0",
+    "version": "0.1.1",
     "description": "OpenBot Desktop - Professional agent management application",
     "main": "main.js",
     "scripts": {

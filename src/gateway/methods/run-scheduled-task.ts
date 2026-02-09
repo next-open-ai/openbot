@@ -1,33 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { agentManager } from "../../agent/agent-manager.js";
 import { getExperienceContextForUserMessage } from "../../memory/index.js";
-
-async function reportTokenUsage(
-    backendBaseUrl: string,
-    sessionId: string,
-    source: "chat" | "scheduled_task",
-    tokens: { promptTokens: number; completionTokens: number },
-    options?: { taskId?: string; executionId?: string },
-): Promise<void> {
-    const url = `${backendBaseUrl.replace(/\/$/, "")}/server-api/usage`;
-    await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            sessionId,
-            source,
-            taskId: options?.taskId ?? undefined,
-            executionId: options?.executionId ?? undefined,
-            promptTokens: tokens.promptTokens,
-            completionTokens: tokens.completionTokens,
-        }),
-    });
-}
+import { loadDesktopAgentConfig } from "../../config/desktop-config.js";
 
 export interface RunScheduledTaskBody {
     sessionId: string;
     message: string;
-    workspace: string;
+    /** 该 session 绑定的 agentId，Gateway 用其本地取配置，不请求 Nest；不传则 default */
+    agentId?: string;
+    workspace?: string;
     taskId?: string;
     backendBaseUrl?: string;
 }
@@ -63,46 +44,24 @@ export async function handleRunScheduledTask(
         res.end(JSON.stringify({ error: "Invalid JSON body" }));
         return;
     }
-    const { sessionId, message, workspace, backendBaseUrl, taskId } = body;
-    if (!sessionId || !message || !workspace) {
+    const { sessionId, message, agentId: bodyAgentId, backendBaseUrl, taskId } = body;
+    if (!sessionId || !message) {
         res.writeHead(400, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "sessionId, message, workspace required" }));
+        res.end(JSON.stringify({ error: "sessionId, message required" }));
         return;
     }
 
-    // 与对话一致：仅通过 sessionId 获取 session，用 session.agentId 拉取 agent 配置与 API Key；未取到时用 "default"，不依赖 body.workspace
+    const sessionAgentId = bodyAgentId ?? "default";
     let resolvedWorkspace = "default";
     let provider: string | undefined;
     let modelId: string | undefined;
     let apiKey: string | undefined;
-    let sessionAgentId = "default";
-    const base = (backendBaseUrl ?? "").replace(/\/$/, "");
-    if (base) {
-        try {
-            const sessionRes = await fetch(`${base}/server-api/agents/sessions/${encodeURIComponent(sessionId)}`);
-            if (sessionRes.ok) {
-                const sessionData = (await sessionRes.json()) as { success?: boolean; data?: { agentId?: string; workspace?: string } };
-                sessionAgentId = sessionData?.data?.agentId ?? "default";
-                if (sessionData?.data?.workspace) resolvedWorkspace = sessionData.data.workspace;
-            }
-            const agentRes = await fetch(`${base}/server-api/agent-config/${encodeURIComponent(sessionAgentId)}`);
-            if (agentRes.ok) {
-                const agentData = (await agentRes.json()) as { success?: boolean; data?: { workspace?: string; provider?: string; model?: string } };
-                const agent = agentData?.data;
-                if (agent?.workspace) resolvedWorkspace = agent.workspace;
-                if (agent?.provider) provider = agent.provider;
-                if (agent?.model) modelId = agent.model;
-            }
-            const configRes = await fetch(`${base}/server-api/config`);
-            if (configRes.ok) {
-                const configData = (await configRes.json()) as { success?: boolean; data?: { providers?: Record<string, { apiKey?: string }> } };
-                const prov = provider ?? "deepseek";
-                const key = configData?.data?.providers?.[prov]?.apiKey;
-                if (key && typeof key === "string" && key.trim()) apiKey = key.trim();
-            }
-        } catch (e) {
-            console.warn("[run-scheduled-task] Failed to fetch session/agent/config, using default:", e);
-        }
+    const agentConfig = await loadDesktopAgentConfig(sessionAgentId);
+    if (agentConfig) {
+        if (agentConfig.workspace) resolvedWorkspace = agentConfig.workspace;
+        provider = agentConfig.provider;
+        modelId = agentConfig.model;
+        if (agentConfig.apiKey) apiKey = agentConfig.apiKey;
     }
 
     try {
@@ -160,15 +119,19 @@ export async function handleRunScheduledTask(
             }).catch((err) => console.error("[run-scheduled-task] POST assistant message failed:", err));
         }
 
-        if (backendBaseUrl && (turnPromptTokens > 0 || turnCompletionTokens > 0)) {
-            reportTokenUsage(backendBaseUrl, sessionId, "scheduled_task", {
-                promptTokens: turnPromptTokens,
-                completionTokens: turnCompletionTokens,
-            }, { taskId }).catch((err) => console.error("[run-scheduled-task] reportTokenUsage failed:", err));
-        }
-
+        const usage =
+            turnPromptTokens > 0 || turnCompletionTokens > 0
+                ? { promptTokens: turnPromptTokens, completionTokens: turnCompletionTokens }
+                : undefined;
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ success: true, sessionId, assistantContent: assistantContent ?? "" }));
+        res.end(
+            JSON.stringify({
+                success: true,
+                sessionId,
+                assistantContent: assistantContent ?? "",
+                ...(usage && { usage }),
+            })
+        );
     } catch (error: any) {
         console.error("[run-scheduled-task] error:", error);
         const msg = error?.message ?? String(error);

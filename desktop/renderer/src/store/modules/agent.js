@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { agentAPI } from '@/api';
+import { agentAPI, usageAPI } from '@/api';
 import socketService from '@/api/socket';
 
 export const useAgentStore = defineStore('agent', {
@@ -11,6 +11,7 @@ export const useAgentStore = defineStore('agent', {
         currentStreamParts: [], // Array of {type: 'text'|'tool', content?: string, toolId?: string}
         isStreaming: false,
         toolExecutions: [],
+        totalTokens: 0,
     }),
 
     getters: {
@@ -77,13 +78,13 @@ export const useAgentStore = defineStore('agent', {
                 const list = historyResponse?.data?.data ?? historyResponse?.data;
                 this.messages = Array.isArray(list) ? list : [];
 
-                await socketService.connectToSession(sessionId);
+                await socketService.connectToSession(sessionId, session.agentId, session.type);
             } catch (error) {
                 console.error('Failed to select session:', error);
                 if (fallback) {
                     this.currentSession = fallback;
                     this.messages = [];
-                    await socketService.connectToSession(sessionId);
+                    await socketService.connectToSession(sessionId, fallback.agentId, fallback.type);
                 } else {
                     throw error;
                 }
@@ -117,7 +118,7 @@ export const useAgentStore = defineStore('agent', {
                     const title = message.trim().substring(0, 50);
                     const session = await this.createSession({ title });
                     this.currentSession = session;
-                    await socketService.connectToSession(session.id);
+                    await socketService.connectToSession(session.id, session.agentId, session.type);
                 } catch (error) {
                     console.error('Failed to create lazy session:', error);
                     return;
@@ -126,7 +127,11 @@ export const useAgentStore = defineStore('agent', {
 
             try {
                 if (this.currentSession && socketService.currentSessionId !== this.currentSession.id) {
-                    await socketService.connectToSession(this.currentSession.id);
+                    await socketService.connectToSession(
+                        this.currentSession.id,
+                        this.currentSession.agentId,
+                        this.currentSession.type,
+                    );
                 }
 
                 const userMessage = {
@@ -146,7 +151,13 @@ export const useAgentStore = defineStore('agent', {
                 agentAPI.appendMessage(this.currentSession.id, 'user', message).catch(() => {});
 
                 const targetAgentId = options?.targetAgentId ?? this.currentSession?.agentId ?? 'default';
-                await socketService.sendMessage(this.currentSession.id, message, targetAgentId);
+                await socketService.sendMessage(
+                    this.currentSession.id,
+                    message,
+                    targetAgentId,
+                    this.currentSession.agentId,
+                    this.currentSession.type,
+                );
             } catch (error) {
                 console.error('Failed to send message:', error);
                 this.isStreaming = false;
@@ -220,7 +231,29 @@ export const useAgentStore = defineStore('agent', {
             }
         },
 
+        async fetchUsageTotal() {
+            try {
+                const res = await usageAPI.getTotal();
+                if (res?.data?.success && res?.data?.data) {
+                    this.totalTokens = res.data.data.totalTokens ?? 0;
+                }
+            } catch (e) {
+                console.warn('Failed to fetch token usage:', e);
+            }
+        },
+
         handleMessageComplete(data) {
+            if (data?.usage && (data.usage.promptTokens > 0 || data.usage.completionTokens > 0) && data.sessionId) {
+                usageAPI
+                    .record({
+                        sessionId: data.sessionId,
+                        source: 'chat',
+                        promptTokens: data.usage.promptTokens ?? 0,
+                        completionTokens: data.usage.completionTokens ?? 0,
+                    })
+                    .then(() => this.fetchUsageTotal())
+                    .catch((e) => console.warn('Record usage failed:', e));
+            }
             if (data.sessionId === this.currentSession?.id) {
                 const content = this.currentMessage || data.content || '';
                 if (content || this.toolExecutions.length > 0) {

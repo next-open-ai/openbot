@@ -1,14 +1,21 @@
 /**
  * 桌面配置模块单元测试：getDesktopConfig、getBoundAgentIdForCli、loadDesktopAgentConfig
  */
-import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
     getDesktopConfig,
     getBoundAgentIdForCli,
     loadDesktopAgentConfig,
+    setProviderApiKey,
+    setDefaultModel,
+    getDesktopConfigList,
+    getProviderSupport,
+    ensureProviderSupportFile,
+    syncDesktopConfigToModelsJson,
 } from "../../src/config/desktop-config.js";
+import { getOpenbotAgentDir } from "../../src/agent/agent-dir.js";
 
 describe("config/desktop-config", () => {
     let testDir: string;
@@ -166,6 +173,86 @@ describe("config/desktop-config", () => {
             expect(result!.provider).toBe("dashscope");
             expect(result!.model).toBe("qwen-max");
             expect(result!.apiKey).toBe("sk-dash");
+            expect(result!.workspace).toBe("qwen");
+        });
+
+        it("returns workspace from agent.workspace or agent.id", async () => {
+            writeFileSync(
+                join(desktopDir, "config.json"),
+                JSON.stringify({ defaultProvider: "deepseek", defaultModel: "deepseek-chat" }),
+                "utf-8",
+            );
+            writeFileSync(
+                join(desktopDir, "agents.json"),
+                JSON.stringify({
+                    agents: [
+                        { id: "default", workspace: "main-ws" },
+                        { id: "no-ws", provider: "deepseek", model: "deepseek-chat" },
+                    ],
+                }),
+                "utf-8",
+            );
+            const defaultResult = await loadDesktopAgentConfig("default");
+            expect(defaultResult!.workspace).toBe("main-ws");
+            const noWsResult = await loadDesktopAgentConfig("no-ws");
+            expect(noWsResult!.workspace).toBe("no-ws");
+        });
+    });
+
+    describe("setProviderApiKey / setDefaultModel / getDesktopConfigList", () => {
+        it("setProviderApiKey writes to config.json and loadDesktopAgentConfig reads it", async () => {
+            await setProviderApiKey("deepseek", "sk-test-123");
+            expect(existsSync(join(desktopDir, "config.json"))).toBe(true);
+            const result = await loadDesktopAgentConfig("default");
+            expect(result!.apiKey).toBe("sk-test-123");
+        });
+
+        it("setDefaultModel writes defaultProvider and defaultModel", async () => {
+            await setDefaultModel("dashscope", "qwen-max");
+            const list = await getDesktopConfigList();
+            expect(list.defaultProvider).toBe("dashscope");
+            expect(list.defaultModel).toBe("qwen-max");
+        });
+
+        it("getDesktopConfigList returns providers with hasKey", async () => {
+            await setProviderApiKey("openai", "sk-openai");
+            await setDefaultModel("openai", "gpt-4");
+            const list = await getDesktopConfigList();
+            expect(list.providers.some((p) => p.provider === "openai" && p.hasKey)).toBe(true);
+        });
+    });
+
+    describe("provider-support and sync", () => {
+        it("ensureProviderSupportFile creates provider-support.json when missing", async () => {
+            const supportPath = join(desktopDir, "provider-support.json");
+            if (existsSync(supportPath)) {
+                const { rmSync } = await import("fs");
+                rmSync(supportPath);
+            }
+            await ensureProviderSupportFile();
+            expect(existsSync(supportPath)).toBe(true);
+        });
+
+        it("getProviderSupport returns provider catalog with models (id, name only)", async () => {
+            const support = await getProviderSupport();
+            expect(support.deepseek).toBeDefined();
+            expect(support.deepseek.name).toBe("DeepSeek");
+            expect(support.deepseek.models.length).toBeGreaterThan(0);
+            expect(support.deepseek.models[0]).toMatchObject({
+                id: "deepseek-chat",
+                name: "DeepSeek Chat",
+            });
+        });
+
+        it("syncDesktopConfigToModelsJson writes agent dir models.json from configured providers", async () => {
+            await setProviderApiKey("deepseek", "sk-deepseek");
+            await syncDesktopConfigToModelsJson();
+            const agentDir = getOpenbotAgentDir();
+            const modelsPath = join(agentDir, "models.json");
+            expect(existsSync(modelsPath)).toBe(true);
+            const models = JSON.parse(readFileSync(modelsPath, "utf-8"));
+            expect(models.providers.deepseek).toBeDefined();
+            expect(models.providers.deepseek.models.some((m: any) => m.id === "deepseek-chat")).toBe(true);
         });
     });
 });

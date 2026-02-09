@@ -4,6 +4,7 @@ import { Cron } from 'croner';
 import { DatabaseService } from '../database/database.service.js';
 import { AgentsService } from '../agents/agents.service.js';
 import { ConfigService } from '../config/config.service.js';
+import { UsageService } from '../usage/usage.service.js';
 
 export type ScheduleType = 'once' | 'cron';
 
@@ -106,6 +107,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         private readonly db: DatabaseService,
         private readonly agentsService: AgentsService,
         private readonly configService: ConfigService,
+        private readonly usageService: UsageService,
     ) {}
 
     onModuleInit(): void {
@@ -372,6 +374,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                     body: JSON.stringify({
                         sessionId: fixedSessionId,
                         message: task.message,
+                        agentId: session.agentId ?? task.workspace,
                         workspace: task.workspace,
                         taskId: task.id,
                         backendBaseUrl: `http://localhost:${process.env.PORT || 3001}`,
@@ -381,6 +384,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 const body = await res.json().catch(() => ({}));
                 const assistantContent = body.assistantContent ?? '';
                 const ok = res.ok && body.success !== false;
+                if (ok && body.usage && (body.usage.promptTokens > 0 || body.usage.completionTokens > 0)) {
+                    this.usageService.recordUsage({
+                        sessionId: fixedSessionId,
+                        source: 'scheduled_task',
+                        taskId: task.id,
+                        promptTokens: body.usage.promptTokens ?? 0,
+                        completionTokens: body.usage.completionTokens ?? 0,
+                    });
+                }
                 const execution = this.addExecution({
                     taskId: task.id,
                     ranAt: nowMs,

@@ -31,8 +31,6 @@ export interface AgentManagerOptions {
     workspace?: string; // Workspace name (e.g. "default", "my-project")
     skillPaths?: string[]; // Additional skill paths from CLI/Config
     skills?: Skill[]; // Pre-loaded skills (optional)
-    /** 后端 base URL，由 Gateway 等调用方注入，供 install_skill 工具请求 server-api */
-    backendBaseUrl?: string;
 }
 
 /** system prompt 中每个技能描述最大字符数，超出截断以省 token */
@@ -49,7 +47,6 @@ export class AgentManager {
     private workspaceDir: string;
     private skillPaths: string[] = [];
     private preLoadedSkills: Skill[] = [];
-    private backendBaseUrl: string | undefined;
 
     constructor(options: AgentManagerOptions = {}) {
         this.agentDir = options.agentDir || getOpenbotAgentDir();
@@ -61,7 +58,6 @@ export class AgentManager {
 
         this.skillPaths = options.skillPaths || [];
         this.preLoadedSkills = options.skills || [];
-        this.backendBaseUrl = options.backendBaseUrl;
 
         // Ensure workspace directory exists
         if (!existsSync(this.workspaceDir)) {
@@ -83,7 +79,6 @@ export class AgentManager {
         }
         if (options.skillPaths) this.skillPaths = options.skillPaths;
         if (options.skills) this.preLoadedSkills = options.skills;
-        if (options.backendBaseUrl !== undefined) this.backendBaseUrl = options.backendBaseUrl;
     }
 
     /**
@@ -246,6 +241,12 @@ For downloads, provide either a direct URL or a selector to click.`;
                     process.env.OPENAI_API_KEY = key;
                 } else if (provider === "dashscope") {
                     process.env.DASHSCOPE_API_KEY = key;
+                } else if (provider === "nvidia") {
+                    process.env.NVIDIA_API_KEY = key;
+                } else if (provider === "kimi") {
+                    process.env.MOONSHOT_API_KEY = key;
+                } else if (provider === "openai" || provider === "openai-custom") {
+                    process.env.OPENAI_API_KEY = key;
                 }
                 if (!process.env.OPENAI_API_KEY) {
                     process.env.OPENAI_API_KEY = key;
@@ -257,6 +258,9 @@ For downloads, provide either a direct URL or a selector to click.`;
         authStorage.setFallbackResolver((p: string) => {
             if (p === "deepseek") return process.env.OPENAI_API_KEY || process.env.DEEPSEEK_API_KEY;
             if (p === "dashscope") return process.env.DASHSCOPE_API_KEY || process.env.OPENAI_API_KEY;
+            if (p === "nvidia") return process.env.NVIDIA_API_KEY || process.env.OPENAI_API_KEY;
+            if (p === "kimi") return process.env.MOONSHOT_API_KEY || process.env.KIMI_API_KEY || process.env.OPENAI_API_KEY;
+            if (p === "openai" || p === "openai-custom") return process.env.OPENAI_API_KEY;
             return process.env.OPENAI_API_KEY;
         });
 
@@ -284,7 +288,7 @@ For downloads, provide either a direct URL or a selector to click.`;
             customTools: [
                 createBrowserTool(sessionWorkspaceDir),
                 createSaveExperienceTool(sessionId),
-                createInstallSkillTool(options.targetAgentId, this.backendBaseUrl),
+                createInstallSkillTool(options.targetAgentId),
             ],
             baseToolsOverride: coreTools,
         } as any);

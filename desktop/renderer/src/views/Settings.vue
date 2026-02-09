@@ -171,53 +171,24 @@
             </button>
           </div>
 
-          <!-- Provider 配置：新增方式——下拉选 Provider + API Key 保存为一行；已配置列表可编辑 Base URL、删除 -->
-          <div v-show="modelConfigSubTab === 'provider'" class="settings-group">
-            <p class="form-hint">{{ t('settings.providerConfigHint') }}</p>
-            <div class="provider-add-form">
-              <h4 class="subsection-title">{{ t('settings.addProviderKey') }}</h4>
-              <div class="form-row form-row-flex">
-                <div class="form-group flex-1">
-                  <label>{{ t('settings.selectProvider') }}</label>
-                  <select v-model="addProviderForm.provider" class="input select-input">
-                    <option value="">—</option>
-                    <option v-for="p in supportedProviders" :key="p" :value="p">{{ p }}</option>
-                  </select>
-                </div>
-                <div class="form-group flex-1">
-                  <label>{{ t('settings.apiKey') }}</label>
-                  <input
-                    v-model="addProviderForm.apiKey"
-                    type="password"
-                    class="input"
-                    :placeholder="t('settings.apiKeyPlaceholder')"
-                    autocomplete="off"
-                  />
-                </div>
-                <div class="form-group flex-1">
-                  <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
-                  <input
-                    v-model="addProviderForm.baseUrl"
-                    type="text"
-                    class="input"
-                    :placeholder="t('settings.baseUrlPlaceholder')"
-                  />
-                </div>
-                <div class="form-group form-group-actions">
-                  <label>&nbsp;</label>
-                  <button type="button" class="btn-primary" :disabled="!addProviderForm.provider || !addProviderForm.apiKey?.trim()" @click="saveAddProvider">
-                    {{ t('common.save') }}
-                  </button>
-                </div>
-              </div>
+          <!-- Provider 配置：新增供应商按钮 + 弹窗；已配置列表卡片展示 -->
+          <div v-show="modelConfigSubTab === 'provider'" class="settings-group provider-config-group">
+            <div class="settings-hint-block">
+              <span class="settings-hint-icon">ℹ️</span>
+              <p class="settings-hint-text">{{ t('settings.providerConfigHint') }}</p>
             </div>
             <div class="provider-configured-list">
-              <h4 class="subsection-title">{{ t('settings.configuredProvidersList') }}</h4>
-              <p v-if="configuredProviders.length === 0" class="form-hint">{{ t('settings.noConfiguredProviderList') }}</p>
+              <div class="subsection-header">
+                <h4 class="subsection-title">{{ t('settings.configuredProvidersList') }}</h4>
+                <button type="button" class="btn-primary btn-add-provider" @click="openAddProviderModal">
+                  {{ t('settings.addProvider') }}
+                </button>
+              </div>
+              <p v-if="configuredProviders.length === 0" class="form-hint empty-hint">{{ t('settings.noConfiguredProviderList') }}</p>
               <div v-else class="provider-cards">
-                <div v-for="prov in configuredProviders" :key="prov" class="provider-card">
+                <div v-for="prov in configuredProviders" :key="prov" class="provider-card" :class="{ 'is-editing': editingProvider === prov }">
                   <div class="provider-card-header">
-                    <span class="provider-name">{{ prov }}</span>
+                    <span class="provider-name">{{ getProviderDisplayName(prov) }}</span>
                     <span class="provider-badge">{{ t('settings.apiKeyConfigured') }}</span>
                     <template v-if="editingProvider !== prov">
                       <button type="button" class="link-btn" @click="startEditProvider(prov)">{{ t('common.edit') }}</button>
@@ -225,28 +196,39 @@
                     </template>
                   </div>
                   <template v-if="editingProvider === prov">
-                    <div class="form-group">
-                      <label>{{ t('settings.apiKey') }}</label>
-                      <input
-                        v-model="localProviderConfig[prov].apiKey"
-                        type="password"
-                        class="input"
-                        :placeholder="t('settings.apiKeyPlaceholder')"
-                        autocomplete="off"
-                      />
-                    </div>
-                    <div class="form-group">
-                      <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
-                      <input
-                        v-model="localProviderConfig[prov].baseUrl"
-                        type="text"
-                        class="input"
-                        :placeholder="t('settings.baseUrlPlaceholder')"
-                      />
-                    </div>
-                    <div class="provider-card-actions">
-                      <button type="button" class="btn-secondary" @click="cancelEditProvider">{{ t('common.cancel') }}</button>
-                      <button type="button" class="btn-primary" @click="saveEditProvider">{{ t('common.save') }}</button>
+                    <div class="provider-card-body">
+                      <div class="form-group">
+                        <label>{{ t('settings.providerAlias') }}</label>
+                        <input
+                          v-model="localProviderConfig[prov].alias"
+                          type="text"
+                          class="input"
+                          :placeholder="t('settings.providerAliasPlaceholder')"
+                        />
+                      </div>
+                      <div class="form-group">
+                        <label>{{ t('settings.apiKey') }}</label>
+                        <input
+                          v-model="localProviderConfig[prov].apiKey"
+                          type="password"
+                          class="input"
+                          :placeholder="t('settings.apiKeyPlaceholder')"
+                          autocomplete="off"
+                        />
+                      </div>
+                      <div class="form-group">
+                        <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
+                        <input
+                          v-model="localProviderConfig[prov].baseUrl"
+                          type="text"
+                          class="input"
+                          :placeholder="t('settings.baseUrlPlaceholder')"
+                        />
+                      </div>
+                      <div class="provider-card-actions">
+                        <button type="button" class="btn-secondary" @click="cancelEditProvider">{{ t('common.cancel') }}</button>
+                        <button type="button" class="btn-primary" @click="saveEditProvider">{{ t('common.save') }}</button>
+                      </div>
                     </div>
                   </template>
                   <template v-else>
@@ -257,42 +239,173 @@
                   </template>
                 </div>
               </div>
-              <div v-if="configuredProviders.length > 0 && !editingProvider" class="actions">
-                <p class="form-hint action-hint">{{ t('settings.editProviderHint') }}</p>
-              </div>
+              <p v-if="configuredProviders.length > 0 && !editingProvider" class="form-hint action-hint">{{ t('settings.editProviderHint') }}</p>
             </div>
           </div>
 
-          <!-- 模型配置：仅已配置 Key 的 Provider 可备选，选 Provider 后再选模型，可设默认 -->
-          <div v-show="modelConfigSubTab === 'default'" class="settings-group">
-            <p class="form-hint">{{ t('settings.defaultModelHint') }}</p>
-            <p v-if="configuredProviders.length === 0" class="form-hint form-hint-warn">
+          <!-- 新增供应商弹窗 -->
+          <transition name="fade">
+            <div v-if="showAddProviderModal" class="modal-backdrop" @click.self="showAddProviderModal = false">
+              <div class="modal-content card-glass modal-add-provider">
+                <div class="modal-header">
+                  <h2>{{ t('settings.addProviderTitle') }}</h2>
+                  <button type="button" class="close-btn" @click="showAddProviderModal = false">✕</button>
+                </div>
+                <div class="modal-body">
+                  <div class="form-group">
+                    <label>{{ t('settings.selectProvider') }}</label>
+                    <select v-model="addProviderForm.provider" class="input select-input" @change="onAddProviderSelect">
+                      <option value="">—</option>
+                      <option v-for="p in supportedProviders" :key="p" :value="p">{{ providerSupport[p]?.name || p }}</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>{{ t('settings.providerAlias') }}</label>
+                    <input
+                      v-model="addProviderForm.alias"
+                      type="text"
+                      class="input"
+                      :placeholder="t('settings.providerAliasPlaceholder')"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>{{ t('settings.apiKey') }}</label>
+                    <input
+                      v-model="addProviderForm.apiKey"
+                      type="password"
+                      class="input"
+                      :placeholder="t('settings.apiKeyPlaceholder')"
+                      autocomplete="off"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label>{{ t('settings.baseUrl') }} ({{ t('settings.optional') }})</label>
+                    <input
+                      v-model="addProviderForm.baseUrl"
+                      type="text"
+                      class="input"
+                      :placeholder="t('settings.baseUrlPlaceholder')"
+                    />
+                  </div>
+                  <div class="modal-footer-actions">
+                    <button type="button" class="btn-secondary" @click="showAddProviderModal = false">{{ t('common.close') }}</button>
+                    <button type="button" class="btn-primary" :disabled="!addProviderForm.provider || !addProviderForm.apiKey?.trim()" @click="submitAddProvider">
+                      {{ t('common.save') }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 模型配置：已配置的模型列表，从有效 Provider 添加（选类型），从列表中选缺省 -->
+          <div v-show="modelConfigSubTab === 'default'" class="settings-group model-config-group">
+            <div class="settings-hint-block">
+              <span class="settings-hint-icon">ℹ️</span>
+              <p class="settings-hint-text">{{ t('settings.defaultModelHint') }}</p>
+            </div>
+            <p v-if="configuredProviders.length === 0" class="form-hint form-hint-warn model-config-warn">
               {{ t('settings.noConfiguredProvider') }}
             </p>
             <template v-else>
-              <div class="form-group">
-                <label>{{ t('settings.defaultProvider') }}</label>
-                <select v-model="localDefaultProvider" class="input select-input" @change="onDefaultProviderChange">
-                  <option v-for="p in configuredProviders" :key="p" :value="p">{{ p }}</option>
-                </select>
+              <div class="subsection-header">
+                <h4 class="subsection-title">{{ t('settings.configuredModelsList') }}</h4>
+                <button type="button" class="btn-primary btn-add-provider" @click="openAddModelModal">{{ t('settings.addModel') }}</button>
               </div>
-              <div class="form-group">
-                <label>{{ t('settings.defaultModel') }}</label>
-                <select v-model="localDefaultModel" class="input select-input">
-                  <option v-for="m in (models[localDefaultProvider] || [])" :key="m" :value="m">{{ m }}</option>
-                </select>
-              </div>
-              <p class="form-hint current-default">
-                {{ t('settings.currentDefault') }}: <strong>{{ config.defaultProvider || '—' }} / {{ config.defaultModel || '—' }}</strong>
-              </p>
-              <div class="actions">
-                <button type="button" class="btn-primary" @click="setDefaultModel">
-                  {{ t('settings.setAsDefaultModel') }}
-                </button>
+              <p v-if="configuredModelsList.length === 0" class="form-hint empty-hint">{{ t('settings.noConfiguredModels') }}</p>
+              <div v-else class="configured-models-list">
+                <div v-for="(item, idx) in configuredModelsList" :key="idx" class="configured-model-row">
+                  <span class="model-row-provider">{{ getProviderDisplayName(item.provider) }}</span>
+                  <span class="model-row-sep">/</span>
+                  <span class="model-row-name">{{ getModelAlias(item) }}</span>
+                  <span class="model-row-type">{{ item.type }}</span>
+                  <span v-if="defaultModelIndex === idx" class="model-row-default-badge">{{ t('settings.defaultModelLabel') }}</span>
+                  <span class="model-row-actions">
+                    <button type="button" class="link-btn" @click="openEditModel(idx)">{{ t('common.edit') }}</button>
+                    <button v-if="defaultModelIndex !== idx" type="button" class="link-btn" @click="setDefaultFromConfigured(item)">{{ t('settings.setAsDefaultModel') }}</button>
+                    <button type="button" class="link-btn danger" @click="confirmRemoveConfiguredModel(idx)">{{ t('common.delete') }}</button>
+                  </span>
+                </div>
               </div>
             </template>
           </div>
         </div>
+
+        <!-- 新增/编辑模型配置弹窗 -->
+        <transition name="fade">
+          <div v-if="showAddModelModal" class="modal-backdrop" @click.self="closeAddModelModal">
+            <div class="modal-content card-glass">
+              <div class="modal-header">
+                <h2>{{ editingModelIndex >= 0 ? t('settings.editModelTitle') : t('settings.addModelTitle') }}</h2>
+                <button type="button" class="close-btn" @click="closeAddModelModal">✕</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-group">
+                  <label>{{ t('settings.selectProvider') }}</label>
+                  <select v-model="addModelForm.provider" class="input select-input" :disabled="editingModelIndex >= 0" @change="onAddModelProviderOrTypeChange">
+                    <option value="">—</option>
+                    <option v-for="p in configuredProviders" :key="p" :value="p">{{ p }}</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('settings.modelType') }}</label>
+                  <select v-model="addModelForm.type" class="input select-input" :disabled="editingModelIndex >= 0" @change="onAddModelProviderOrTypeChange">
+                    <option value="llm">{{ t('settings.modelTypeLlm') }}</option>
+                    <option value="embedding">{{ t('settings.modelTypeEmbedding') }}</option>
+                    <option value="image">{{ t('settings.modelTypeImage') }}</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('settings.model') }}</label>
+                  <input
+                    v-if="isOpenAiCustomProvider"
+                    v-model="addModelForm.modelId"
+                    type="text"
+                    class="input"
+                    :placeholder="t('settings.modelIdCustomPlaceholder')"
+                  />
+                  <select
+                    v-else
+                    v-model="addModelForm.modelId"
+                    class="input select-input"
+                    :disabled="!addModelForm.provider || editingModelIndex >= 0"
+                  >
+                    <option value="">—</option>
+                    <option v-for="m in addModelOptions" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('settings.modelAlias') }}</label>
+                  <input
+                    v-model="addModelForm.alias"
+                    type="text"
+                    class="input"
+                    :placeholder="t('settings.modelAliasPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="checkbox-label">
+                    <input v-model="addModelForm.reasoning" type="checkbox" />
+                    {{ t('settings.modelReasoning') }}
+                  </label>
+                </div>
+                <div v-if="addModelForm.cost" class="form-group cost-fields">
+                  <label>{{ t('settings.modelCost') }}</label>
+                  <div class="cost-row">
+                    <span class="cost-item"><input v-model.number="addModelForm.cost.input" type="number" min="0" step="0.0001" class="input cost-input" /> input</span>
+                    <span class="cost-item"><input v-model.number="addModelForm.cost.output" type="number" min="0" step="0.0001" class="input cost-input" /> output</span>
+                    <span class="cost-item"><input v-model.number="addModelForm.cost.cacheRead" type="number" min="0" step="0.0001" class="input cost-input" /> cacheRead</span>
+                    <span class="cost-item"><input v-model.number="addModelForm.cost.cacheWrite" type="number" min="0" step="0.0001" class="input cost-input" /> cacheWrite</span>
+                  </div>
+                </div>
+                <div class="modal-footer-actions">
+                  <button type="button" class="btn-secondary" @click="closeAddModelModal">{{ t('common.close') }}</button>
+                  <button type="button" class="btn-primary" :disabled="!addModelForm.provider || !addModelForm.modelId" @click="submitAddModel">{{ t('common.save') }}</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
 
         <!-- 用户 Tab -->
         <div v-show="activeTab === 'users'" class="tab-content">
@@ -542,8 +655,23 @@ export default {
     const localProviderConfig = ref({});
     const localDefaultProvider = ref('');
     const localDefaultModel = ref('');
-    const addProviderForm = ref({ provider: '', apiKey: '', baseUrl: '' });
+    const addProviderForm = ref({ provider: '', alias: '', apiKey: '', baseUrl: '' });
     const editingProvider = ref(null);
+    const showAddProviderModal = ref(false);
+    const showAddModelModal = ref(false);
+    /** 编辑时为已配置模型列表下标，新增时为 -1 */
+    const editingModelIndex = ref(-1);
+    const defaultCost = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    const addModelForm = ref({
+      provider: '',
+      type: 'llm',
+      modelId: '',
+      alias: '',
+      reasoning: false,
+      cost: defaultCost(),
+      contextWindow: 64000,
+      maxTokens: 8192,
+    });
 
     const usersList = ref([]);
     const usersLoading = ref(false);
@@ -560,10 +688,17 @@ export default {
     const showChangeCurrentPasswordModal = ref(false);
     const currentUserPasswordForm = ref({ password: '', confirm: '' });
     
-    const config = computed(() => settingsStore.config);
+    const config = computed(() => settingsStore.config || {});
     const providers = computed(() => settingsStore.providers || []);
+    const providerSupport = computed(() => settingsStore.providerSupport || {});
     const models = computed(() => settingsStore.models || {});
     const supportedProviders = computed(() => Array.isArray(providers.value) ? providers.value : []);
+    /** 当前已选 provider 的可用模型列表（来自 provider-support），用于默认模型下拉；项为 { id, name } */
+    const defaultModelOptions = computed(() => {
+      const list = models.value[localDefaultProvider.value];
+      if (!Array.isArray(list)) return [];
+      return list.map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.id, name: m.name || m.id }));
+    });
     const configuredProviders = computed(() => {
       const cfg = localProviderConfig.value;
       if (!cfg || typeof cfg !== 'object') return [];
@@ -571,6 +706,32 @@ export default {
         const entry = cfg[p];
         return entry && typeof entry.apiKey === 'string' && entry.apiKey.trim() !== '';
       });
+    });
+    /** 已配置的模型列表（备用），从 config.configuredModels 来 */
+    const configuredModelsList = computed(() => {
+      const list = config.value?.configuredModels;
+      return Array.isArray(list) ? list : [];
+    });
+    /** 当前缺省模型在列表中的下标（仅第一个匹配项视为缺省，避免重复显示） */
+    const defaultModelIndex = computed(() => {
+      const list = configuredModelsList.value;
+      const p = config.value?.defaultProvider;
+      const m = config.value?.defaultModel;
+      if (!p || !m) return -1;
+      const idx = list.findIndex((item) => item.provider === p && item.modelId === m);
+      return idx;
+    });
+    /** 是否为 OpenAI 自定义 Provider（模型 ID 允许手工录入） */
+    const isOpenAiCustomProvider = computed(() => addModelForm.value.provider === 'openai-custom');
+    /** 新增模型弹窗中当前 provider+type 对应的模型下拉选项（非 openai-custom 时使用） */
+    const addModelOptions = computed(() => {
+      const provider = addModelForm.value.provider;
+      const type = addModelForm.value.type;
+      if (!provider || !type || provider === 'openai-custom') return [];
+      const key = `${provider}:${type}`;
+      const list = settingsStore.models[key] || models.value[key];
+      if (!Array.isArray(list)) return [];
+      return list.map((m) => (typeof m === 'string' ? { id: m, name: m } : { id: m.id, name: m.name || m.id }));
     });
     const platform = window.electronAPI?.platform || 'web';
     // Mock electron version if not available
@@ -623,6 +784,7 @@ export default {
             next[p] = {
               apiKey: entry && typeof entry.apiKey === 'string' ? entry.apiKey : '',
               baseUrl: entry && typeof entry.baseUrl === 'string' ? entry.baseUrl : '',
+              alias: entry && typeof entry.alias === 'string' ? entry.alias : '',
             };
           }
         }
@@ -632,6 +794,8 @@ export default {
         const configured = Object.keys(next).filter((k) => (next[k].apiKey || '').trim() !== '');
         localDefaultProvider.value = configured.includes(defProv) ? defProv : (configured[0] || 'deepseek');
         localDefaultModel.value = defModel;
+        const cm = Array.isArray(cfg.configuredModels) ? cfg.configuredModels : [];
+        const defItem = cm.find((m) => m.provider === defProv && m.modelId === defModel);
         ensureModelsLoaded(localDefaultProvider.value).catch((err) => console.warn('[Settings] ensureModelsLoaded', err));
       } catch (err) {
         console.error('[Settings] initModelConfigTab error', err);
@@ -655,27 +819,217 @@ export default {
       ensureModelsLoaded(provider).catch(() => {});
     }
 
+    function getModelDisplayName(provider, modelId) {
+      const entry = providerSupport.value[provider];
+      if (!entry?.models) return modelId || '—';
+      const m = entry.models.find((x) => x.id === modelId);
+      return m ? (m.name || m.id) : modelId;
+    }
+
+    function getModelAlias(item) {
+      const name = item.alias?.trim();
+      if (name) return name;
+      return getModelDisplayName(item.provider, item.modelId);
+    }
+
+    function getProviderDisplayName(providerId) {
+      const fromConfig = config.value?.providers?.[providerId]?.alias?.trim();
+      if (fromConfig) return fromConfig;
+      const fromLocal = localProviderConfig.value[providerId]?.alias?.trim();
+      if (fromLocal) return fromLocal;
+      const support = providerSupport.value[providerId];
+      return support?.name || providerId;
+    }
+
+    function ensureUniqueModelAlias(baseAlias, existingList) {
+      const existing = existingList.map((it) => getModelAlias(it));
+      if (!existing.includes(baseAlias)) return baseAlias;
+      let n = 2;
+      while (existing.includes(`${baseAlias} (${n})`)) n++;
+      return `${baseAlias} (${n})`;
+    }
+
+    function ensureUniqueProviderAlias(baseAlias, excludeProviderId) {
+      const provs = configuredProviders.value.filter((p) => p !== excludeProviderId);
+      const existing = provs.map((p) => getProviderDisplayName(p));
+      if (!existing.includes(baseAlias)) return baseAlias;
+      let n = 2;
+      while (existing.includes(`${baseAlias} (${n})`)) n++;
+      return `${baseAlias} (${n})`;
+    }
+
+    function openAddModelModal() {
+      editingModelIndex.value = -1;
+      addModelForm.value = {
+        provider: configuredProviders.value[0] || '',
+        type: 'llm',
+        modelId: '',
+        alias: '',
+        reasoning: false,
+        cost: defaultCost(),
+        contextWindow: 64000,
+        maxTokens: 8192,
+      };
+      if (addModelForm.value.provider) {
+        settingsStore.loadModels(addModelForm.value.provider, addModelForm.value.type).catch(() => {});
+      }
+      showAddModelModal.value = true;
+    }
+
+    function openEditModel(idx) {
+      const list = configuredModelsList.value;
+      const item = list[idx];
+      if (!item) return;
+      editingModelIndex.value = idx;
+      const c = item.cost && typeof item.cost === 'object' ? item.cost : defaultCost();
+      addModelForm.value = {
+        provider: item.provider,
+        type: item.type || 'llm',
+        modelId: item.modelId,
+        alias: (item.alias || '').trim() || '',
+        reasoning: !!item.reasoning,
+        cost: {
+          input: Number(c.input) || 0,
+          output: Number(c.output) || 0,
+          cacheRead: Number(c.cacheRead) || 0,
+          cacheWrite: Number(c.cacheWrite) || 0,
+        },
+        contextWindow: Math.max(0, Math.floor(Number(item.contextWindow))) || 64000,
+        maxTokens: Math.max(0, Math.floor(Number(item.maxTokens))) || 8192,
+      };
+      settingsStore.loadModels(item.provider, item.type || 'llm').catch(() => {});
+      showAddModelModal.value = true;
+    }
+
+    function closeAddModelModal() {
+      showAddModelModal.value = false;
+      editingModelIndex.value = -1;
+      addModelForm.value = { provider: '', type: 'llm', modelId: '', alias: '', reasoning: false, cost: defaultCost(), contextWindow: 64000, maxTokens: 8192 };
+    }
+
+    function onAddModelProviderOrTypeChange() {
+      const { provider, type } = addModelForm.value;
+      addModelForm.value.modelId = '';
+      if (provider && type) settingsStore.loadModels(provider, type).catch(() => {});
+    }
+
+    async function submitAddModel() {
+      const { provider, type, modelId } = addModelForm.value;
+      if (!provider || !modelId) return;
+      const baseAlias = (addModelForm.value.alias || '').trim() || getModelDisplayName(provider, modelId);
+      const list = configuredModelsList.value;
+      const isEdit = editingModelIndex.value >= 0;
+      const excludeList = isEdit ? list.filter((_, i) => i !== editingModelIndex.value) : list;
+      const alias = ensureUniqueModelAlias(baseAlias, excludeList);
+      const c = addModelForm.value.cost || {};
+      const newItem = {
+        provider,
+        modelId,
+        type,
+        alias,
+        reasoning: !!addModelForm.value.reasoning,
+        cost: {
+          input: Number(c.input) || 0,
+          output: Number(c.output) || 0,
+          cacheRead: Number(c.cacheRead) || 0,
+          cacheWrite: Number(c.cacheWrite) || 0,
+        },
+        contextWindow: Math.max(0, Math.floor(Number(addModelForm.value.contextWindow)) || 64000),
+        maxTokens: Math.max(0, Math.floor(Number(addModelForm.value.maxTokens)) || 8192),
+      };
+      let nextList;
+      if (isEdit) {
+        nextList = list.map((it, i) => (i === editingModelIndex.value ? newItem : it));
+        const wasDefault = list[editingModelIndex.value]?.provider === config.value?.defaultProvider && list[editingModelIndex.value]?.modelId === config.value?.defaultModel;
+        if (wasDefault) {
+          await settingsStore.updateConfig({ configuredModels: nextList, defaultProvider: provider, defaultModel: modelId });
+        } else {
+          await settingsStore.updateConfig({ configuredModels: nextList });
+        }
+      } else {
+        nextList = [...list, newItem];
+        await settingsStore.updateConfig({ configuredModels: nextList });
+        if (list.length === 0) {
+          await settingsStore.updateConfig({ defaultProvider: provider, defaultModel: modelId });
+        }
+      }
+      closeAddModelModal();
+    }
+
+    function confirmRemoveConfiguredModel(idx) {
+      if (!window.confirm(t('settings.confirmRemoveModel'))) return;
+      removeConfiguredModel(idx);
+    }
+
+    function removeConfiguredModel(idx) {
+      const list = configuredModelsList.value.filter((_, i) => i !== idx);
+      if (!list.length) {
+        settingsStore.updateConfig({ configuredModels: [], defaultProvider: 'deepseek', defaultModel: 'deepseek-chat' });
+        return;
+      }
+      const removed = configuredModelsList.value[idx];
+      const wasDefault = removed.provider === config.value.defaultProvider && removed.modelId === config.value.defaultModel;
+      settingsStore.updateConfig({ configuredModels: list });
+      if (wasDefault && list.length) {
+        const first = list[0];
+        settingsStore.updateConfig({ defaultProvider: first.provider, defaultModel: first.modelId });
+      }
+    }
+
+    function isDefaultModel(item) {
+      const p = config.value?.defaultProvider;
+      const m = config.value?.defaultModel;
+      return p === item.provider && m === item.modelId;
+    }
+
+    function setDefaultFromConfigured(item) {
+      settingsStore.updateConfig({ defaultProvider: item.provider, defaultModel: item.modelId });
+    }
+
     async function saveProviderConfig() {
-      const payload = { providers: { ...localProviderConfig.value } };
-      await settingsStore.updateConfig(payload);
+      const raw = localProviderConfig.value;
+      const providers = {};
+      for (const [p, entry] of Object.entries(raw)) {
+        if (!p) continue;
+        providers[p] = {
+          apiKey: entry.apiKey,
+          baseUrl: entry.baseUrl,
+          alias: entry.alias ?? '',
+        };
+      }
+      await settingsStore.updateConfig({ providers });
       alert(t('common.saved'));
     }
 
-    function saveAddProvider() {
-      const { provider, apiKey, baseUrl } = addProviderForm.value;
+    function openAddProviderModal() {
+      addProviderForm.value = { provider: '', alias: '', apiKey: '', baseUrl: '' };
+      showAddProviderModal.value = true;
+    }
+
+    function onAddProviderSelect() {
+      const p = addProviderForm.value.provider;
+      addProviderForm.value.alias = p ? (providerSupport.value[p]?.name || p) : '';
+    }
+
+    function submitAddProvider() {
+      const { provider, alias, apiKey, baseUrl } = addProviderForm.value;
       if (!provider || !(apiKey && apiKey.trim())) return;
+      const base = (alias || '').trim() || (providerSupport.value[provider]?.name || provider);
+      const uniqueAlias = ensureUniqueProviderAlias(base, provider);
       localProviderConfig.value = {
         ...localProviderConfig.value,
         [provider]: {
           apiKey: apiKey.trim(),
           baseUrl: (baseUrl || '').trim(),
+          alias: uniqueAlias,
         },
       };
       saveProviderConfig().then(() => {
-        addProviderForm.value.apiKey = '';
-        addProviderForm.value.baseUrl = '';
+        showAddProviderModal.value = false;
+        addProviderForm.value = { provider: '', alias: '', apiKey: '', baseUrl: '' };
       }).catch(() => {});
     }
+
 
     function removeProvider(prov) {
       if (!prov) return;
@@ -700,6 +1054,7 @@ export default {
           [prov]: {
             apiKey: fromConfig.apiKey ?? '',
             baseUrl: fromConfig.baseUrl ?? '',
+            alias: fromConfig.alias ?? '',
           },
         };
       }
@@ -707,6 +1062,15 @@ export default {
     }
 
     async function saveEditProvider() {
+      const prov = editingProvider.value;
+      if (prov) {
+        const rawAlias = localProviderConfig.value[prov]?.alias?.trim() || getProviderDisplayName(prov);
+        const uniqueAlias = ensureUniqueProviderAlias(rawAlias, prov);
+        localProviderConfig.value = {
+          ...localProviderConfig.value,
+          [prov]: { ...localProviderConfig.value[prov], alias: uniqueAlias },
+        };
+      }
       await saveProviderConfig();
       editingProvider.value = null;
     }
@@ -876,7 +1240,7 @@ export default {
     onMounted(async () => {
       try {
         activeTab.value = tabFromQuery();
-        await settingsStore.loadProviders();
+        await settingsStore.loadProviderSupport();
         loadAgentConfig();
         initModelConfigTab();
       } catch (err) {
@@ -890,7 +1254,31 @@ export default {
       config,
       localConfig,
       providers,
+      providerSupport,
       models,
+      defaultModelOptions,
+      configuredModelsList,
+      defaultModelIndex,
+      isOpenAiCustomProvider,
+      addModelOptions,
+      getModelDisplayName,
+      getModelAlias,
+      getProviderDisplayName,
+      isDefaultModel,
+      openAddModelModal,
+      openEditModel,
+      closeAddModelModal,
+      editingModelIndex,
+      onAddModelProviderOrTypeChange,
+      submitAddModel,
+      confirmRemoveConfiguredModel,
+      setDefaultFromConfigured,
+      openAddProviderModal,
+      onAddProviderSelect,
+      submitAddProvider,
+      showAddProviderModal,
+      showAddModelModal,
+      addModelForm,
       modelConfigSubTab,
       localProviderConfig,
       localDefaultProvider,
@@ -898,7 +1286,6 @@ export default {
       addProviderForm,
       supportedProviders,
       configuredProviders,
-      saveAddProvider,
       removeProvider,
       editingProvider,
       startEditProvider,
@@ -1068,17 +1455,58 @@ export default {
   line-height: 1.5;
   margin-bottom: var(--spacing-md);
 }
-.provider-add-form {
+
+/* 提示信息块：统一风格 */
+.settings-hint-block {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
   margin-bottom: var(--spacing-xl);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-lg);
+  border-left: 4px solid var(--color-accent-primary);
 }
-.provider-add-form .subsection-title,
-.provider-configured-list .subsection-title {
+.settings-hint-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+.settings-hint-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.subsection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+.subsection-title {
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-sm);
+  margin: 0;
   letter-spacing: -0.01em;
 }
+.empty-hint {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+}
+.model-config-warn {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: rgba(230, 180, 50, 0.08);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--color-warning, #b8860b);
+}
+
 .model-config-tabs ~ .settings-group .form-group label {
   font-size: var(--font-size-sm);
   font-weight: 500;
@@ -1098,8 +1526,23 @@ export default {
 .form-group-actions {
   margin-bottom: 0;
 }
-.provider-configured-list {
-  margin-top: var(--spacing-xl);
+
+/* Provider 配置区域 */
+.provider-config-group .provider-configured-list {
+  margin-top: 0;
+}
+.provider-config-group .subsection-header {
+  margin-bottom: var(--spacing-lg);
+}
+.btn-add-provider {
+  flex-shrink: 0;
+}
+.provider-configured-list .subsection-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 .provider-cards {
   display: flex;
@@ -1111,6 +1554,14 @@ export default {
   background: var(--color-bg-secondary);
   border-radius: 12px;
   border: 1px solid var(--glass-border);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.provider-card:hover {
+  border-color: var(--color-bg-elevated);
+}
+.provider-card.is-editing {
+  border-color: var(--color-accent-primary);
+  box-shadow: 0 0 0 1px var(--color-accent-primary);
 }
 .provider-card-header {
   display: flex;
@@ -1118,6 +1569,16 @@ export default {
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
   flex-wrap: wrap;
+}
+.provider-card-body {
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--glass-border);
+}
+.provider-card-body .form-group {
+  margin-bottom: var(--spacing-md);
+}
+.provider-card-body .form-group:last-of-type {
+  margin-bottom: 0;
 }
 .provider-name {
   font-size: var(--font-size-base);
@@ -1155,9 +1616,101 @@ export default {
   gap: var(--spacing-md);
   margin-top: var(--spacing-md);
 }
+
+.modal-add-provider .modal-body .form-group {
+  margin-bottom: var(--spacing-lg);
+}
+.modal-add-provider .modal-body .form-group:last-of-type {
+  margin-bottom: 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  max-width: none;
+}
+.cost-fields .cost-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+}
+.cost-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.cost-input {
+  width: 72px;
+  max-width: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.model-config-group .subsection-header {
+  margin-bottom: var(--spacing-md);
+}
+.model-config-actions {
+  margin-top: var(--spacing-lg);
+}
+
 .current-default {
   margin-top: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
+}
+
+.configured-models-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+.configured-model-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+}
+.model-row-provider {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.model-row-sep {
+  color: var(--color-text-tertiary);
+}
+.model-row-name {
+  color: var(--color-text-primary);
+}
+.model-row-type {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.model-row-default-badge {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-accent-primary);
+  background: var(--color-bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-accent-primary);
+}
+.model-row-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--spacing-sm);
 }
 .form-hint-warn {
   font-size: var(--font-size-sm);

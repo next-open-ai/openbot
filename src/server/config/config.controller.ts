@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Param } from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, Query } from '@nestjs/common';
 import { ConfigService, AppConfig } from './config.service.js';
 
 @Controller('config')
@@ -34,9 +34,18 @@ export class ConfigController {
         };
     }
 
+    @Get('provider-support')
+    async getProviderSupport() {
+        const support = await this.configService.getProviderSupport();
+        return {
+            success: true,
+            data: support,
+        };
+    }
+
     @Get('providers/:provider/models')
-    async getModels(@Param('provider') provider: string) {
-        const models = await this.configService.getModels(provider);
+    async getModels(@Param('provider') provider: string, @Query('type') type?: string) {
+        const models = await this.configService.getModels(provider, type);
         return {
             success: true,
             data: models,

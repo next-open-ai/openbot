@@ -1,5 +1,8 @@
 import type { WebSocket } from "ws";
 
+/** 会话类型：chat 普通对话，scheduled 定时任务，system 系统/临时 */
+export type SessionType = "chat" | "scheduled" | "system";
+
 /**
  * Gateway client connection
  */
@@ -8,6 +11,10 @@ export interface GatewayClient {
     ws: WebSocket;
     authenticated: boolean;
     sessionId?: string;
+    /** 建连时客户端传入的 session 绑定 agentId，用于取配置，不再请求 Nest */
+    agentId?: string;
+    /** 建连时客户端传入的 session 类型 */
+    sessionType?: SessionType;
     connectedAt: number;
 }
 
@@ -64,6 +71,10 @@ export interface GatewayEvent extends GatewayMessage {
  */
 export interface ConnectParams {
     sessionId?: string;
+    /** 当前 session 绑定的 agentId，Gateway 用其本地取配置，不请求 Nest */
+    agentId?: string;
+    /** 当前 session 类型：chat | scheduled | system */
+    sessionType?: SessionType;
     nonce?: string;
 }
 
@@ -73,6 +84,10 @@ export interface ConnectParams {
 export interface AgentChatParams {
     message: string;
     sessionId?: string;
+    /** 当前 session 绑定的 agentId，不传则用 connect 时存的 client.agentId，再缺省 default */
+    agentId?: string;
+    /** 当前 session 类型，不传则用 connect 时存的 client.sessionType，再缺省 chat */
+    sessionType?: SessionType;
     /** 对话/安装目标：具体 agentId，或 "global"|"all" 表示全局；用于 install_skill 等隔离 */
     targetAgentId?: string;
 }

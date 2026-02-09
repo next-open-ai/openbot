@@ -56,12 +56,13 @@ export const skillsAPI = {
         }),
 };
 
-// Config API
+// Config API（先配 supported providers，再配模型；数据来自 provider-support + config）
 export const configAPI = {
     getConfig: () => apiClient.get('/config'),
     updateConfig: (updates) => apiClient.put('/config', updates),
     getProviders: () => apiClient.get('/config/providers'),
-    getModels: (provider) => apiClient.get(`/config/providers/${provider}/models`),
+    getProviderSupport: () => apiClient.get('/config/provider-support'),
+    getModels: (provider, type) => apiClient.get(`/config/providers/${encodeURIComponent(provider)}/models`, { params: type ? { type } : {} }),
 };
 
 // Auth API（登录）
@@ -92,6 +93,7 @@ export const tasksAPI = {
 // Usage API (token 统计)
 export const usageAPI = {
     getTotal: () => apiClient.get('/usage/total'),
+    record: (dto) => apiClient.post('/usage', dto),
 };
 
 // Workspace API

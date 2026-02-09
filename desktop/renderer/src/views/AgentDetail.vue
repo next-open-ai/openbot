@@ -59,7 +59,7 @@
               />
               <p class="form-hint">{{ t('agents.workspaceReadonly') }}</p>
             </div>
-            <!-- 模型配置：从已配置的 providers 中选 -->
+            <!-- 模型配置：从已配置的模型列表中选择，选项为 供应商 / 模型名，选中后显示供应商及模型 ID -->
             <div class="config-section model-section">
               <h3 class="config-section-title">{{ t('agents.modelConfig') }}</h3>
               <p class="form-hint">{{ t('agents.modelConfigHint') }}</p>
@@ -68,23 +68,29 @@
                 <p>{{ t('common.loading') }}</p>
               </div>
               <template v-else>
-                <p v-if="configuredProviders.length === 0" class="form-hint form-hint-warn">
-                  {{ t('settings.noConfiguredProvider') }}
+                <p v-if="configuredModelsList.length === 0" class="form-hint form-hint-warn">
+                  {{ t('agents.noConfiguredModels') }}
                 </p>
                 <template v-else>
                   <div class="form-group">
-                    <label>{{ t('settings.provider') }}</label>
-                    <select v-model="modelForm.provider" class="form-input" @change="onModelProviderChange">
+                    <label>{{ t('agents.selectConfiguredModel') }}</label>
+                    <select v-model="selectedConfiguredModelKey" class="form-input" @change="onConfiguredModelSelect">
                       <option value="">—</option>
-                      <option v-for="p in configuredProviders" :key="p" :value="p">{{ p }}</option>
+                      <option
+                        v-for="item in configuredModelsList"
+                        :key="item.provider + '|' + item.modelId"
+                        :value="item.provider + '|' + item.modelId"
+                      >
+                        {{ getConfiguredModelOptionLabel(item) }}
+                      </option>
                     </select>
                   </div>
-                  <div class="form-group">
-                    <label>{{ t('settings.model') }}</label>
-                    <select v-model="modelForm.model" class="form-input">
-                      <option value="">—</option>
-                      <option v-for="m in modelOptions" :key="m" :value="m">{{ m }}</option>
-                    </select>
+                  <div v-if="selectedModelItem" class="form-group model-current-display">
+                    <span class="label">{{ t('agents.currentProvider') }}：</span>
+                    <span class="value">{{ getProviderDisplayName(selectedModelItem.provider) }}</span>
+                    <span class="sep">，</span>
+                    <span class="label">{{ t('agents.currentModelId') }}：</span>
+                    <span class="value"><code>{{ selectedModelItem.modelId }}</code></span>
                   </div>
                 </template>
               </template>
@@ -269,8 +275,9 @@ export default {
     const configSaving = ref(false);
 
     const modelForm = ref({ provider: '', model: '' });
-    const configuredProviders = ref([]);
-    const modelOptions = ref([]);
+    const configRef = ref({});
+    const configuredModelsList = ref([]);
+    const selectedConfiguredModelKey = ref('');
     const modelConfigLoading = ref(false);
 
     const agentSkills = ref([]);
@@ -287,6 +294,20 @@ export default {
 
     const canDeleteWorkspaceSkill = computed(() => agent.value && !agent.value.isDefault && agent.value.workspace !== 'default');
     const renderedSkillContent = computed(() => (skillDetailContent.value ? marked(skillDetailContent.value) : ''));
+
+    function getProviderDisplayName(providerId) {
+      const alias = configRef.value?.providers?.[providerId]?.alias?.trim();
+      return alias || providerId || '—';
+    }
+    function getConfiguredModelOptionLabel(item) {
+      return getProviderDisplayName(item.provider) + ' / ' + (item.alias?.trim() || item.modelId || '—');
+    }
+    const selectedModelItem = computed(() => {
+      const key = selectedConfiguredModelKey.value;
+      if (!key) return null;
+      const [provider, modelId] = key.split('|');
+      return configuredModelsList.value.find((it) => it.provider === provider && it.modelId === modelId) || null;
+    });
 
     async function loadAgent() {
       if (!agentId.value) return;
@@ -344,46 +365,47 @@ export default {
       try {
         const configRes = await configAPI.getConfig();
         const cfg = configRes.data?.data ?? {};
-        const prov = cfg.providers && typeof cfg.providers === 'object' ? cfg.providers : {};
-        configuredProviders.value = Object.keys(prov).filter(
-          (p) => prov[p] && typeof prov[p].apiKey === 'string' && prov[p].apiKey.trim() !== '',
-        );
-        const provider = modelForm.value.provider || agent.value?.provider;
-        if (provider && configuredProviders.value.includes(provider)) {
-          const modelsRes = await configAPI.getModels(provider);
-          modelOptions.value = modelsRes.data?.data ?? [];
-          if (!modelForm.value.model && agent.value?.model && modelOptions.value.includes(agent.value.model)) {
-            modelForm.value.model = agent.value.model;
-          } else if (!modelOptions.value.includes(modelForm.value.model)) {
-            modelForm.value.model = modelOptions.value[0] || '';
-          }
-        } else {
-          modelOptions.value = [];
+        configRef.value = cfg;
+        const list = Array.isArray(cfg.configuredModels) ? cfg.configuredModels : [];
+        configuredModelsList.value = list;
+        const defaultProvider = cfg.defaultProvider || '';
+        const defaultModel = cfg.defaultModel || '';
+        const agentProvider = modelForm.value.provider || agent.value?.provider || '';
+        const agentModel = modelForm.value.model || agent.value?.model || '';
+        const keyFor = (p, m) => (p && m ? `${p}|${m}` : '');
+        let key = keyFor(agentProvider, agentModel);
+        const inList = (k) => list.some((it) => keyFor(it.provider, it.modelId) === k);
+        if (!key || !inList(key)) {
+          key = keyFor(defaultProvider, defaultModel);
+        }
+        if ((!key || !inList(key)) && list.length) {
+          const first = list[0];
+          key = keyFor(first.provider, first.modelId);
+        }
+        selectedConfiguredModelKey.value = key || '';
+        if (key) {
+          const [p, m] = key.split('|');
+          modelForm.value.provider = p || '';
+          modelForm.value.model = m || '';
         }
       } catch (e) {
-        configuredProviders.value = [];
-        modelOptions.value = [];
+        configuredModelsList.value = [];
+        selectedConfiguredModelKey.value = '';
       } finally {
         modelConfigLoading.value = false;
       }
     }
 
-    async function onModelProviderChange() {
-      const provider = modelForm.value.provider;
-      if (!provider) {
-        modelOptions.value = [];
+    function onConfiguredModelSelect() {
+      const key = selectedConfiguredModelKey.value;
+      if (!key) {
+        modelForm.value.provider = '';
         modelForm.value.model = '';
         return;
       }
-      try {
-        const res = await configAPI.getModels(provider);
-        modelOptions.value = res.data?.data ?? [];
-        const current = modelForm.value.model;
-        modelForm.value.model = modelOptions.value.includes(current) ? current : (modelOptions.value[0] || '');
-      } catch {
-        modelOptions.value = [];
-        modelForm.value.model = '';
-      }
+      const [p, m] = key.split('|');
+      modelForm.value.provider = p || '';
+      modelForm.value.model = m || '';
     }
 
     async function loadSkills() {
@@ -501,11 +523,14 @@ export default {
       configSaving,
       saveConfig,
       modelForm,
-      configuredProviders,
-      modelOptions,
+      configuredModelsList,
+      selectedConfiguredModelKey,
+      selectedModelItem,
+      getConfiguredModelOptionLabel,
+      getProviderDisplayName,
+      onConfiguredModelSelect,
       modelConfigLoading,
       loadModelConfig,
-      onModelProviderChange,
       agentSkills,
       skillsLoading,
       canDeleteWorkspaceSkill,
@@ -658,6 +683,22 @@ export default {
   font-weight: 600;
   margin: 0 0 var(--spacing-sm) 0;
   color: var(--color-text-primary);
+}
+.model-current-display {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}
+.model-current-display .label {
+  color: var(--color-text-secondary);
+}
+.model-current-display .value code {
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-tertiary);
 }
 .loading-state.small {
   padding: var(--spacing-md) 0;

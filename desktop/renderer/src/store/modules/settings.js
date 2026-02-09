@@ -15,6 +15,7 @@ export const useSettingsStore = defineStore('settings', {
             providers: {},
         },
         providers: [],
+        providerSupport: {},
         models: {},
     }),
 
@@ -22,22 +23,23 @@ export const useSettingsStore = defineStore('settings', {
         async loadConfig() {
             try {
                 const response = await configAPI.getConfig();
-                if (response.data && response.data.data) {
-                    this.config = { ...this.config, ...response.data.data };
+                const data = response?.data?.data;
+                if (data && typeof data === 'object') {
+                    this.config = { ...this.config, ...data };
                 }
-                this.applyTheme(this.config.theme);
+                this.applyTheme(this.config?.theme);
             } catch (error) {
                 console.error('Failed to load config:', error);
-                // Apply default theme if config load fails
-                this.applyTheme(this.config.theme);
+                this.applyTheme(this.config?.theme);
             }
         },
 
         async updateConfig(updates) {
             try {
                 const response = await configAPI.updateConfig(updates);
-                this.config = response.data.data;
-                if (updates.theme) {
+                const next = response?.data?.data;
+                this.config = next && typeof next === 'object' ? { ...this.config, ...next } : this.config;
+                if (updates?.theme) {
                     this.applyTheme(updates.theme);
                 }
             } catch (error) {
@@ -45,19 +47,30 @@ export const useSettingsStore = defineStore('settings', {
             }
         },
 
-        async loadProviders() {
+        async loadProviderSupport() {
             try {
-                const response = await configAPI.getProviders();
-                this.providers = response.data.data;
+                const response = await configAPI.getProviderSupport();
+                this.providerSupport = response.data?.data ?? {};
+                this.providers = Object.keys(this.providerSupport);
             } catch (error) {
-                console.error('Failed to load providers:', error);
+                console.error('Failed to load provider support:', error);
+                this.providerSupport = {};
+                this.providers = [];
             }
         },
 
-        async loadModels(provider) {
+        async loadProviders() {
+            await this.loadProviderSupport();
+        },
+
+        /** @param {string} [type] - 可选，llm/embedding/image，按类型筛选；缓存 key 为 provider 或 provider:type */
+        async loadModels(provider, type) {
+            if (!provider) return;
             try {
-                const response = await configAPI.getModels(provider);
-                this.models[provider] = response.data.data;
+                const response = await configAPI.getModels(provider, type);
+                const list = response.data?.data ?? [];
+                const key = type ? `${provider}:${type}` : provider;
+                this.models = { ...this.models, [key]: list };
             } catch (error) {
                 console.error('Failed to load models:', error);
             }

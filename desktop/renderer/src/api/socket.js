@@ -8,6 +8,8 @@ class SocketService {
         this.socket = null;
         this.listeners = new Map();
         this.currentSessionId = null;
+        this.currentAgentId = null;
+        this.currentSessionType = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 5;
         this.pendingRequests = new Map(); // Map<id, {resolve, reject}>
@@ -80,16 +82,22 @@ class SocketService {
     }
 
     /**
-     * Connect to Gateway and authenticate with sessionId.
-     * Call this when opening a session so subsequent agent.chat is allowed.
+     * Connect to Gateway and authenticate with sessionId, agentId, sessionType.
+     * Gateway 用 agentId/sessionType 本地取配置，不再请求 Nest。
      */
-    async connectToSession(sessionId) {
+    async connectToSession(sessionId, agentId, sessionType) {
         this.currentSessionId = sessionId;
+        this.currentAgentId = agentId !== undefined ? agentId : (this.currentAgentId ?? 'default');
+        this.currentSessionType = sessionType !== undefined ? sessionType : (this.currentSessionType ?? 'chat');
         await this.whenReady();
         if (this.socket?.readyState !== WebSocket.OPEN) {
             throw new Error('WebSocket not connected');
         }
-        await this.call('connect', { sessionId });
+        await this.call('connect', {
+            sessionId,
+            agentId: this.currentAgentId,
+            sessionType: this.currentSessionType,
+        });
         await this.call('subscribe_session', { sessionId });
     }
 
@@ -98,9 +106,16 @@ class SocketService {
      * @param {string} sessionId
      * @param {string} message
      * @param {string} [targetAgentId] - 对话/安装目标：具体 agentId，或 "global"|"all" 表示全局
+     * @param {string} [agentId] - 当前 session 绑定的 agentId，不传则用 connect 时存的
+     * @param {string} [sessionType] - 当前 session 类型 chat|scheduled|system
      */
-    async sendMessage(sessionId, message, targetAgentId) {
-        const params = { sessionId, message };
+    async sendMessage(sessionId, message, targetAgentId, agentId, sessionType) {
+        const params = {
+            sessionId,
+            message,
+            agentId: agentId ?? this.currentAgentId,
+            sessionType: sessionType ?? this.currentSessionType,
+        };
         if (targetAgentId !== undefined && targetAgentId !== null) {
             params.targetAgentId = targetAgentId;
         }
@@ -119,6 +134,8 @@ class SocketService {
             await this.call('unsubscribe_session');
         }
         this.currentSessionId = null;
+        this.currentAgentId = null;
+        this.currentSessionType = null;
     }
 
     /**
@@ -201,9 +218,11 @@ class SocketService {
     disconnect() {
         if (this.socket) {
             this.socket.close();
-            this.socket = null;
-            this.currentSessionId = null;
-        }
+        this.socket = null;
+        this.currentSessionId = null;
+        this.currentAgentId = null;
+        this.currentSessionType = null;
+    }
         this.pendingRequests.forEach((p) => {
             if (p.timer) clearTimeout(p.timer);
             p.reject(new Error('Disconnected'));

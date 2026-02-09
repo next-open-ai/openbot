@@ -138,12 +138,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
 import { useAgentStore } from '@/store/modules/agent';
 import { useSkillStore } from '@/store/modules/skill';
-import { usageAPI } from '@/api';
 
 export default {
   name: 'Dashboard',
@@ -153,7 +152,7 @@ export default {
     const skillStore = useSkillStore();
     const { t } = useI18n();
 
-    const totalTokens = ref(0);
+    const totalTokens = computed(() => agentStore.totalTokens);
 
     const sessions = computed(() => agentStore.sessions);
     const activeSessions = computed(() => agentStore.activeSessions.length);
@@ -182,20 +181,9 @@ export default {
       router.push(`/chat/${sessionId}`);
     };
 
-    const fetchTokenTotal = async () => {
-      try {
-        const res = await usageAPI.getTotal();
-        if (res?.data?.success && res?.data?.data) {
-          totalTokens.value = res.data.data.totalTokens ?? 0;
-        }
-      } catch (e) {
-        console.warn('Failed to fetch token usage:', e);
-      }
-    };
-
     onMounted(() => {
       skillStore.fetchSkills();
-      fetchTokenTotal();
+      agentStore.fetchUsageTotal();
     });
 
     return {

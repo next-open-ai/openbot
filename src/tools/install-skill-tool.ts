@@ -1,5 +1,6 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { resolveInstallTarget, installSkillByUrl } from "../installer/index.js";
 
 const InstallSkillSchema = Type.Object({
     url: Type.String({
@@ -10,14 +11,10 @@ const InstallSkillSchema = Type.Object({
 type InstallSkillParams = { url: string };
 
 /**
- * 创建 install_skill 工具：通过后端 API 安装技能。
- * @param targetAgentId 安装目标（具体 agentId / "global"|"all" / 未传则后端默认）
- * @param backendBaseUrl 后端 base URL（如 http://localhost:3001），由调用方注入；不传则工具返回「未连接后端」提示
+ * 创建 install_skill 工具：通过核心 installer 安装技能，不依赖 Nest。
+ * @param targetAgentId 安装目标（具体 agentId / "global"|"all" / 未传则当前/default）
  */
-export function createInstallSkillTool(
-    targetAgentId: string | undefined,
-    backendBaseUrl?: string,
-): ToolDefinition {
+export function createInstallSkillTool(targetAgentId: string | undefined): ToolDefinition {
     return {
         name: "install_skill",
         label: "Install Skill",
@@ -39,52 +36,26 @@ export function createInstallSkillTool(
                     details: undefined,
                 };
             }
-            const base = backendBaseUrl?.trim();
-            if (!base) {
-                return {
-                    content: [
-                        {
-                            type: "text" as const,
-                            text: "当前环境未连接后端，无法通过工具安装。请让用户在应用内使用「手动安装」并填入该地址：" + url,
-                        },
-                    ],
-                    details: undefined,
-                };
-            }
-            const installUrl = `${base.replace(/\/$/, "")}/server-api/skills/install`;
             try {
-                const res = await fetch(installUrl, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url, targetAgentId: targetAgentId }),
+                const target = await resolveInstallTarget(targetAgentId);
+                const result = await installSkillByUrl(url, {
+                    scope: target.scope,
+                    workspace: target.workspace,
                 });
-                const data = (await res.json().catch(() => ({}))) as {
-                    success?: boolean;
-                    data?: { stdout?: string; stderr?: string; installDir?: string };
-                    message?: string;
-                };
-                if (!res.ok) {
-                    const msg = data?.message ?? data?.data?.stderr ?? res.statusText;
-                    return {
-                        content: [{ type: "text" as const, text: `安装请求失败: ${msg}` }],
-                        details: undefined,
-                    };
-                }
-                const out = data?.data?.stdout ?? "";
-                const err = data?.data?.stderr ?? "";
-                const installDir = data?.data?.installDir;
+                const out = result.stdout?.trim() ?? "";
+                const err = result.stderr?.trim() ?? "";
+                const installDir = result.installDir;
                 const dirLine = installDir ? `\n安装目录：${installDir}` : "";
-                const baseText =
-                    out.trim() || (err.trim() ? `安装完成。\n${err}` : "技能已安装完成。");
+                const baseText = out || (err ? `安装完成。\n${err}` : "技能已安装完成。");
                 const text = dirLine ? `${baseText}${dirLine}` : baseText;
                 return {
                     content: [{ type: "text" as const, text }],
-                    details: data?.data,
+                    details: { stdout: result.stdout, stderr: result.stderr, installDir: result.installDir },
                 };
             } catch (err) {
                 const msg = err instanceof Error ? err.message : String(err);
                 return {
-                    content: [{ type: "text" as const, text: `安装请求异常: ${msg}` }],
+                    content: [{ type: "text" as const, text: `安装失败: ${msg}` }],
                     details: undefined,
                 };
             }

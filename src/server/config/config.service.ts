@@ -2,6 +2,33 @@ import { Injectable } from '@nestjs/common';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { getProviderSupport, syncDesktopConfigToModelsJson } from '../../config/desktop-config.js';
+
+/** 模型 cost 配置，写入 models.json；缺省均为 0 */
+export interface ModelCost {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+}
+
+/** 已配置的模型项（备用模型列表中的一条），新增时需选类型 */
+export interface ConfiguredModelItem {
+    provider: string;
+    modelId: string;
+    /** 模型类型：llm / embedding / image 等，用于在不同场景筛选 */
+    type: 'llm' | 'embedding' | 'image';
+    /** 显示用别名，缺省用模型名；重名时自动加后缀区分 */
+    alias?: string;
+    /** 是否推理模型，缺省 false；写入 models.json */
+    reasoning?: boolean;
+    /** 成本配置，缺省均为 0；写入 models.json */
+    cost?: ModelCost;
+    /** 上下文窗口，缺省 64000；写入 models.json */
+    contextWindow?: number;
+    /** 最大 token，缺省 8192；写入 models.json */
+    maxTokens?: number;
+}
 
 export interface AppConfig {
     gatewayUrl: string;
@@ -20,8 +47,12 @@ export interface AppConfig {
         [key: string]: {
             apiKey?: string;
             baseUrl?: string;
+            /** 显示用别名，缺省用 provider 名；重名时自动加后缀区分 */
+            alias?: string;
         };
     };
+    /** 已配置的模型列表（备用），从该列表中选一个为缺省模型 */
+    configuredModels?: ConfiguredModelItem[];
 }
 
 @Injectable()
@@ -52,6 +83,7 @@ export class ConfigService {
             theme: 'dark',
             maxAgentSessions: 5,
             providers: {},
+            configuredModels: [],
         };
     }
 
@@ -81,6 +113,9 @@ export class ConfigService {
         this.config = { ...this.config, ...updates };
         this.config.defaultAgentId = this.getDefaultAgentId(this.config);
         await this.saveConfig();
+        await syncDesktopConfigToModelsJson().catch((err) =>
+            console.warn('[ConfigService] syncDesktopConfigToModelsJson failed', err),
+        );
         return this.config;
     }
 
@@ -93,17 +128,31 @@ export class ConfigService {
         }
     }
 
+    /** 支持的 provider 列表（来自 provider-support.json，供配置时下拉） */
     async getProviders(): Promise<string[]> {
-        return ['deepseek', 'dashscope', 'openai', 'anthropic'];
+        const support = await getProviderSupport();
+        return Object.keys(support);
     }
 
-    async getModels(provider: string): Promise<string[]> {
-        const modelMap: { [key: string]: string[] } = {
-            deepseek: ['deepseek-chat', 'deepseek-coder'],
-            dashscope: ['qwen-max', 'qwen-plus', 'qwen-turbo'],
-            openai: ['gpt-4', 'gpt-3.5-turbo'],
-            anthropic: ['claude-3-opus', 'claude-3-sonnet'],
-        };
-        return modelMap[provider] || [];
+    /** 某 provider 下的可用模型（来自 provider-support）；可按 type 筛选（llm/embedding/image/audio/video） */
+    async getModels(provider: string, type?: string): Promise<{ id: string; name: string; types?: string[] }[]> {
+        const support = await getProviderSupport();
+        const entry = support[provider];
+        if (!entry?.models?.length) return [];
+        let list = entry.models.map((m) => ({
+            id: m.id,
+            name: m.name || m.id,
+            types: m.types && m.types.length > 0 ? m.types : ["llm"],
+        }));
+        if (type && type.trim()) {
+            const t = type.trim().toLowerCase();
+            list = list.filter((m) => m.types?.includes(t));
+        }
+        return list;
+    }
+
+    /** 完整 provider 目录（支持列表 + 各 provider 的模型），供前端一次拉取 */
+    async getProviderSupport() {
+        return getProviderSupport();
     }
 }

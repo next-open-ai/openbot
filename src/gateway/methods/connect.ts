@@ -3,19 +3,19 @@ import { agentManager } from "../../agent/agent-manager.js";
 import { randomUUID } from "crypto";
 
 /**
- * Handle client connection request
+ * Handle client connection request.
+ * 客户端传入 sessionId、agentId、sessionType，Gateway 不再为配置/类型请求 Nest。
  */
 export async function handleConnect(
     client: GatewayClient,
     params: ConnectParams
 ): Promise<{ sessionId: string; status: string }> {
-    // Mark client as authenticated
     client.authenticated = true;
-
-    // Use provided session ID or generate new one
     client.sessionId = params.sessionId || randomUUID();
+    if (params.agentId !== undefined) client.agentId = params.agentId;
+    if (params.sessionType !== undefined) client.sessionType = params.sessionType;
 
-    console.log(`Client ${client.id} connected with session ${client.sessionId}`);
+    console.log(`Client ${client.id} connected with session ${client.sessionId}, agentId=${client.agentId ?? "default"}, type=${client.sessionType ?? "chat"}`);
 
     return {
         sessionId: client.sessionId || "",

@@ -3,34 +3,7 @@ import { agentManager } from "../../agent/agent-manager.js";
 import { getExperienceContextForUserMessage } from "../../memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
-import { getDesktopConfig } from "../../config/desktop-config.js";
-import { getBackendBaseUrl } from "../backend-url.js";
-
-/**
- * Report token usage to Desktop Server (persist to DB). No-op if backend URL not set.
- */
-async function reportTokenUsage(
-    sessionId: string,
-    source: "chat" | "scheduled_task",
-    tokens: { promptTokens: number; completionTokens: number },
-    options?: { taskId?: string; executionId?: string },
-): Promise<void> {
-    const base = getBackendBaseUrl();
-    if (!base) return;
-    const url = `${base.replace(/\/$/, "")}/server-api/usage`;
-    await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            sessionId,
-            source,
-            taskId: options?.taskId ?? undefined,
-            executionId: options?.executionId ?? undefined,
-            promptTokens: tokens.promptTokens,
-            completionTokens: tokens.completionTokens,
-        }),
-    });
-}
+import { getDesktopConfig, loadDesktopAgentConfig } from "../../config/desktop-config.js";
 
 /**
  * Broadcast message to all clients subscribed to a session
@@ -64,50 +37,30 @@ export async function handleAgentChat(
 
     console.log(`Agent chat request for session ${targetSessionId}: ${message.substring(0, 50)}...`);
 
-    return handleAgentChatInner(client, targetSessionId, message, targetAgentId);
+    return handleAgentChatInner(client, targetSessionId, message, params);
 }
 
 async function handleAgentChatInner(
     client: GatewayClient,
     targetSessionId: string,
     message: string,
-    targetAgentId: string | undefined,
+    params: AgentChatParams,
 ): Promise<{ status: string; sessionId: string }> {
-    // 通过 sessionId 获取归属的 agentId，再通过 agentId 获取该智能体配置的 provider/model，用于创建 Agent Session
+    const { targetAgentId } = params;
+    // 客户端在 connect 或 agent.chat 传入 agentId/sessionType，Gateway 不再请求 Nest
+    const sessionAgentId = params.agentId ?? client.agentId ?? "default";
+    const sessionType = params.sessionType ?? client.sessionType ?? "chat";
+
     let workspace = "default";
     let provider: string | undefined;
     let modelId: string | undefined;
-    let sessionType: string | undefined;
-    let sessionAgentId = "default";
     let apiKey: string | undefined;
-    const base = getBackendBaseUrl();
-    if (base) {
-        try {
-            const sessionRes = await fetch(`${base.replace(/\/$/, "")}/server-api/agents/sessions/${targetSessionId}`);
-            if (sessionRes.ok) {
-                const sessionData = (await sessionRes.json()) as { success?: boolean; data?: { agentId?: string; type?: string } };
-                sessionType = sessionData?.data?.type;
-                sessionAgentId = sessionData?.data?.agentId ?? "default";
-                const agentRes = await fetch(`${base.replace(/\/$/, "")}/server-api/agent-config/${encodeURIComponent(sessionAgentId)}`);
-                if (agentRes.ok) {
-                    const agentData = (await agentRes.json()) as { success?: boolean; data?: { workspace?: string; provider?: string; model?: string } };
-                    const agent = agentData?.data;
-                    if (agent?.workspace) workspace = agent.workspace;
-                    if (agent?.provider) provider = agent.provider;
-                    if (agent?.model) modelId = agent.model;
-                }
-            }
-            // 从桌面端全局配置读取当前 provider 的 API Key（设置里配置的会生效）
-            const configRes = await fetch(`${base.replace(/\/$/, "")}/server-api/config`);
-            if (configRes.ok) {
-                const configData = (await configRes.json()) as { success?: boolean; data?: { providers?: Record<string, { apiKey?: string }> } };
-                const prov = provider ?? "deepseek";
-                const key = configData?.data?.providers?.[prov]?.apiKey;
-                if (key && typeof key === "string" && key.trim()) apiKey = key.trim();
-            }
-        } catch (e) {
-            console.warn("[agent-chat] Failed to fetch session/agent config, using default:", e);
-        }
+    const agentConfig = await loadDesktopAgentConfig(sessionAgentId);
+    if (agentConfig) {
+        if (agentConfig.workspace) workspace = agentConfig.workspace;
+        provider = agentConfig.provider;
+        modelId = agentConfig.model;
+        if (agentConfig.apiKey) apiKey = agentConfig.apiKey;
     }
 
     // system / scheduled：每次对话前先删再建，对话结束马上关闭，节省资源
@@ -170,20 +123,18 @@ async function handleAgentChatInner(
                 isError: event.isError
             });
         } else if (event.type === "turn_end") {
-            // Explicit completion event required for frontend to stop loading state
-            // Only send on turn_end to avoid duplicate empty messages from message_end
-            wsMessage = createEvent("message_complete", { sessionId: targetSessionId, content: "" });
-            // Record token usage for this turn (message may have usage.input / usage.output)
             const usage = (event as any).message?.usage;
-            if (usage) {
-                const promptTokens = Number(usage.input ?? usage.input_tokens ?? 0) || 0;
-                const completionTokens = Number(usage.output ?? usage.output_tokens ?? 0) || 0;
-                if (promptTokens > 0 || completionTokens > 0) {
-                    reportTokenUsage(targetSessionId, "chat", { promptTokens, completionTokens }).catch((err) =>
-                        console.error("[agent-chat] reportTokenUsage failed:", err)
-                    );
-                }
-            }
+            const promptTokens = Number(usage?.input ?? usage?.input_tokens ?? 0) || 0;
+            const completionTokens = Number(usage?.output ?? usage?.output_tokens ?? 0) || 0;
+            const usagePayload =
+                promptTokens > 0 || completionTokens > 0
+                    ? { promptTokens, completionTokens }
+                    : undefined;
+            wsMessage = createEvent("message_complete", {
+                sessionId: targetSessionId,
+                content: "",
+                ...(usagePayload && { usage: usagePayload }),
+            });
         }
 
         if (wsMessage) {

@@ -24,8 +24,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
-import { setBackendBaseUrl, getBackendBaseUrl } from "./backend-url.js";
-import { agentManager } from "../agent/agent-manager.js";
+import { setBackendBaseUrl } from "./backend-url.js";
 
 /**
  * Find an available port starting from startPort
@@ -104,7 +103,6 @@ export async function startGatewayServer(port: number = 3000): Promise<{
     const backendPort = await findAvailablePort(3001);
     console.log(`Found available port for Desktop Server: ${backendPort}`);
     setBackendBaseUrl(`http://localhost:${backendPort}`);
-    agentManager.configure({ backendBaseUrl: getBackendBaseUrl() ?? undefined });
 
     // 2. Start Desktop Server
     let backendProcess: ChildProcess | null = null;
