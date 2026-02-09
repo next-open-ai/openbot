@@ -11,7 +11,7 @@ import { AgentsService } from './agents.service.js';
 
 @WebSocketGateway({
     cors: {
-        origin: ['http://localhost:5173', 'http://localhost:3001'],
+        origin: ['http://localhost:5173', 'http://localhost:38081'],
         credentials: true,
     },
 })

@@ -5,7 +5,7 @@ const http = require('http');
 
 let mainWindow;
 let gatewayProcess;
-const GATEWAY_PORT = 3000;
+const GATEWAY_PORT = 38080;
 
 // Start OpenBot Gateway
 function startGateway() {
@@ -74,7 +74,7 @@ async function createWindow() {
 
     // Load the Frontend
     // In development: Vite dev server (5173)
-    // In production: Gateway static file serving (3000)
+    // In production: Gateway static file serving (38080)
     const isDev = process.env.NODE_ENV !== 'production';
     const startUrl = isDev
         ? 'http://localhost:5173'

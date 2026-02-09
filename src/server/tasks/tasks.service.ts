@@ -377,7 +377,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                         agentId: session.agentId ?? task.workspace,
                         workspace: task.workspace,
                         taskId: task.id,
-                        backendBaseUrl: `http://localhost:${process.env.PORT || 3001}`,
+                        backendBaseUrl: `http://localhost:${process.env.PORT || 38081}`,
                     }),
                     signal: AbortSignal.timeout(runTimeoutMs),
                 });

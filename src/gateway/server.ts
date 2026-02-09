@@ -18,13 +18,19 @@ import { WebSocketServer } from "ws";
 import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse, type RequestOptions } from "http";
 import { handleConnection } from "./connection-handler.js";
 import { readFile, stat } from "fs/promises";
-import { join, extname } from "path";
+import { join, extname, dirname } from "path";
+import { fileURLToPath } from "node:url";
 import { existsSync } from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { setBackendBaseUrl } from "./backend-url.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+/** 包根目录（dist/gateway 的上级的上级），npm 安装后静态资源在 desktop/renderer/dist */
+const PACKAGE_ROOT = join(__dirname, "..", "..");
+const STATIC_DIR = join(PACKAGE_ROOT, "desktop", "renderer", "dist");
 
 /**
  * Find an available port starting from startPort
@@ -92,7 +98,7 @@ const MIME_TYPES: Record<string, string> = {
 /**
  * Start WebSocket gateway server
  */
-export async function startGatewayServer(port: number = 3000): Promise<{
+export async function startGatewayServer(port: number = 38080): Promise<{
     httpServer: Server;
     wss: WebSocketServer;
     close: () => Promise<void>;
@@ -100,7 +106,7 @@ export async function startGatewayServer(port: number = 3000): Promise<{
     console.log(`Starting gateway server on port ${port}...`);
 
     // 1. Find available port for Desktop Server
-    const backendPort = await findAvailablePort(3001);
+    const backendPort = await findAvailablePort(38081);
     console.log(`Found available port for Desktop Server: ${backendPort}`);
     setBackendBaseUrl(`http://localhost:${backendPort}`);
 
@@ -205,9 +211,9 @@ export async function startGatewayServer(port: number = 3000): Promise<{
             return;
         }
 
-        // Serve static files
+        // Serve static files (from package root so npm install works)
         try {
-            const staticDir = join(process.cwd(), "desktop/renderer/dist");
+            const staticDir = STATIC_DIR;
             // Normalize URL to remove query parameters and ensuring it starts with /
             const urlPath = req.url?.split("?")[0] || "/";
 

@@ -62,7 +62,7 @@ npm run dev
 ```
 
 This will start:
-- NestJS backend on `http://localhost:3001`
+- NestJS backend on `http://localhost:38081`
 - Vue.js frontend on `http://localhost:5173`
 - Electron desktop window
 
@@ -145,7 +145,7 @@ Configuration is stored in `~/.openbot/desktop/config.json`:
 
 ```json
 {
-  "gatewayUrl": "ws://localhost:3000",
+  "gatewayUrl": "ws://localhost:38080",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-chat",
   "defaultAgentId": "default",
@@ -163,7 +163,7 @@ If the desktop app can't connect to the gateway:
 
 1. Ensure the gateway is running: `node dist/gateway/server.js`
 2. Check the gateway URL in Configuration
-3. Verify no firewall is blocking port 3000
+3. Verify no firewall is blocking port 38080
 
 ### Build Errors
 
@@ -177,7 +177,7 @@ npm install
 ### WebSocket Not Connecting
 
 Check that:
-- NestJS backend is running on port 3001
+- NestJS backend is running on port 38081
 - Frontend is connecting to the correct backend URL
 - CORS is properly configured
 

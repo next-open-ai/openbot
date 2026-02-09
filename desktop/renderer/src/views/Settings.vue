@@ -128,7 +128,7 @@
             <h3>{{ t('settings.gateway') }}</h3>
             <div class="form-group">
               <label>{{ t('settings.gatewayUrl') }}</label>
-              <input v-model="localConfig.gatewayUrl" class="input" placeholder="ws://localhost:3000" />
+              <input v-model="localConfig.gatewayUrl" class="input" placeholder="ws://localhost:38080" />
             </div>
           </div>
 

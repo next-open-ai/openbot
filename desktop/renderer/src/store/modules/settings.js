@@ -4,7 +4,7 @@ import { configAPI } from '@/api';
 export const useSettingsStore = defineStore('settings', {
     state: () => ({
         config: {
-            gatewayUrl: 'ws://localhost:3000',
+            gatewayUrl: 'ws://localhost:38080',
             defaultProvider: 'deepseek',
             defaultModel: 'deepseek-chat',
             defaultAgentId: 'default',

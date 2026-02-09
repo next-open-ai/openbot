@@ -12,9 +12,9 @@ node dist/cli.js gateway
 
 **Expected output:**
 ```
-Starting gateway server on port 3000...
-✅ Gateway server listening on ws://localhost:3000
-   Health check: http://localhost:3000/health
+Starting gateway server on port 38080...
+✅ Gateway server listening on ws://localhost:38080
+   Health check: http://localhost:38080/health
 ```
 
 ### Terminal 2: Desktop Application
@@ -74,7 +74,7 @@ Once all services are running:
 ## 🐛 Troubleshooting
 
 ### Gateway Connection Failed
-**Error:** `ECONNREFUSED 127.0.0.1:3000`
+**Error:** `ECONNREFUSED 127.0.0.1:38080`
 
 **Solution:** Make sure Terminal 1 (gateway) is running first
 

@@ -157,7 +157,7 @@ Examples:
 program
     .command("gateway")
     .description("Start WebSocket gateway server")
-    .option("-p, --port <port>", "Port to listen on", "3000")
+    .option("-p, --port <port>", "Port to listen on", "38080")
     .action(async (options) => {
         const port = parseInt(options.port, 10);
         if (isNaN(port) || port <= 0 || port > 65535) {

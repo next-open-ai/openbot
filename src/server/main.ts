@@ -15,11 +15,11 @@ async function bootstrap() {
 
     // Enable CORS for frontend
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:3001'],
+        origin: ['http://localhost:5173', 'http://localhost:38081'],
         credentials: true,
     });
 
-    const port = process.env.PORT || 3001;
+    const port = process.env.PORT || 38081;
     await app.listen(port);
 
     console.log(`🚀 OpenBot Desktop Server running on http://localhost:${port}`);

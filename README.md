@@ -27,7 +27,7 @@
 │                              客户端 / 接入层                                  │
 ├─────────────────┬─────────────────────────────┬─────────────────────────────┤
 │   CLI (openbot) │   WebSocket Gateway (JSON-RPC)  │   OpenBot Desktop (Electron)  │
-│   Commander     │   ws, 端口 3000               │   Vue 3 + Pinia + Vite       │
+│   Commander     │   ws, 端口 38080              │   Vue 3 + Pinia + Vite       │
 └────────┬────────┴──────────────┬──────────────┴──────────────┬──────────────┘
          │                        │                             │
          │                        │  HTTP + Socket.io            │
@@ -88,7 +88,7 @@
 | 类别 | 技术 |
 |------|------|
 | 协议 | JSON-RPC over WebSocket（`ws`） |
-| 端口 | 默认 3000，可 `-p` 指定 |
+| 端口 | 默认 38080，可 `-p` 指定 |
 | 职责 | 连接管理、消息路由、静态资源、拉 Nest 子进程 |
 | 方法 | `connect`、`agent.chat`、`agent.cancel`、`subscribe_session`、`unsubscribe_session` 等 |
 
@@ -206,10 +206,10 @@ openbot "总结一下当前有哪些技能"
 ### 启动 WebSocket 网关
 
 ```bash
-openbot gateway --port 3000
+openbot gateway --port 38080
 ```
 
-客户端通过 `ws://localhost:3000` 连接，使用 JSON-RPC 调用 `connect`、`agent.chat` 等。
+客户端通过 `ws://localhost:38080` 连接，使用 JSON-RPC 调用 `connect`、`agent.chat` 等。
 
 ### 启动桌面端
 

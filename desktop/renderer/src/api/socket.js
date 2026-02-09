@@ -167,7 +167,7 @@ class SocketService {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let host = window.location.host;
         if (window.location.hostname === 'localhost' && window.location.port === '5173') {
-            host = 'localhost:3000';
+            host = 'localhost:38080';
         }
         const url = `${protocol}//${host}`;
         console.log('Connecting to Gateway WebSocket:', url);
