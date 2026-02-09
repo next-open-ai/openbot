@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **OpenBot** 是基于 Agent Skills 与编码智能体（Coding Agent）的**一体化 AI 助手平台**，支持 CLI、WebSocket 网关与桌面端。通过可插拔技能（Skills）、浏览器自动化、代码执行与长期记忆，为开发与日常任务提供可扩展的 AI 工作流。
+**Agent 时代的到来，国人当自强 ：）**
 
 ---
 
