@@ -1,8 +1,8 @@
 /**
- * Avoid MaxListenersExceededWarning when Browser Tool is used repeatedly.
- * Playwright/agent-browser attach abort listeners to the same AbortSignal per action;
- * Node's default EventTarget maxListeners is 10.
+ * WebSocket Gateway 入口：提供 WS JSON-RPC（如 agent.chat），并代理 /server-api 到 Desktop 后端（src/server/）。
+ * 与 Nest Desktop Backend 是不同进程；本进程可拉 Nest 子进程并转发请求。
  */
+/* Avoid MaxListenersExceededWarning: Browser Tool / Playwright attach abort listeners to same AbortSignal; Node default maxListeners is 10. */
 const Et = (globalThis as any).EventTarget;
 if (Et?.prototype?.addEventListener && Et.prototype.setMaxListeners) {
     const add = Et.prototype.addEventListener;
@@ -24,7 +24,8 @@ import { spawn, type ChildProcess } from "child_process";
 import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
-import { setBackendBaseUrl } from "./backend-url.js";
+import { setBackendBaseUrl, getBackendBaseUrl } from "./backend-url.js";
+import { agentManager } from "../agent/agent-manager.js";
 
 /**
  * Find an available port starting from startPort
@@ -103,6 +104,7 @@ export async function startGatewayServer(port: number = 3000): Promise<{
     const backendPort = await findAvailablePort(3001);
     console.log(`Found available port for Desktop Server: ${backendPort}`);
     setBackendBaseUrl(`http://localhost:${backendPort}`);
+    agentManager.configure({ backendBaseUrl: getBackendBaseUrl() ?? undefined });
 
     // 2. Start Desktop Server
     let backendProcess: ChildProcess | null = null;

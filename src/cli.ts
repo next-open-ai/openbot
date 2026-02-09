@@ -7,7 +7,7 @@ import { getOpenbotAgentDir } from "./agent/agent-dir.js";
 import { loadSkillsFromPaths, type Skill } from "./agent/skills.js";
 import { run } from "./agent/run.js";
 import { ConfigManager } from "./agent/config-manager.js";
-import { loadDesktopAgentConfig, getBoundAgentIdForCli } from "./agent/desktop-config.js";
+import { loadDesktopAgentConfig, getBoundAgentIdForCli } from "./config/desktop-config.js";
 
 const require = createRequire(import.meta.url);
 const PKG = require("../package.json") as { version: string };

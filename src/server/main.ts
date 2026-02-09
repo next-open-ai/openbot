@@ -1,3 +1,7 @@
+/**
+ * OpenBot Desktop 后端入口（NestJS HTTP API，前缀 server-api）。
+ * 与 WebSocket Gateway（src/gateway/）是不同进程；Gateway 可拉本进程并代理 /server-api。
+ */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 

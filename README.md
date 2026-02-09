@@ -54,9 +54,20 @@
 ```
 
 - **CLI**：直接调用 Agent 核心，单次提示或批量脚本。
-- **Gateway**：对外提供 WebSocket（JSON-RPC），供 Web/移动端连接；内部负责起端口、拉 Nest 后端、路由请求。
-- **Desktop**：Electron 包一层 Vue 前端 + 本地 Nest 后端，通过 Gateway 或直连后端与 Agent 通信；技能、会话、任务、工作区等由 Nest 模块管理。
+- **WebSocket Gateway**（`src/gateway/`）：对外提供 WebSocket（JSON-RPC），供 Web/移动端连接；负责起端口、拉 Nest 后端子进程、代理 `/server-api` 请求。**与「Desktop 后端」是不同进程。**
+- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。桌面前端与 Gateway 通过 HTTP 调用此服务。
+- **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
+
+### 目录与模块对应
+
+| 目录 | 说明 |
+|------|------|
+| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`。不要与「Gateway 进程」混淆。 |
+| `src/gateway/` | **WebSocket 网关**，独立进程，提供 WS JSON-RPC 并代理到 Desktop 后端。 |
+| `src/agent/` | Agent 核心（CLI 与 Gateway 共用）。 |
+| `src/config/` | 桌面配置读取（~/.openbot/desktop），CLI 与 Gateway 共用。 |
+| `examples/workspace/` | 示例工作区数据（仅示例/测试用）。真实工作区根目录为 `~/.openbot/workspace/`。 |
 
 ---
 
@@ -195,7 +206,7 @@ npm run desktop:install
 ## 开发
 
 ```bash
-# 单元/集成测试
+# 单元/集成测试（含 config/desktop-config、gateway/utils、server agents e2e）
 npm test
 
 # 仅 e2e
@@ -204,6 +215,8 @@ npm run test:e2e
 # 记忆相关测试
 npm run test:memory
 ```
+
+测试分布：`test/config/` 桌面配置、`test/gateway/` 网关工具方法、`test/server/` Nest 后端 e2e。
 
 ---
 

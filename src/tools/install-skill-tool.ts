@@ -1,6 +1,5 @@
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { getBackendBaseUrl } from "../gateway/backend-url.js";
 
 const InstallSkillSchema = Type.Object({
     url: Type.String({
@@ -12,12 +11,13 @@ type InstallSkillParams = { url: string };
 
 /**
  * 创建 install_skill 工具：通过后端 API 安装技能。
- * 创建时绑定 targetAgentId，安装目标由此决定：
- * - 具体 agentId → 安装到该 agent 的 workspace/skills
- * - "global"|"all" → 安装到全局 OPENBOT_AGENT_DIR/skills
- * - 未传则后端按默认/全局处理
+ * @param targetAgentId 安装目标（具体 agentId / "global"|"all" / 未传则后端默认）
+ * @param backendBaseUrl 后端 base URL（如 http://localhost:3001），由调用方注入；不传则工具返回「未连接后端」提示
  */
-export function createInstallSkillTool(targetAgentId: string | undefined): ToolDefinition {
+export function createInstallSkillTool(
+    targetAgentId: string | undefined,
+    backendBaseUrl?: string,
+): ToolDefinition {
     return {
         name: "install_skill",
         label: "Install Skill",
@@ -39,7 +39,7 @@ export function createInstallSkillTool(targetAgentId: string | undefined): ToolD
                     details: undefined,
                 };
             }
-            const base = getBackendBaseUrl();
+            const base = backendBaseUrl?.trim();
             if (!base) {
                 return {
                     content: [

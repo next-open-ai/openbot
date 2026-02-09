@@ -3,7 +3,7 @@ import { agentManager } from "../../agent/agent-manager.js";
 import { getExperienceContextForUserMessage } from "../../memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
-import { getDesktopConfig } from "../desktop-config.js";
+import { getDesktopConfig } from "../../config/desktop-config.js";
 import { getBackendBaseUrl } from "../backend-url.js";
 
 /**
