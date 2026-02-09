@@ -157,6 +157,9 @@ npm run build
 ### CLI 使用
 
 ```bash
+# 全局安装（sharp包会因为github国内不可达，请尝试VPN.后续会考虑优化掉这个库）
+npm install -g @next-open-ai/openbot
+
 # 直接对话（使用默认 workspace 与技能）
 openbot "总结一下当前有哪些技能"
 
