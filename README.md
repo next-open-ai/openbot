@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **OpenBot** 是基于 Agent Skills 与编码智能体（Coding Agent）的**一体化 AI 助手平台**，支持 CLI、WebSocket 网关与桌面端。通过可插拔技能（Skills）、浏览器自动化、代码执行与长期记忆，为开发与日常任务提供可扩展的 AI 工作流。
-**Agent 时代的到来，国人当自强 ：）**
+** 大家一起面对 AI Agent 时代的到来**
 
 ---
 
@@ -56,7 +56,7 @@
 
 - **CLI**：直接调用 Agent 核心，单次提示或批量脚本。
 - **WebSocket Gateway**（`src/gateway/`）：对外提供 WebSocket（JSON-RPC），供 Web/移动端连接；负责起端口、拉 Nest 后端子进程、代理 `/server-api` 请求。**与「Desktop 后端」是不同进程。**
-- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。桌面前端与 Gateway 通过 HTTP 调用此服务。
+- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；默认端口 38081（Gateway 启动时若被占用会自动寻找可用端口）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。桌面前端与 Gateway 通过 HTTP 调用此服务。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
 
@@ -67,7 +67,7 @@
 | `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`。不要与「Gateway 进程」混淆。 |
 | `src/gateway/` | **WebSocket 网关**，独立进程，提供 WS JSON-RPC 并代理到 Desktop 后端。 |
 | `src/agent/` | Agent 核心（CLI 与 Gateway 共用）。 |
-| `src/config/` | 桌面配置读取（~/.openbot/desktop），CLI 与 Gateway 共用。 |
+| `src/config/` | 桌面配置（~/.openbot/desktop）：config.json、agents.json、provider-support.json；CLI 与 Gateway 共用；同步到 agent 目录 models.json 的逻辑在此。 |
 | `examples/workspace/` | 示例工作区数据（仅示例/测试用）。真实工作区根目录为 `~/.openbot/workspace/`。 |
 
 ---
@@ -127,7 +127,7 @@
 | 类别 | 技术 |
 |------|------|
 | 向量索引 | Vectra（LocalIndex） |
-| 嵌入 | @xenova/transformers（本地模型） |
+| 嵌入 | 远端 API（config.json 中 RAG 知识库配置的 embedding 模型；未配置时长记忆空转） |
 | 扩展 | compaction-extension（会话压缩、摘要入 prompt） |
 | 持久化 | 与 agent 目录一致的 memory 目录、better-sqlite3（若用于元数据） |
 
@@ -175,14 +175,20 @@ openbot --model deepseek-chat --provider deepseek "写一段 TypeScript 示例"
 
 ### CLI 配置模型选项
 
-CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/config.json`）。未在命令行显式指定 `--provider` / `--model` 时，将使用该配置中的**缺省智能体**对应的 provider 与 model；若该智能体未单独配置模型，则使用全局缺省模型。
+CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/`）。主要文件：
+
+- **config.json**：全局缺省 provider/model、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表（`configuredModels`）等。
+- **agents.json**：智能体列表；每个智能体可单独配置 provider、model、工作区（workspace）。桌面端「当前智能体」由 `defaultAgentId` 指定。
+- **provider-support.json**：Provider 与模型目录，供设置页下拉选择；缺失时自动从内置默认生成并写入。
+
+未在命令行显式指定 `--provider` / `--model` 时，CLI 使用**缺省智能体**（`defaultAgentId`）对应的 provider 与 model；若该智能体在 agents.json 中单独配置了则用其值，否则用 config 的 `defaultProvider` / `defaultModel`。
 
 | 操作 | 命令 | 说明 |
 |------|------|------|
-| 保存 API Key | `openbot login <provider> <apiKey>` | 将某 Provider 的 API Key 写入桌面配置，供 CLI 与桌面端共用 |
-| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 在桌面配置中设置全局缺省 provider 与 model（如 `deepseek` / `deepseek-chat`） |
+| 保存 API Key | `openbot login <provider> <apiKey>` | 将某 Provider 的 API Key 写入桌面 config.json（仅桌面配置，不同步到 agent 目录 auth） |
+| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 在桌面 config 中设置全局缺省 provider 与 model（如 `deepseek` / `deepseek-chat`） |
 | 查看配置 | `openbot config list` | 列出桌面配置中的 providers 与缺省模型 |
-| 同步到 Agent 目录 | `openbot config sync` | 将桌面配置同步到 `~/.openbot/agent/models.json`，供 pi-agent 使用 |
+| 同步到 Agent 目录 | `openbot config sync` | 根据桌面 config 的 providers 与已配置模型列表（或 provider-support 默认）生成并写入 `~/.openbot/agent/models.json`，供 pi-agent 使用 |
 
 **常用 Provider 示例**：`deepseek`、`dashscope`、`openai`、`openai-custom`（自定义 OpenAI 兼容端点）、`nvidia`、`kimi`。模型 ID 需与各 Provider 支持的一致（如 DeepSeek 的 `deepseek-chat`、OpenAI 的 `gpt-4o`）；使用 `openai-custom` 时可填写自部署模型的 ID。
 

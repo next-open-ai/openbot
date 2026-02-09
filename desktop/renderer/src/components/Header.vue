@@ -10,8 +10,9 @@
       >
         {{ sessionsPanelVisible ? '‹' : '›' }}
       </button>
+      <!-- 跳转会话管理页入口：暂时不显示，可从侧栏「日志」进入 -->
       <button
-        v-if="isChatRoute"
+        v-if="false && isChatRoute"
         type="button"
         class="header-btn-sessions"
         :title="t('sessions.manage')"

@@ -29,6 +29,14 @@
         </div>
         <div 
           class="nav-item" 
+          :class="{ active: activeTab === 'knowledge' }"
+          @click="activeTab = 'knowledge'; initKnowledgeTab()"
+        >
+          <span class="nav-icon">📚</span>
+          {{ t('settings.knowledge') }}
+        </div>
+        <div 
+          class="nav-item" 
           :class="{ active: activeTab === 'users' }"
           @click="activeTab = 'users'"
         >
@@ -407,6 +415,36 @@
           </div>
         </transition>
 
+        <!-- 知识库 Tab（RAG 长记忆 embedding 配置） -->
+        <div v-show="activeTab === 'knowledge'" class="tab-content">
+          <h2 class="tab-title">{{ t('settings.knowledgeTitle') }}</h2>
+          <div class="settings-hint-block">
+            <span class="settings-hint-icon">ℹ️</span>
+            <p class="settings-hint-text">{{ t('settings.knowledgeHint') }}</p>
+          </div>
+          <div class="settings-group">
+            <div class="form-group">
+              <label>{{ t('settings.embeddingProvider') }}</label>
+              <select v-model="localRag.embeddingProvider" class="input select-input" @change="onKnowledgeProviderChange">
+                <option value="">— {{ t('settings.optional') }} —</option>
+                <option v-for="p in providersWithEmbedding" :key="p" :value="p">{{ getProviderDisplayName(p) }}</option>
+              </select>
+              <p v-if="configuredProviders.length > 0 && providersWithEmbedding.length === 0" class="form-hint form-hint-warn">{{ t('settings.noEmbeddingModel') }}</p>
+              <p v-else-if="configuredProviders.length === 0" class="form-hint form-hint-warn">{{ t('settings.noEmbeddingProvider') }}</p>
+            </div>
+            <div class="form-group">
+              <label>{{ t('settings.embeddingModel') }}</label>
+              <select v-model="localRag.embeddingModel" class="input select-input" :disabled="!localRag.embeddingProvider">
+                <option value="">—</option>
+                <option v-for="m in knowledgeEmbeddingModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+            </div>
+            <div class="actions">
+              <button @click="saveKnowledgeConfig" class="btn-primary">{{ t('common.save') }}</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 用户 Tab -->
         <div v-show="activeTab === 'users'" class="tab-content">
           <h2 class="tab-title">{{ t('settings.users') }}</h2>
@@ -621,7 +659,7 @@ import { useI18n } from '@/composables/useI18n';
 import { usersAPI } from '@/api';
 import SettingsSkills from '@/components/SettingsSkills.vue';
 
-const SETTINGS_TABS = ['general', 'agent', 'models', 'users', 'skills', 'about'];
+const SETTINGS_TABS = ['general', 'agent', 'models', 'knowledge', 'users', 'skills', 'about'];
 
 export default {
   name: 'Settings',
@@ -649,6 +687,7 @@ export default {
       }
       if (tab === 'users') loadUsers();
       if (tab === 'models') initModelConfigTab();
+      if (tab === 'knowledge') initKnowledgeTab();
     });
     const localConfig = ref({});
     const modelConfigSubTab = ref('provider');
@@ -687,7 +726,8 @@ export default {
     const userFormSaving = ref(false);
     const showChangeCurrentPasswordModal = ref(false);
     const currentUserPasswordForm = ref({ password: '', confirm: '' });
-    
+    const localRag = ref({ embeddingProvider: '', embeddingModel: '' });
+
     const config = computed(() => settingsStore.config || {});
     const providers = computed(() => settingsStore.providers || []);
     const providerSupport = computed(() => settingsStore.providerSupport || {});
@@ -720,6 +760,22 @@ export default {
       if (!p || !m) return -1;
       const idx = list.findIndex((item) => item.provider === p && item.modelId === m);
       return idx;
+    });
+    /** 已配置且 provider-support 中提供 embedding 模型的 Provider 列表 */
+    const providersWithEmbedding = computed(() => {
+      const support = providerSupport.value;
+      return configuredProviders.value.filter((p) => {
+        const models = support[p]?.models;
+        return Array.isArray(models) && models.some((m) => m.types?.includes('embedding'));
+      });
+    });
+    /** 知识库 Tab 下当前选的 Provider 的 embedding 模型列表 */
+    const knowledgeEmbeddingModels = computed(() => {
+      const p = localRag.value.embeddingProvider;
+      if (!p) return [];
+      const entry = providerSupport.value[p];
+      if (!entry?.models) return [];
+      return entry.models.filter((m) => m.types?.includes('embedding'));
     });
     /** 是否为 OpenAI 自定义 Provider（模型 ID 允许手工录入） */
     const isOpenAiCustomProvider = computed(() => addModelForm.value.provider === 'openai-custom');
@@ -773,6 +829,28 @@ export default {
     const resetAgentConfig = () => {
       loadAgentConfig();
     };
+
+    function initKnowledgeTab() {
+      const cfg = config.value || {};
+      const rag = cfg.rag;
+      localRag.value = {
+        embeddingProvider: (rag?.embeddingProvider && typeof rag.embeddingProvider === 'string' ? rag.embeddingProvider : '').trim(),
+        embeddingModel: (rag?.embeddingModel && typeof rag.embeddingModel === 'string' ? rag.embeddingModel : '').trim(),
+      };
+    }
+
+    function onKnowledgeProviderChange() {
+      localRag.value.embeddingModel = '';
+    }
+
+    async function saveKnowledgeConfig() {
+      const p = (localRag.value.embeddingProvider || '').trim();
+      const m = (localRag.value.embeddingModel || '').trim();
+      await settingsStore.updateConfig({
+        rag: p && m ? { embeddingProvider: p, embeddingModel: m } : undefined,
+      });
+      alert(t('common.saved'));
+    }
 
     function initModelConfigTab() {
       try {
@@ -1243,6 +1321,7 @@ export default {
         await settingsStore.loadProviderSupport();
         loadAgentConfig();
         initModelConfigTab();
+        if (activeTab.value === 'knowledge') initKnowledgeTab();
       } catch (err) {
         console.error('[Settings] onMounted error', err);
       }
@@ -1286,6 +1365,12 @@ export default {
       addProviderForm,
       supportedProviders,
       configuredProviders,
+      localRag,
+      providersWithEmbedding,
+      knowledgeEmbeddingModels,
+      initKnowledgeTab,
+      onKnowledgeProviderChange,
+      saveKnowledgeConfig,
       removeProvider,
       editingProvider,
       startEditProvider,

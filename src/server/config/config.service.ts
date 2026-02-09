@@ -53,6 +53,8 @@ export interface AppConfig {
     };
     /** 已配置的模型列表（备用），从该列表中选一个为缺省模型 */
     configuredModels?: ConfiguredModelItem[];
+    /** RAG 知识库：embedding 使用该 provider+model，未配置时基于 RAG 的长记忆空转 */
+    rag?: { embeddingProvider?: string; embeddingModel?: string };
 }
 
 @Injectable()
@@ -84,6 +86,7 @@ export class ConfigService {
             maxAgentSessions: 5,
             providers: {},
             configuredModels: [],
+            rag: undefined,
         };
     }
 

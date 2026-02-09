@@ -14,6 +14,7 @@ import {
     getProviderSupport,
     ensureProviderSupportFile,
     syncDesktopConfigToModelsJson,
+    getRagEmbeddingConfigSync,
 } from "../../src/config/desktop-config.js";
 import { getOpenbotAgentDir } from "../../src/agent/agent-dir.js";
 
@@ -253,6 +254,62 @@ describe("config/desktop-config", () => {
             const models = JSON.parse(readFileSync(modelsPath, "utf-8"));
             expect(models.providers.deepseek).toBeDefined();
             expect(models.providers.deepseek.models.some((m: any) => m.id === "deepseek-chat")).toBe(true);
+        });
+    });
+
+    describe("getRagEmbeddingConfigSync", () => {
+        it("returns null when config.json does not exist", () => {
+            expect(getRagEmbeddingConfigSync()).toBeNull();
+        });
+
+        it("returns null when rag is not set", () => {
+            writeFileSync(
+                join(desktopDir, "config.json"),
+                JSON.stringify({ defaultProvider: "deepseek", providers: { deepseek: { apiKey: "sk" } } }),
+                "utf-8",
+            );
+            expect(getRagEmbeddingConfigSync()).toBeNull();
+        });
+
+        it("returns null when rag.embeddingProvider or embeddingModel is empty", () => {
+            writeFileSync(
+                join(desktopDir, "config.json"),
+                JSON.stringify({
+                    rag: { embeddingModel: "text-embedding-3-small" },
+                    providers: { openai: { apiKey: "sk" } },
+                }),
+                "utf-8",
+            );
+            expect(getRagEmbeddingConfigSync()).toBeNull();
+        });
+
+        it("returns null when provider has no apiKey", () => {
+            writeFileSync(
+                join(desktopDir, "config.json"),
+                JSON.stringify({
+                    rag: { embeddingProvider: "openai", embeddingModel: "text-embedding-3-small" },
+                    providers: { openai: {} },
+                }),
+                "utf-8",
+            );
+            expect(getRagEmbeddingConfigSync()).toBeNull();
+        });
+
+        it("returns config when rag and provider apiKey are set", () => {
+            writeFileSync(
+                join(desktopDir, "config.json"),
+                JSON.stringify({
+                    rag: { embeddingProvider: "openai", embeddingModel: "text-embedding-3-small" },
+                    providers: { openai: { apiKey: "sk-openai" } },
+                }),
+                "utf-8",
+            );
+            const cfg = getRagEmbeddingConfigSync();
+            expect(cfg).not.toBeNull();
+            expect(cfg!.provider).toBe("openai");
+            expect(cfg!.modelId).toBe("text-embedding-3-small");
+            expect(cfg!.apiKey).toBe("sk-openai");
+            expect(cfg!.baseUrl).toBe("https://api.openai.com/v1");
         });
     });
 });

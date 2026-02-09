@@ -35,6 +35,14 @@ interface DesktopConfiguredModel {
     maxTokens?: number;
 }
 
+/** RAG 长记忆：使用远端 embedding 模型；未配置时基于 RAG 的长记忆空转 */
+export interface RagEmbeddingConfig {
+    provider: string;
+    modelId: string;
+    apiKey?: string;
+    baseUrl?: string;
+}
+
 /** 与 Nest ConfigService 使用的 config.json 结构一致 */
 interface DesktopConfigJson {
     defaultProvider?: string;
@@ -43,6 +51,8 @@ interface DesktopConfigJson {
     maxAgentSessions?: number;
     providers?: Record<string, { apiKey?: string; baseUrl?: string; alias?: string }>;
     configuredModels?: DesktopConfiguredModel[];
+    /** RAG 知识库：embedding 使用该 provider+model，未配置时长记忆空转 */
+    rag?: { embeddingProvider?: string; embeddingModel?: string };
 }
 
 interface AgentItem {
@@ -90,6 +100,40 @@ export function getDesktopConfig(): { maxAgentSessions: number } {
         return { maxAgentSessions: DEFAULT_MAX_AGENT_SESSIONS };
     }
 }
+
+/** 同步读取 RAG embedding 配置；未配置或无效时返回 null，长记忆将空转 */
+export function getRagEmbeddingConfigSync(): RagEmbeddingConfig | null {
+    try {
+        const configPath = getConfigPath();
+        if (!existsSync(configPath)) return null;
+        const content = readFileSync(configPath, "utf-8");
+        const data = JSON.parse(content) as DesktopConfigJson;
+        const provider = data.rag?.embeddingProvider?.trim();
+        const modelId = data.rag?.embeddingModel?.trim();
+        if (!provider || !modelId) return null;
+        const prov = data.providers?.[provider];
+        const apiKey = prov?.apiKey?.trim();
+        if (!apiKey) return null;
+        let baseUrl = prov?.baseUrl?.trim();
+        if (!baseUrl) {
+            const d = EMBEDDING_DEFAULT_BASE_URL[provider];
+            baseUrl = d ?? "";
+        }
+        if (!baseUrl) return null;
+        return { provider, modelId, apiKey, baseUrl: baseUrl.replace(/\/$/, "") };
+    } catch {
+        return null;
+    }
+}
+
+const EMBEDDING_DEFAULT_BASE_URL: Record<string, string> = {
+    openai: "https://api.openai.com/v1",
+    "openai-custom": "",
+    deepseek: "https://api.deepseek.com/v1",
+    dashscope: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    nvidia: "https://integrate.api.nvidia.com/v1",
+    kimi: "https://api.moonshot.cn/v1",
+};
 
 export interface DesktopAgentConfig {
     provider: string;

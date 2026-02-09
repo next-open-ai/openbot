@@ -24,6 +24,17 @@
 
     <div class="sidebar-footer">
       <router-link
+        to="/sessions"
+        class="nav-item"
+        :class="{ active: isLogsActive }"
+        :title="t('settings.logsTitle')"
+      >
+        <span class="nav-icon" aria-hidden="true">
+          <IconLogs />
+        </span>
+        <span class="nav-label">{{ t('settings.logs') }}</span>
+      </router-link>
+      <router-link
         to="/settings"
         class="nav-item"
         :class="{ active: isActive('/settings') }"
@@ -47,10 +58,11 @@ import IconAgents from '@/components/icons/IconAgents.vue';
 import IconTasks from '@/components/icons/IconTasks.vue';
 import IconWorkResults from '@/components/icons/IconWorkResults.vue';
 import IconSettings from '@/components/icons/IconSettings.vue';
+import IconLogs from '@/components/icons/IconLogs.vue';
 
 export default {
   name: 'Sidebar',
-  components: { IconChat, IconAgents, IconTasks, IconWorkResults, IconSettings },
+  components: { IconChat, IconAgents, IconTasks, IconWorkResults, IconSettings, IconLogs },
   setup() {
     const route = useRoute();
     const { t } = useI18n();
@@ -67,9 +79,12 @@ export default {
       return route.path.startsWith(path);
     };
 
+    const isLogsActive = computed(() => route.path === '/sessions');
+
     return {
       navItems,
       isActive,
+      isLogsActive,
       t,
     };
   },
@@ -192,6 +207,8 @@ export default {
   border-top: 1px solid var(--glass-border);
   width: 100%;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 </style>

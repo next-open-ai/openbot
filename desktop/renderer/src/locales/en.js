@@ -322,6 +322,13 @@ export default {
     deleteUserConfirm: 'Delete this user? They will no longer be able to log in.',
     usernameRequired: 'Username is required',
     passwordRequired: 'Password is required',
+    knowledge: 'Knowledge',
+    knowledgeTitle: 'Knowledge (RAG long memory)',
+    knowledgeHint: 'Long memory uses a remote embedding model for vectorization. When not configured, experience summaries and conversation compactions are not written to the vector store (no-op). Configure at least one provider with an Embedding model in Model Configuration first.',
+    embeddingProvider: 'Embedding Provider',
+    embeddingModel: 'Embedding Model',
+    noEmbeddingProvider: 'Please configure at least one provider that offers an Embedding model (e.g. OpenAI, custom endpoint) in Model Configuration first.',
+    noEmbeddingModel: 'This provider has no Embedding models available; check provider-support or use an endpoint that supports embeddings.',
   },
   lang: {
     zh: '中文',

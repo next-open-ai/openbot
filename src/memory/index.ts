@@ -15,7 +15,7 @@ export async function initMemory(): Promise<void> {
 }
 
 /**
- * 将一条文本写入向量库
+ * 将一条文本写入向量库。未配置 RAG embedding 时跳过写入并返回占位 id（长记忆空转）。
  * @param text 内容
  * @param metadata.infotype 经验总结(experience) 或 compaction 摘要(compaction)
  * @param metadata.sessionId 会话 id
@@ -26,6 +26,7 @@ export async function addMemory(
 ): Promise<string> {
     const id = randomUUID();
     const vec = await embed(text);
+    if (vec === null) return id;
     const meta: MemoryMetadata = {
         ...metadata,
         createdAt: new Date().toISOString(),
@@ -41,20 +42,21 @@ export interface SearchMemoryOptions {
 }
 
 /**
- * 按语义搜索记忆，可按 infotype、sessionId 过滤
+ * 按语义搜索记忆，可按 infotype、sessionId 过滤。未配置 RAG embedding 时返回空数组（空转）。
  */
 export async function searchMemory(
     query: string,
     topK: number = 10,
     options?: SearchMemoryOptions,
 ): Promise<MemorySearchResult[]> {
+    const vec = await embed(query);
+    if (vec === null) return [];
     const opts = typeof options === "object" && options != null ? options : {};
     const k = opts.topK ?? topK;
     const filter =
         opts.infotype != null || opts.sessionId != null
             ? { infotype: opts.infotype, sessionId: opts.sessionId }
             : undefined;
-    const vec = await embed(query);
     const rows = await queryStore(vec, k, filter);
     return rows.map((r) => ({
         document: r.document,

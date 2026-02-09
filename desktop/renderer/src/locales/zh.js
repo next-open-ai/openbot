@@ -322,6 +322,13 @@ export default {
     deleteUserConfirm: '确定要删除该用户吗？删除后该用户将无法登录。',
     usernameRequired: '请填写用户名',
     passwordRequired: '请填写密码',
+    knowledge: '知识库',
+    knowledgeTitle: '知识库（RAG 长记忆）',
+    knowledgeHint: '长记忆使用远端 embedding 模型做向量化；未配置时，经验总结与对话摘要不会写入向量库，相关能力空转。需先在「模型配置」中配置至少一个带 Embedding 模型的 Provider。',
+    embeddingProvider: 'Embedding Provider',
+    embeddingModel: 'Embedding 模型',
+    noEmbeddingProvider: '请先在「模型配置」中配置至少一个提供 Embedding 模型的 Provider（如 OpenAI、自定义端点等）。',
+    noEmbeddingModel: '该 Provider 暂无 Embedding 模型可选，请在 provider-support 中确认或使用支持 embedding 的端点。',
   },
   lang: {
     zh: '中文',
