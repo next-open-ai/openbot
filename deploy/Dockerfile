@@ -4,7 +4,8 @@
 # ------------------------------------------------------------------------------
 # Stage 1: 构建（使用完整镜像以便 node-gyp 编译 better-sqlite3 等原生模块）
 # ------------------------------------------------------------------------------
-FROM node:20-bookworm AS builder
+#FROM node:20-bookworm AS builder
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22-alpine  AS builder
 
 WORKDIR /app
 
@@ -28,8 +29,8 @@ RUN cd desktop/renderer && npm ci && npm run build
 # ------------------------------------------------------------------------------
 # Stage 2: 运行镜像
 # ------------------------------------------------------------------------------
-FROM node:20-bookworm-slim
-
+#FROM node:20-bookworm-slim
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22-alpine
 WORKDIR /app
 
 # 从构建阶段拷贝依赖与产物（避免在 slim 中重新编译 better-sqlite3）

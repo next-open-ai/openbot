@@ -1,9 +1,9 @@
 kind: pipeline
 type: docker
-name: template-simple-admin-vue-PROD-UI
+name: openbot-PROD
 environment:
   APP_CODE: 100088
-  APP_NAME: template-simple-admin-vue-ui
+  APP_NAME: openbot
   IMAGE_ARCH: amd64
 
 steps:
@@ -20,7 +20,7 @@ steps:
   #     - npm install --legacy-peer-deps
   #     - npm run build:prod
 
-  - name: 构建yudao-ui-admin-vue3镜像&PUSH镜像到 Resigry Hub
+  - name: 构建openbot镜像&PUSH镜像到 Resigry Hub
     image: plugins/docker:20.14
     settings:
       dockerfile: ./deploy/Dockerfile
