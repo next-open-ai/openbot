@@ -1,5 +1,11 @@
 /** 中文 */
 export default {
+  app: {
+    configPromptTitle: '提醒配置供应商与模型',
+    configPromptDesc: '您尚未配置 API 供应商或默认模型，对话功能可能无法使用。是否前往设置页完成配置？',
+    configPromptConfirm: '去配置',
+    configPromptSkip: '不设置，先体验界面',
+  },
   common: {
     send: '发送',
     sending: '发送中…',

@@ -1,5 +1,11 @@
 /** English */
 export default {
+  app: {
+    configPromptTitle: 'Configure provider and model',
+    configPromptDesc: 'You have not configured an API provider or default model. Chat may not work. Go to settings to configure now?',
+    configPromptConfirm: 'Go to settings',
+    configPromptSkip: 'Skip and explore',
+  },
   common: {
     send: 'Send',
     sending: 'Sending…',

@@ -29,6 +29,8 @@ interface DesktopConfiguredModel {
     modelId: string;
     type: string;
     alias?: string;
+    /** 唯一编码，供界面与 agent.modelItemCode 匹配已设好的模型 */
+    modelItemCode?: string;
     reasoning?: boolean;
     cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
     contextWindow?: number;
@@ -47,6 +49,8 @@ export interface RagEmbeddingConfig {
 interface DesktopConfigJson {
     defaultProvider?: string;
     defaultModel?: string;
+    /** 缺省模型在 configuredModels 中的唯一标识，与 defaultProvider/defaultModel 一起确定缺省模型 */
+    defaultModelItemCode?: string;
     defaultAgentId?: string;
     maxAgentSessions?: number;
     providers?: Record<string, { apiKey?: string; baseUrl?: string; alias?: string }>;
@@ -57,9 +61,12 @@ interface DesktopConfigJson {
 
 interface AgentItem {
     id: string;
+    name?: string;
     workspace: string;
     provider?: string;
     model?: string;
+    /** 匹配 config.configuredModels 中的 modelItemCode，优先于 provider/model */
+    modelItemCode?: string;
 }
 
 interface AgentsFile {
@@ -199,6 +206,13 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
     const resolvedAgentId = agentId === "default" ? "default" : agentId;
     let provider = config.defaultProvider ?? "deepseek";
     let model = config.defaultModel ?? "deepseek-chat";
+    if (config.defaultModelItemCode && Array.isArray(config.configuredModels)) {
+        const configured = config.configuredModels.find((m) => m.modelItemCode === config.defaultModelItemCode);
+        if (configured) {
+            provider = configured.provider;
+            model = configured.modelId;
+        }
+    }
     let workspaceName: string = resolvedAgentId;
 
     if (existsSync(agentsPath)) {
@@ -210,8 +224,19 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
             if (agent) {
                 if (agent.workspace) workspaceName = agent.workspace;
                 else if (agent.id) workspaceName = agent.id;
-                if (agent.provider) provider = agent.provider;
-                if (agent.model) model = agent.model;
+                if (agent.modelItemCode && Array.isArray(config.configuredModels)) {
+                    const configured = config.configuredModels.find((m) => m.modelItemCode === agent.modelItemCode);
+                    if (configured) {
+                        provider = configured.provider;
+                        model = configured.modelId;
+                    } else {
+                        if (agent.provider) provider = agent.provider;
+                        if (agent.model) model = agent.model;
+                    }
+                } else {
+                    if (agent.provider) provider = agent.provider;
+                    if (agent.model) model = agent.model;
+                }
             }
         } catch {
             // ignore
@@ -238,6 +263,7 @@ export interface DesktopConfigListEntry {
 export interface DesktopConfigList {
     defaultProvider: string;
     defaultModel: string;
+    defaultModelItemCode?: string;
     providers: DesktopConfigListEntry[];
 }
 
@@ -268,26 +294,98 @@ async function writeDesktopConfigJson(config: DesktopConfigJson): Promise<void> 
 
 /**
  * 将某 provider 的 API Key 写入桌面 config（中心化配置源）。
- * openbot login 使用此方法，不再写 agent 目录 auth.json。
+ * openbot login 使用：缺省 alias 与 provider 同名；若有 baseUrl 则一并写入。
+ * 若传入 modelId 或未传则取该 provider 第一个模型，会补齐 defaultProvider/defaultModel、configuredModels、agents 默认智能体，后续可直接运行。
  */
-export async function setProviderApiKey(provider: string, apiKey: string): Promise<void> {
+export async function setProviderApiKey(provider: string, apiKey: string, modelId?: string): Promise<void> {
     const config = await readDesktopConfigJson();
     if (!config.providers) config.providers = {};
     if (!config.providers[provider]) config.providers[provider] = {};
-    config.providers[provider].apiKey = apiKey.trim();
+    const entry = config.providers[provider];
+    entry.apiKey = apiKey.trim();
+    if (entry.alias === undefined || entry.alias === "") entry.alias = provider;
+    const support = await getProviderSupport();
+    const supportEntry = support[provider];
+    if (supportEntry?.baseUrl != null && String(supportEntry.baseUrl).trim() !== "" && !(entry.baseUrl != null && String(entry.baseUrl).trim() !== "")) {
+        entry.baseUrl = supportEntry.baseUrl.trim();
+    }
     await writeDesktopConfigJson(config);
-    await syncDesktopConfigToModelsJson();
+
+    const effectiveModelId = (modelId != null && String(modelId).trim() !== "")
+        ? String(modelId).trim()
+        : await getFirstModelForProvider(provider);
+    if (effectiveModelId) {
+        await setDefaultModel(provider, effectiveModelId);
+    } else {
+        await syncDesktopConfigToModelsJson();
+    }
+}
+
+/** 生成 configuredModels 项的 modelItemCode，与界面约定一致 */
+function buildModelItemCode(provider: string, modelId: string): string {
+    return `${provider}_${modelId}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 /**
- * 将全局默认 provider/model 写入桌面 config。
- * openbot config set-model 使用此方法，不再写 agent 目录 models.json。
+ * 将全局默认 provider/model 写入桌面 config，并在 configuredModels 中增加/更新对应项，agents.json 中缺省智能体写入 modelItemCode。
+ * openbot config set-model 使用此方法。
  */
 export async function setDefaultModel(provider: string, modelId: string): Promise<void> {
+    const modelIdTrim = modelId.trim();
+    const modelItemCode = buildModelItemCode(provider, modelIdTrim);
     const config = await readDesktopConfigJson();
     config.defaultProvider = provider;
-    config.defaultModel = modelId.trim();
+    config.defaultModel = modelIdTrim;
+    config.defaultModelItemCode = modelItemCode;
+    if (!Array.isArray(config.configuredModels)) config.configuredModels = [];
+    const list = config.configuredModels;
+    const existing = list.find(
+        (m) => m.modelItemCode === modelItemCode || (m.provider === provider && m.modelId === modelIdTrim),
+    );
+    const item = {
+        provider,
+        modelId: modelIdTrim,
+        type: "llm" as const,
+        alias: `${modelIdTrim} item`,
+        modelItemCode,
+        reasoning: false,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 64000,
+        maxTokens: 8192,
+    };
+    if (existing) {
+        Object.assign(existing, item);
+    } else {
+        list.push(item);
+    }
     await writeDesktopConfigJson(config);
+
+    const agentsPath = join(getDesktopDir(), "agents.json");
+    if (existsSync(agentsPath)) {
+        try {
+            const raw = await readFile(agentsPath, "utf-8");
+            const data = JSON.parse(raw) as AgentsFile;
+            const agents = Array.isArray(data.agents) ? data.agents : [];
+            const defaultAgent = agents.find((a) => a.id === DEFAULT_AGENT_ID);
+            if (defaultAgent) {
+                (defaultAgent as AgentItem).provider = provider;
+                (defaultAgent as AgentItem).model = modelIdTrim;
+                (defaultAgent as AgentItem).modelItemCode = modelItemCode;
+            } else {
+                agents.unshift({
+                    id: DEFAULT_AGENT_ID,
+                    name: "主智能体",
+                    workspace: DEFAULT_AGENT_ID,
+                    provider,
+                    model: modelIdTrim,
+                    modelItemCode,
+                });
+            }
+            await writeFile(agentsPath, JSON.stringify({ agents }, null, 2), "utf-8");
+        } catch {
+            // ignore
+        }
+    }
     await syncDesktopConfigToModelsJson();
 }
 
@@ -311,7 +409,7 @@ export async function getDesktopConfigList(): Promise<DesktopConfigList> {
             hasKey: false,
         });
     }
-    return { defaultProvider, defaultModel, providers: entries };
+    return { defaultProvider, defaultModel, defaultModelItemCode: config.defaultModelItemCode, providers: entries };
 }
 
 /**
@@ -323,6 +421,57 @@ export async function ensureProviderSupportFile(): Promise<void> {
     if (existsSync(path)) return;
     ensureDesktopDir();
     await writeFile(path, JSON.stringify(DEFAULT_PROVIDER_SUPPORT, null, 2), "utf-8");
+}
+
+/** 若 config.json 不存在则写入默认结构，供 CLI/Gateway 启动时初始化 */
+async function ensureConfigJsonInitialized(): Promise<void> {
+    const configPath = getConfigPath();
+    if (existsSync(configPath)) return;
+    ensureDesktopDir();
+    const defaultConfig: DesktopConfigJson = {
+        defaultProvider: "deepseek",
+        defaultModel: "deepseek-chat",
+        defaultAgentId: DEFAULT_AGENT_ID,
+        maxAgentSessions: DEFAULT_MAX_AGENT_SESSIONS,
+        providers: {},
+        configuredModels: [],
+    };
+    await writeFile(configPath, JSON.stringify(defaultConfig, null, 2), "utf-8");
+}
+
+/** 若 agents.json 不存在则写入默认智能体，供 CLI/Gateway 启动时初始化 */
+async function ensureAgentsJsonInitialized(): Promise<void> {
+    const agentsPath = join(getDesktopDir(), "agents.json");
+    if (existsSync(agentsPath)) return;
+    ensureDesktopDir();
+    const defaultAgents: AgentsFile = {
+        agents: [
+            { id: DEFAULT_AGENT_ID, name: "主智能体", workspace: DEFAULT_AGENT_ID },
+        ],
+    };
+    await writeFile(agentsPath, JSON.stringify(defaultAgents, null, 2), "utf-8");
+}
+
+/**
+ * CLI / Gateway 运行时调用，确保 config.json、provider-support.json、agents.json 均完成初始化。
+ */
+export async function ensureDesktopConfigInitialized(): Promise<void> {
+    ensureDesktopDir();
+    await ensureProviderSupportFile();
+    await ensureConfigJsonInitialized();
+    await ensureAgentsJsonInitialized();
+}
+
+/**
+ * 取某 provider 在 provider-support 中的第一个 llm 模型 id；若无则返回第一个模型 id。
+ */
+export async function getFirstModelForProvider(provider: string): Promise<string | null> {
+    const support = await getProviderSupport();
+    const entry = support[provider];
+    if (!entry?.models?.length) return null;
+    const llm = entry.models.find((m) => m.types?.includes("llm"));
+    if (llm) return llm.id;
+    return entry.models[0].id;
 }
 
 /**
@@ -424,7 +573,7 @@ export async function syncDesktopConfigToModelsJson(): Promise<void> {
     for (const [providerId, userConfig] of Object.entries(configured)) {
         if (!userConfig?.apiKey?.trim()) continue;
         const defaults = SYNC_DEFAULTS[providerId] ?? { baseUrl: "", apiKey: "OPENAI_API_KEY", api: "openai-completions" };
-        const baseUrl = userConfig.baseUrl?.trim() || defaults.baseUrl;
+        const baseUrl = userConfig.baseUrl?.trim() || (support[providerId]?.baseUrl ?? "").trim() || defaults.baseUrl;
         if (!baseUrl) continue;
         const def = support[providerId];
         const items = configuredModels.filter((m) => m.provider === providerId);

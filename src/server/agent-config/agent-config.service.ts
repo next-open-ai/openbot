@@ -20,6 +20,8 @@ export interface AgentConfigItem {
     workspace: string;
     provider?: string;
     model?: string;
+    /** 匹配 config.configuredModels 中的 modelItemCode，优先于 provider/model */
+    modelItemCode?: string;
     /** 是否为系统缺省智能体（主智能体），不可删除 */
     isDefault?: boolean;
 }
@@ -147,7 +149,7 @@ export class AgentConfigService {
         return agent;
     }
 
-    async updateAgent(id: string, updates: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model'>>): Promise<AgentConfigItem> {
+    async updateAgent(id: string, updates: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode'>>): Promise<AgentConfigItem> {
         if (id === DEFAULT_AGENT_ID) {
             await this.ensureDefaultWorkspace();
         }
@@ -167,6 +169,7 @@ export class AgentConfigService {
         }
         if (updates.provider !== undefined) agent.provider = updates.provider;
         if (updates.model !== undefined) agent.model = updates.model;
+        if (updates.modelItemCode !== undefined) agent.modelItemCode = updates.modelItemCode;
         await this.writeAgentsFile(file);
         return { ...agent, isDefault: agent.id === DEFAULT_AGENT_ID };
     }
@@ -181,6 +184,47 @@ export class AgentConfigService {
             throw new NotFoundException('智能体不存在');
         }
         file.agents.splice(idx, 1);
+        await this.writeAgentsFile(file);
+    }
+
+    /**
+     * 根据 config 的 defaultProvider / defaultModel / defaultModelItemCode 及 configuredModels 同步 agents.json 中缺省智能体的 provider、model、modelItemCode。
+     * 在桌面保存配置（如修改默认模型）后调用，保证 agents 与 config 一致。
+     */
+    async syncDefaultAgentFromConfig(config: {
+        defaultProvider?: string;
+        defaultModel?: string;
+        defaultModelItemCode?: string;
+        configuredModels?: Array<{ provider: string; modelId: string; modelItemCode?: string }>;
+    }): Promise<void> {
+        const list = config.configuredModels ?? [];
+        let provider = config.defaultProvider?.trim();
+        let model = config.defaultModel?.trim();
+        let modelItemCode = config.defaultModelItemCode?.trim();
+        if (modelItemCode && list.length) {
+            const item = list.find((m) => m.modelItemCode === modelItemCode);
+            if (item) {
+                provider = item.provider;
+                model = item.modelId;
+            }
+        }
+        if (!provider || !model) return;
+        if (!modelItemCode && list.length) {
+            const item = list.find((m) => m.provider === provider && m.modelId === model);
+            if (item?.modelItemCode) modelItemCode = item.modelItemCode;
+        }
+        await this.ensureDefaultWorkspace();
+        const file = await this.readAgentsFile();
+        let idx = file.agents.findIndex((a) => a.id === DEFAULT_AGENT_ID);
+        if (idx < 0) {
+            file.agents.unshift(this.defaultAgent({ provider, model, modelItemCode }));
+            idx = 0;
+        } else {
+            const agent = file.agents[idx];
+            agent.provider = provider;
+            agent.model = model;
+            agent.modelItemCode = modelItemCode;
+        }
         await this.writeAgentsFile(file);
     }
 }

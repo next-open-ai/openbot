@@ -12,6 +12,7 @@ import {
     setDefaultModel,
     getDesktopConfigList,
     syncDesktopConfigToModelsJson,
+    ensureDesktopConfigInitialized,
 } from "./config/desktop-config.js";
 
 const require = createRequire(import.meta.url);
@@ -179,14 +180,15 @@ program
         process.on("SIGTERM", shutdown);
     });
 
-// Login command（写入桌面 config，中心化配置源）
+// Login command（写入桌面 config；可选 model，不传则取该 provider 第一个模型，补齐后可直接运行）
 program
     .command("login")
-    .description("Save API key for a provider to desktop config (~/.openbot/desktop)")
+    .description("Save API key for a provider to desktop config (~/.openbot/desktop); optional model, default first model")
     .argument("<provider>", "Provider name (e.g., deepseek, dashscope, openai)")
     .argument("<apiKey>", "API Key")
-    .action(async (provider, apiKey) => {
-        await setProviderApiKey(provider, apiKey);
+    .argument("[model]", "Model ID (optional; default: first model for provider)")
+    .action(async (provider, apiKey, model?: string) => {
+        await setProviderApiKey(provider, apiKey, model);
         console.log(`[openbot] API key saved for provider: ${provider}`);
     });
 
@@ -230,7 +232,10 @@ configCmd
         console.log("[openbot] Synced desktop providers to agent models.json");
     });
 
-program.parseAsync(process.argv).catch((err: unknown) => {
+(async () => {
+    await ensureDesktopConfigInitialized();
+    await program.parseAsync(process.argv);
+})().catch((err: unknown) => {
     console.error(err);
     process.exit(1);
 });

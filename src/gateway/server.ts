@@ -26,6 +26,7 @@ import { createServer as createNetServer } from "net";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { setBackendBaseUrl } from "./backend-url.js";
+import { ensureDesktopConfigInitialized } from "../config/desktop-config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 /** 包根目录（dist/gateway 的上级的上级），npm 安装后静态资源在 desktop/renderer/dist */
@@ -103,6 +104,7 @@ export async function startGatewayServer(port: number = 38080): Promise<{
     wss: WebSocketServer;
     close: () => Promise<void>;
 }> {
+    await ensureDesktopConfigInitialized();
     console.log(`Starting gateway server on port ${port}...`);
 
     // 1. Find available port for Desktop Server

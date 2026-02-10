@@ -157,7 +157,7 @@
 适用于：使用 **CLI**，或在自有环境中运行 **Gateway（Web）**。
 
 ```bash
-# 全局安装（sharp 依赖可能需 VPN，后续会优化）
+# 全局安装（测试过node版本：20/22 24太新，有一些库要本地编译环境）
 npm install -g @next-open-ai/openbot
 ```
 
@@ -196,7 +196,7 @@ npm link   # 或 npm install -g . 本地全局安装
 - 从 [Releases](https://github.com/next-open-ai/openbot/releases) 下载对应平台的安装包（macOS / Windows）。
 - 安装后启动 OpenBot Desktop，按界面引导配置 API Key 与默认模型即可使用。
 
-首次使用建议在设置中配置默认 Provider/模型，或通过 CLI 执行一次 `openbot login` / `openbot config set-model`（与桌面端共用 `~/.openbot/desktop/` 配置）。
+首次使用建议在设置中配置默认 Provider/模型，或通过 CLI 执行 `openbot login <provider> <apiKey> [model]` / `openbot config set-model <provider> <modelId>`（与桌面端共用 `~/.openbot/desktop/` 配置）。
 
 ---
 
@@ -226,20 +226,29 @@ openbot --model deepseek-chat --provider deepseek "写一段 TypeScript 示例"
 
 CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/`）。主要文件：
 
-- **config.json**：全局缺省 provider/model、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表等。
-- **agents.json**：智能体列表；每个智能体可单独配置 provider、model、工作区。
+- **config.json**：全局缺省 provider/model、**defaultModelItemCode**（缺省模型在 configuredModels 中的唯一标识）、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表（configuredModels）等。
+- **agents.json**：智能体列表；每个智能体可配置 provider、model、**modelItemCode**（匹配 configuredModels）、工作区。
 - **provider-support.json**：Provider 与模型目录，供设置页下拉选择。
 
 | 操作 | 命令 | 说明 |
 |------|------|------|
-| 保存 API Key | `openbot login <provider> <apiKey>` | 写入桌面 config.json |
-| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 设置全局缺省 provider 与 model |
+| 保存 API Key（可选指定模型） | `openbot login <provider> <apiKey> [model]` | 写入 config.json；不传 model 时取该 provider 第一个模型并补齐缺省配置，可直接运行 |
+| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 设置全局缺省 provider、model 及 defaultModelItemCode |
 | 查看配置 | `openbot config list` | 列出 providers 与缺省模型 |
 | 同步到 Agent 目录 | `openbot config sync` | 生成并写入 `~/.openbot/agent/models.json` |
 
 **首次使用建议**：
 
 ```bash
+# 方式一：login 后直接对话（不传 model 时自动用该 provider 第一个模型）
+openbot login deepseek YOUR_DEEPSEEK_API_KEY
+openbot "总结一下当前有哪些技能"
+
+# 方式二：指定模型再 login
+openbot login deepseek YOUR_DEEPSEEK_API_KEY deepseek-reasoner
+openbot "总结一下当前有哪些技能"
+
+# 方式三：先 login 再单独设置缺省模型
 openbot login deepseek YOUR_DEEPSEEK_API_KEY
 openbot config set-model deepseek deepseek-chat
 openbot config sync

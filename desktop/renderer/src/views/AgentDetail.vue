@@ -78,8 +78,8 @@
                       <option value="">—</option>
                       <option
                         v-for="item in configuredModelsList"
-                        :key="item.provider + '|' + item.modelId"
-                        :value="item.provider + '|' + item.modelId"
+                        :key="optionValueFor(item)"
+                        :value="optionValueFor(item)"
                       >
                         {{ getConfiguredModelOptionLabel(item) }}
                       </option>
@@ -302,11 +302,17 @@ export default {
     function getConfiguredModelOptionLabel(item) {
       return getProviderDisplayName(item.provider) + ' / ' + (item.alias?.trim() || item.modelId || '—');
     }
+    function optionValueFor(item) {
+      return (item.modelItemCode && item.modelItemCode.trim()) ? item.modelItemCode : `${item.provider}|${item.modelId}`;
+    }
     const selectedModelItem = computed(() => {
       const key = selectedConfiguredModelKey.value;
       if (!key) return null;
-      const [provider, modelId] = key.split('|');
-      return configuredModelsList.value.find((it) => it.provider === provider && it.modelId === modelId) || null;
+      if (key.includes('|')) {
+        const [provider, modelId] = key.split('|');
+        return configuredModelsList.value.find((it) => it.provider === provider && it.modelId === modelId) || null;
+      }
+      return configuredModelsList.value.find((it) => (it.modelItemCode && it.modelItemCode === key)) || null;
     });
 
     async function loadAgent() {
@@ -348,11 +354,13 @@ export default {
         }
         payload.provider = modelForm.value.provider || undefined;
         payload.model = modelForm.value.model || undefined;
+        const item = selectedModelItem.value;
+        if (item && item.modelItemCode) payload.modelItemCode = item.modelItemCode;
         await agentConfigAPI.updateAgent(agent.value.id, payload);
         if (!agent.value.isDefault) {
           agent.value.name = configForm.value.name || agent.value.workspace;
         }
-        agent.value = { ...agent.value, provider: modelForm.value.provider, model: modelForm.value.model };
+        agent.value = { ...agent.value, provider: modelForm.value.provider, model: modelForm.value.model, modelItemCode: item?.modelItemCode ?? agent.value.modelItemCode };
       } catch (e) {
         console.error('Save config failed', e);
       } finally {
@@ -370,23 +378,32 @@ export default {
         configuredModelsList.value = list;
         const defaultProvider = cfg.defaultProvider || '';
         const defaultModel = cfg.defaultModel || '';
+        const agentModelItemCode = agent.value?.modelItemCode;
         const agentProvider = modelForm.value.provider || agent.value?.provider || '';
         const agentModel = modelForm.value.model || agent.value?.model || '';
         const keyFor = (p, m) => (p && m ? `${p}|${m}` : '');
-        let key = keyFor(agentProvider, agentModel);
-        const inList = (k) => list.some((it) => keyFor(it.provider, it.modelId) === k);
-        if (!key || !inList(key)) {
+        const inListByCode = (code) => list.some((it) => it.modelItemCode === code);
+        const inListByProviderModel = (k) => list.some((it) => keyFor(it.provider, it.modelId) === k);
+        let key = '';
+        if (agentModelItemCode && inListByCode(agentModelItemCode)) {
+          key = agentModelItemCode;
+        } else if (agentProvider && agentModel && inListByProviderModel(keyFor(agentProvider, agentModel))) {
+          key = keyFor(agentProvider, agentModel);
+        }
+        if (!key && inListByProviderModel(keyFor(defaultProvider, defaultModel))) {
           key = keyFor(defaultProvider, defaultModel);
         }
-        if ((!key || !inList(key)) && list.length) {
+        if (!key && list.length) {
           const first = list[0];
-          key = keyFor(first.provider, first.modelId);
+          key = optionValueFor(first);
         }
         selectedConfiguredModelKey.value = key || '';
         if (key) {
-          const [p, m] = key.split('|');
-          modelForm.value.provider = p || '';
-          modelForm.value.model = m || '';
+          const item = key.includes('|') ? list.find((it) => keyFor(it.provider, it.modelId) === key) : list.find((it) => it.modelItemCode === key);
+          if (item) {
+            modelForm.value.provider = item.provider || '';
+            modelForm.value.model = item.modelId || '';
+          }
         }
       } catch (e) {
         configuredModelsList.value = [];
@@ -403,9 +420,15 @@ export default {
         modelForm.value.model = '';
         return;
       }
-      const [p, m] = key.split('|');
-      modelForm.value.provider = p || '';
-      modelForm.value.model = m || '';
+      const item = selectedModelItem.value;
+      if (item) {
+        modelForm.value.provider = item.provider || '';
+        modelForm.value.model = item.modelId || '';
+      } else if (key.includes('|')) {
+        const [p, m] = key.split('|');
+        modelForm.value.provider = p || '';
+        modelForm.value.model = m || '';
+      }
     }
 
     async function loadSkills() {
@@ -527,6 +550,7 @@ export default {
       selectedConfiguredModelKey,
       selectedModelItem,
       getConfiguredModelOptionLabel,
+      optionValueFor,
       getProviderDisplayName,
       onConfiguredModelSelect,
       modelConfigLoading,

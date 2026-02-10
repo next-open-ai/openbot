@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { getProviderSupport, syncDesktopConfigToModelsJson } from '../../config/desktop-config.js';
+import { AgentConfigService } from '../agent-config/agent-config.service.js';
 
 /** 模型 cost 配置，写入 models.json；缺省均为 0 */
 export interface ModelCost {
@@ -20,6 +21,8 @@ export interface ConfiguredModelItem {
     type: 'llm' | 'embedding' | 'image';
     /** 显示用别名，缺省用模型名；重名时自动加后缀区分 */
     alias?: string;
+    /** 唯一编码，供界面与 agent.modelItemCode 匹配已设好的模型 */
+    modelItemCode?: string;
     /** 是否推理模型，缺省 false；写入 models.json */
     reasoning?: boolean;
     /** 成本配置，缺省均为 0；写入 models.json */
@@ -34,6 +37,8 @@ export interface AppConfig {
     gatewayUrl: string;
     defaultProvider: string;
     defaultModel: string;
+    /** 缺省模型在 configuredModels 中的唯一标识（defaultModelItemCode），与 defaultProvider/defaultModel 一起确定缺省模型 */
+    defaultModelItemCode?: string;
     /** 缺省智能体 id */
     defaultAgentId?: string;
     theme: 'light' | 'dark';
@@ -62,7 +67,7 @@ export class ConfigService {
     private configPath: string;
     private config: AppConfig;
 
-    constructor() {
+    constructor(private readonly agentConfigService: AgentConfigService) {
         const homeDir = process.env.HOME || process.env.USERPROFILE || '';
         const configDir = join(homeDir, '.openbot', 'desktop');
         this.configPath = join(configDir, 'config.json');
@@ -108,14 +113,26 @@ export class ConfigService {
         }
     }
 
+    /** 每次获取前从磁盘重新读取，保证打开配置界面时显示最新（含 CLI 写入的配置） */
     async getConfig(): Promise<AppConfig> {
+        await this.loadConfig();
         return this.config;
     }
 
     async updateConfig(updates: Partial<AppConfig>): Promise<AppConfig> {
         this.config = { ...this.config, ...updates };
         this.config.defaultAgentId = this.getDefaultAgentId(this.config);
+        const p = this.config.defaultProvider;
+        const m = this.config.defaultModel;
+        const list = this.config.configuredModels ?? [];
+        if (p && m && list.length) {
+            const item = list.find((x) => x.provider === p && x.modelId === m);
+            if (item?.modelItemCode) this.config.defaultModelItemCode = item.modelItemCode;
+        }
         await this.saveConfig();
+        await this.agentConfigService.syncDefaultAgentFromConfig(this.config).catch((err) =>
+            console.warn('[ConfigService] syncDefaultAgentFromConfig failed', err),
+        );
         await syncDesktopConfigToModelsJson().catch((err) =>
             console.warn('[ConfigService] syncDesktopConfigToModelsJson failed', err),
         );

@@ -681,13 +681,24 @@ export default {
     watch(() => route.query?.tab, (q) => {
       if (SETTINGS_TABS.includes(q)) activeTab.value = q;
     });
-    watch(activeTab, (tab) => {
+    watch(activeTab, async (tab) => {
       if (route.query?.tab !== tab) {
         router.replace({ path: '/settings', query: { ...route.query, tab } });
       }
       if (tab === 'users') loadUsers();
-      if (tab === 'models') initModelConfigTab();
-      if (tab === 'knowledge') initKnowledgeTab();
+      // 打开对应配置 Tab 时先从磁盘刷新配置再初始化界面，显示最新（含 CLI 写入）
+      if (tab === 'general') {
+        await settingsStore.loadConfig();
+        loadAgentConfig();
+      }
+      if (tab === 'models') {
+        await settingsStore.loadConfig();
+        initModelConfigTab();
+      }
+      if (tab === 'knowledge') {
+        await settingsStore.loadConfig();
+        initKnowledgeTab();
+      }
     });
     const localConfig = ref({});
     const modelConfigSubTab = ref('provider');
@@ -752,14 +763,18 @@ export default {
       const list = config.value?.configuredModels;
       return Array.isArray(list) ? list : [];
     });
-    /** 当前缺省模型在列表中的下标（仅第一个匹配项视为缺省，避免重复显示） */
+    /** 当前缺省模型在列表中的下标（优先按 defaultModelItemCode 匹配，否则按 provider+modelId） */
     const defaultModelIndex = computed(() => {
       const list = configuredModelsList.value;
+      const code = config.value?.defaultModelItemCode;
+      if (code) {
+        const idx = list.findIndex((item) => item.modelItemCode === code);
+        if (idx >= 0) return idx;
+      }
       const p = config.value?.defaultProvider;
       const m = config.value?.defaultModel;
       if (!p || !m) return -1;
-      const idx = list.findIndex((item) => item.provider === p && item.modelId === m);
-      return idx;
+      return list.findIndex((item) => item.provider === p && item.modelId === m);
     });
     /** 已配置且 provider-support 中提供 embedding 模型的 Provider 列表 */
     const providersWithEmbedding = computed(() => {
@@ -991,6 +1006,10 @@ export default {
       if (provider && type) settingsStore.loadModels(provider, type).catch(() => {});
     }
 
+    function buildModelItemCode(provider, modelId) {
+      return `${provider}_${modelId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
     async function submitAddModel() {
       const { provider, type, modelId } = addModelForm.value;
       if (!provider || !modelId) return;
@@ -1000,11 +1019,14 @@ export default {
       const excludeList = isEdit ? list.filter((_, i) => i !== editingModelIndex.value) : list;
       const alias = ensureUniqueModelAlias(baseAlias, excludeList);
       const c = addModelForm.value.cost || {};
+      const existingItem = isEdit ? list[editingModelIndex.value] : null;
+      const modelItemCode = (existingItem && existingItem.modelItemCode) ? existingItem.modelItemCode : buildModelItemCode(provider, modelId);
       const newItem = {
         provider,
         modelId,
         type,
         alias,
+        modelItemCode,
         reasoning: !!addModelForm.value.reasoning,
         cost: {
           input: Number(c.input) || 0,
@@ -1020,7 +1042,7 @@ export default {
         nextList = list.map((it, i) => (i === editingModelIndex.value ? newItem : it));
         const wasDefault = list[editingModelIndex.value]?.provider === config.value?.defaultProvider && list[editingModelIndex.value]?.modelId === config.value?.defaultModel;
         if (wasDefault) {
-          await settingsStore.updateConfig({ configuredModels: nextList, defaultProvider: provider, defaultModel: modelId });
+          await settingsStore.updateConfig({ configuredModels: nextList, defaultProvider: provider, defaultModel: modelId, defaultModelItemCode: newItem.modelItemCode });
         } else {
           await settingsStore.updateConfig({ configuredModels: nextList });
         }
@@ -1028,7 +1050,7 @@ export default {
         nextList = [...list, newItem];
         await settingsStore.updateConfig({ configuredModels: nextList });
         if (list.length === 0) {
-          await settingsStore.updateConfig({ defaultProvider: provider, defaultModel: modelId });
+          await settingsStore.updateConfig({ defaultProvider: provider, defaultModel: modelId, defaultModelItemCode: newItem.modelItemCode });
         }
       }
       closeAddModelModal();
@@ -1042,7 +1064,7 @@ export default {
     function removeConfiguredModel(idx) {
       const list = configuredModelsList.value.filter((_, i) => i !== idx);
       if (!list.length) {
-        settingsStore.updateConfig({ configuredModels: [], defaultProvider: 'deepseek', defaultModel: 'deepseek-chat' });
+        settingsStore.updateConfig({ configuredModels: [], defaultProvider: 'deepseek', defaultModel: 'deepseek-chat', defaultModelItemCode: undefined });
         return;
       }
       const removed = configuredModelsList.value[idx];
@@ -1050,18 +1072,24 @@ export default {
       settingsStore.updateConfig({ configuredModels: list });
       if (wasDefault && list.length) {
         const first = list[0];
-        settingsStore.updateConfig({ defaultProvider: first.provider, defaultModel: first.modelId });
+        settingsStore.updateConfig({ defaultProvider: first.provider, defaultModel: first.modelId, defaultModelItemCode: first.modelItemCode || undefined });
       }
     }
 
     function isDefaultModel(item) {
+      const code = config.value?.defaultModelItemCode;
+      if (code) return item.modelItemCode === code;
       const p = config.value?.defaultProvider;
       const m = config.value?.defaultModel;
       return p === item.provider && m === item.modelId;
     }
 
     function setDefaultFromConfigured(item) {
-      settingsStore.updateConfig({ defaultProvider: item.provider, defaultModel: item.modelId });
+      settingsStore.updateConfig({
+        defaultProvider: item.provider,
+        defaultModel: item.modelId,
+        defaultModelItemCode: item.modelItemCode || undefined,
+      });
     }
 
     async function saveProviderConfig() {
@@ -1086,7 +1114,13 @@ export default {
 
     function onAddProviderSelect() {
       const p = addProviderForm.value.provider;
-      addProviderForm.value.alias = p ? (providerSupport.value[p]?.name || p) : '';
+      const entry = providerSupport.value[p];
+      addProviderForm.value.alias = p ? (entry?.name || p) : '';
+      if (entry?.baseUrl != null && String(entry.baseUrl).trim() !== '') {
+        addProviderForm.value.baseUrl = String(entry.baseUrl).trim();
+      } else {
+        addProviderForm.value.baseUrl = '';
+      }
     }
 
     function submitAddProvider() {
@@ -1120,6 +1154,14 @@ export default {
 
     function startEditProvider(prov) {
       editingProvider.value = prov;
+      const cur = localProviderConfig.value[prov];
+      const preset = providerSupport.value[prov]?.baseUrl != null && String(providerSupport.value[prov].baseUrl).trim() !== '' ? String(providerSupport.value[prov].baseUrl).trim() : '';
+      if (cur && (!cur.baseUrl || !String(cur.baseUrl).trim()) && preset) {
+        localProviderConfig.value = {
+          ...localProviderConfig.value,
+          [prov]: { ...cur, baseUrl: preset },
+        };
+      }
     }
 
     function cancelEditProvider() {
@@ -1160,9 +1202,12 @@ export default {
         alert(t('settings.noConfiguredProvider'));
         return;
       }
+      const list = configuredModelsList.value;
+      const item = list.find((x) => x.provider === prov && x.modelId === model);
       await settingsStore.updateConfig({
         defaultProvider: prov,
         defaultModel: model,
+        defaultModelItemCode: item?.modelItemCode || undefined,
       });
       alert(t('common.saved'));
     }
@@ -1319,6 +1364,8 @@ export default {
       try {
         activeTab.value = tabFromQuery();
         await settingsStore.loadProviderSupport();
+        // 打开设置页时先刷新磁盘配置，再初始化各 Tab 数据，显示最新（含 CLI 写入）
+        await settingsStore.loadConfig();
         loadAgentConfig();
         initModelConfigTab();
         if (activeTab.value === 'knowledge') initKnowledgeTab();
