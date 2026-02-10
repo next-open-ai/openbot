@@ -27,13 +27,13 @@ COPY desktop/renderer ./desktop/renderer
 RUN cd desktop/renderer && npm ci && npm run build
 
 # ------------------------------------------------------------------------------
-# Stage 2: 运行镜像
+# Stage 2: 运行镜像（必须用 glibc 系如 Debian，Alpine/musl 会导致 better-sqlite3 报 fcntl64 找不到）
+# 若私有仓库无 slim 标签，可改为与 builder 同镜像或使用 node:22-bookworm-slim
 # ------------------------------------------------------------------------------
-#FROM node:20-bookworm-slim
-FROM ccr.ccs.tencentyun.com/windwithlife/node:22-alpine
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim
 WORKDIR /app
 
-# 从构建阶段拷贝依赖与产物（避免在 slim 中重新编译 better-sqlite3）
+# 从构建阶段拷贝依赖与产物（builder 与 runtime 须同为 glibc，否则 better-sqlite3 会 ERR_DLOPEN_FAILED）
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 RUN npm prune --production
