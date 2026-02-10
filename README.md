@@ -4,8 +4,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**OpenBot** 是基于 Agent Skills 与编码智能体（Coding Agent）的**一体化 AI 助手平台**，支持 CLI、WebSocket 网关与桌面端。通过可插拔技能（Skills）、浏览器自动化、代码执行与长期记忆，为开发与日常任务提供可扩展的 AI 工作流。
-** 大家一起面对 AI Agent 时代的到来**
+**OpenBot** 是基于 Agent Skills 与编码智能体（Coding Agent）的**一体化 AI 助手平台**，支持 CLI、WebSocket 网关与桌面端。通过可插拔技能（Skills）、浏览器自动化、代码执行与长期记忆，为开发与日常任务提供可扩展的 AI 工作流。除提供可自我升级扩展的 AI Agent 引擎及多通道、多终端接入外，后续将支持 MCP 以降低 Token 消耗与大模型幻觉，并接入现有 AI Agent 生态（下一步计划接入 Coze）。
 
 ---
 
@@ -13,11 +12,13 @@
 
 | 能力 | 说明 |
 |------|------|
-| **技能架构** | 基于 Agent Skills 规范，支持多路径加载、本地安装与动态扩展 |
+| **技能架构** | 基于 Agent Skills 规范，支持多路径加载、本地安装与动态扩展；支持技能自我发现与自我迭代 |
 | **编码智能体** | 集成 [pi-coding-agent](https://www.npmjs.com/package/@mariozechner/pi-coding-agent)，支持多轮工具调用与代码执行 |
 | **浏览器自动化** | 内置 [agent-browser](https://www.npmjs.com/package/agent-browser)，可导航、填表、截图与数据抓取 |
 | **长期记忆** | 向量存储（Vectra）+ 本地嵌入，支持经验总结与会话压缩（compaction） |
-| **多端接入** | CLI、WebSocket 网关、Electron 桌面端，同一套 Agent 核心 |
+| **多端接入** | CLI、WebSocket 网关、Electron 桌面端，同一套 Agent 核心；各端技术栈见下方「各端技术栈」 |
+| **MCP（规划中）** | 为降低 Token 消耗与大模型幻觉，后续将支持 MCP（Model Context Protocol） |
+| **生态接入（规划中）** | 接入现有 AI Agent 生态，下一步计划接入 Coze 生态 |
 
 ---
 
@@ -56,7 +57,7 @@
 
 - **CLI**：直接调用 Agent 核心，单次提示或批量脚本。
 - **WebSocket Gateway**（`src/gateway/`）：对外提供 WebSocket（JSON-RPC），供 Web/移动端连接；负责起端口、拉 Nest 后端子进程、代理 `/server-api` 请求。**与「Desktop 后端」是不同进程。**
-- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；默认端口 38081（Gateway 启动时若被占用会自动寻找可用端口）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。桌面前端与 Gateway 通过 HTTP 调用此服务。
+- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；默认端口 38081。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
 
@@ -64,10 +65,10 @@
 
 | 目录 | 说明 |
 |------|------|
-| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`。不要与「Gateway 进程」混淆。 |
+| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`。 |
 | `src/gateway/` | **WebSocket 网关**，独立进程，提供 WS JSON-RPC 并代理到 Desktop 后端。 |
 | `src/agent/` | Agent 核心（CLI 与 Gateway 共用）。 |
-| `src/config/` | 桌面配置（~/.openbot/desktop）：config.json、agents.json、provider-support.json；CLI 与 Gateway 共用；同步到 agent 目录 models.json 的逻辑在此。 |
+| `src/config/` | 桌面配置（~/.openbot/desktop）：config.json、agents.json、provider-support.json；CLI 与 Gateway 共用。 |
 | `examples/workspace/` | 示例工作区数据（仅示例/测试用）。真实工作区根目录为 `~/.openbot/workspace/`。 |
 
 ---
@@ -140,26 +141,74 @@
 
 ---
 
-## 快速开始
+# 一、安装与部署
 
-### 环境要求
+安装与部署按**安装方式**划分：npm、Docker、Desktop 安装包。任选其一即可使用对应端的 CLI、Web 或 Desktop。
 
-- **Node.js** ≥ 20
-- 可选：`OPENAI_API_KEY` （按所用 provider 配置）
+## 环境要求
 
-### 安装与构建
+- **Node.js** ≥ 20（npm 安装与本地开发必需）
+- 可选：按所用 Provider 配置 API Key（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`）
+
+---
+
+## 1.1 npm 安装
+
+适用于：使用 **CLI**，或在自有环境中运行 **Gateway（Web）**。
 
 ```bash
-npm install
-npm run build
+# 全局安装（sharp 依赖可能需 VPN，后续会优化）
+npm install -g @next-open-ai/openbot
 ```
 
-### CLI 使用
+安装后可直接使用 `openbot` 命令（见下方「使用方式」）。若需从源码构建再安装：
 
 ```bash
-# 全局安装（sharp包会因为github国内不可达，请尝试VPN.后续会考虑优化掉这个库）
-npm install -g @next-open-ai/openbot
+git clone <repo>
+cd openbot
+npm install
+npm run build
+npm link   # 或 npm install -g . 本地全局安装
+```
 
+---
+
+## 1.2 Docker 部署
+
+适用于：在服务器或容器环境中运行 **Gateway**，供 Web/其他客户端连接。
+
+> **说明**：Docker 镜像与编排正在规划中，当前推荐使用 npm 全局安装后执行 `openbot gateway` 部署网关。
+
+规划中的使用方式示例：
+
+```bash
+# 示例（以实际仓库/镜像名为准）
+# docker pull next-open-ai/openbot
+# docker run -p 38080:38080 -e OPENAI_API_KEY=xxx next-open-ai/openbot gateway
+```
+
+---
+
+## 1.3 Desktop 安装包
+
+适用于：仅使用 **桌面端**，无需 Node 环境。
+
+- 从 [Releases](https://github.com/next-open-ai/openbot/releases) 下载对应平台的安装包（macOS / Windows）。
+- 安装后启动 OpenBot Desktop，按界面引导配置 API Key 与默认模型即可使用。
+
+首次使用建议在设置中配置默认 Provider/模型，或通过 CLI 执行一次 `openbot login` / `openbot config set-model`（与桌面端共用 `~/.openbot/desktop/` 配置）。
+
+---
+
+# 二、使用方式
+
+按**使用端**划分：CLI、Web、Desktop；后续将支持 iOS、Android、飞书等。
+
+## 2.1 CLI
+
+在已通过 **npm 安装** 或 **源码构建并 link** 的环境中，在终端使用 `openbot`。
+
+```bash
 # 直接对话（使用默认 workspace 与技能）
 openbot "总结一下当前有哪些技能"
 
@@ -173,55 +222,134 @@ openbot --dry-run --prompt "查北京天气"
 openbot --model deepseek-chat --provider deepseek "写一段 TypeScript 示例"
 ```
 
-### CLI 配置模型选项
+### CLI 配置（与桌面端共用）
 
 CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/`）。主要文件：
 
-- **config.json**：全局缺省 provider/model、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表（`configuredModels`）等。
-- **agents.json**：智能体列表；每个智能体可单独配置 provider、model、工作区（workspace）。桌面端「当前智能体」由 `defaultAgentId` 指定。
-- **provider-support.json**：Provider 与模型目录，供设置页下拉选择；缺失时自动从内置默认生成并写入。
-
-未在命令行显式指定 `--provider` / `--model` 时，CLI 使用**缺省智能体**（`defaultAgentId`）对应的 provider 与 model；若该智能体在 agents.json 中单独配置了则用其值，否则用 config 的 `defaultProvider` / `defaultModel`。
+- **config.json**：全局缺省 provider/model、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表等。
+- **agents.json**：智能体列表；每个智能体可单独配置 provider、model、工作区。
+- **provider-support.json**：Provider 与模型目录，供设置页下拉选择。
 
 | 操作 | 命令 | 说明 |
 |------|------|------|
-| 保存 API Key | `openbot login <provider> <apiKey>` | 将某 Provider 的 API Key 写入桌面 config.json（仅桌面配置，不同步到 agent 目录 auth） |
-| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 在桌面 config 中设置全局缺省 provider 与 model（如 `deepseek` / `deepseek-chat`） |
-| 查看配置 | `openbot config list` | 列出桌面配置中的 providers 与缺省模型 |
-| 同步到 Agent 目录 | `openbot config sync` | 根据桌面 config 的 providers 与已配置模型列表（或 provider-support 默认）生成并写入 `~/.openbot/agent/models.json`，供 pi-agent 使用 |
-
-**常用 Provider 示例**：`deepseek`、`dashscope`、`openai`、`openai-custom`（自定义 OpenAI 兼容端点）、`nvidia`、`kimi`。模型 ID 需与各 Provider 支持的一致（如 DeepSeek 的 `deepseek-chat`、OpenAI 的 `gpt-4o`）；使用 `openai-custom` 时可填写自部署模型的 ID。
-
-**命令行覆盖**：单次执行时可用 `--provider`、`--model`、`--api-key` 覆盖配置或环境变量中的值。
-
-**环境变量**：未在桌面配置中保存 API Key 时，会回退到环境变量，例如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY` 等（详见 `openbot --help` 末尾的 Environment 说明）。
+| 保存 API Key | `openbot login <provider> <apiKey>` | 写入桌面 config.json |
+| 设置缺省模型 | `openbot config set-model <provider> <modelId>` | 设置全局缺省 provider 与 model |
+| 查看配置 | `openbot config list` | 列出 providers 与缺省模型 |
+| 同步到 Agent 目录 | `openbot config sync` | 生成并写入 `~/.openbot/agent/models.json` |
 
 **首次使用建议**：
 
 ```bash
-# 1. 保存 API Key（任选其一或多种）
 openbot login deepseek YOUR_DEEPSEEK_API_KEY
-# openbot login openai YOUR_OPENAI_API_KEY
-
-# 2. 设置缺省模型
 openbot config set-model deepseek deepseek-chat
-
-# 3. 可选：同步到 agent 目录（桌面端保存配置后也会自动同步）
 openbot config sync
-
-# 4. 直接对话
 openbot "总结一下当前有哪些技能"
 ```
 
-### 启动 WebSocket 网关
+未在命令行指定 `--provider` / `--model` 时，CLI 使用缺省智能体对应的配置；单次可用 `--provider`、`--model`、`--api-key` 覆盖。未在配置中保存 API Key 时，会回退到环境变量（如 `OPENAI_API_KEY`、`DEEPSEEK_API_KEY`）。
+
+---
+
+## 2.2 Web
+
+通过 **WebSocket 网关** 使用 OpenBot：先启动网关，再通过 Web 客户端连接。
 
 ```bash
+# 启动网关（默认端口 38080）
 openbot gateway --port 38080
 ```
 
-客户端通过 `ws://localhost:38080` 连接，使用 JSON-RPC 调用 `connect`、`agent.chat` 等。
+客户端连接 `ws://localhost:38080`，使用 JSON-RPC 调用 `connect`、`agent.chat`、`agent.cancel` 等（详见下方「Gateway API 简述」）。  
+前端可自行实现或使用仓库内 Web 示例（若有）。
 
-### 启动桌面端
+---
+
+## 2.3 Desktop
+
+- **通过安装包**：安装后直接打开 OpenBot Desktop，登录/配置后即可使用桌面界面（会话、智能体、技能、任务、工作区等）。
+- **通过源码**：在「开发」章节中运行 `npm run desktop:dev` 启动开发版桌面。
+
+桌面端与 CLI 共用同一套配置与 Agent 核心，同一台机器上配置一次即可双端使用。
+
+---
+
+## 2.4 即将支持
+
+**通道与终端**
+
+| 端 | 说明 |
+|----|------|
+| **iOS** | 规划中 |
+| **Android** | 规划中 |
+| **飞书** | 规划中 |
+
+上述端将通过 WebSocket Gateway 或专用适配与现有 Agent 核心对接。
+
+**生态与协议**
+
+| 方向 | 说明 |
+|------|------|
+| **MCP** | 支持 MCP 协议，降低 Token 消耗与大模型幻觉，与 Skill 自我发现/迭代形成互补 |
+| **Coze 生态** | 接入现有 AI Agent 生态，下一步计划接入 Coze |
+
+文档与发布节奏后续更新。
+
+---
+
+# 三、开发
+
+面向**参与 OpenBot 源码开发**的读者，按形态分为 CLI、Web（Gateway + 前端）、Desktop 三部分。
+
+## 环境与依赖
+
+- Node.js ≥ 20
+- 仓库克隆后安装依赖并构建：
+
+```bash
+git clone <repo>
+cd openbot
+npm install
+npm run build
+```
+
+---
+
+## 3.1 CLI 开发
+
+- 入口：`openbot` → bin → `dist/cli.js`
+- 技术：Commander（子命令 `gateway`、`login`、`config`）、TypeScript 5.7
+- 配置与数据：`~/.openbot/agent`、`~/.openbot/desktop`（与桌面共用）
+
+修改 CLI 后重新构建并本地安装：
+
+```bash
+npm run build
+npm link
+openbot --help
+```
+
+---
+
+## 3.2 Web 开发（Gateway + 前端）
+
+- **Gateway**：`src/gateway/`，默认端口 38080，可 `-p` 指定；协议 JSON-RPC over WebSocket；职责包括连接管理、消息路由、静态资源、拉 Nest 子进程。
+- **方法**：`connect`、`agent.chat`、`agent.cancel`、`subscribe_session`、`unsubscribe_session` 等。
+
+本地启动网关：
+
+```bash
+npm run build
+openbot gateway --port 38080
+```
+
+若仓库内有独立 Web 前端工程，则分别启动 Gateway 与前端 dev server，前端通过 `ws://localhost:38080` 连接。
+
+---
+
+## 3.3 Desktop 开发
+
+- **后端**：NestJS（`src/server/`），前缀 `server-api`，默认端口 38081；Gateway 启动时会拉该子进程并代理 `/server-api`。
+- **前端**：Electron 28 + Vue 3 + Pinia + Vite 5，位于 `desktop/`。
 
 ```bash
 # 先构建核心（若未构建）
@@ -236,21 +364,10 @@ npm run desktop:install
 
 ---
 
-## Gateway API 简述
-
-- **请求**：`{ "type": "request", "id": "<id>", "method": "<method>", "params": { ... } }`
-- **成功响应**：`{ "type": "response", "id": "<id>", "result": { ... } }`
-- **错误响应**：`{ "type": "response", "id": "<id>", "error": { "message": "..." } }`
-- **服务端事件**：如 `agent.chunk`（流式输出）、`agent.tool`（工具调用）等，格式为 `{ "type": "event", "event": "...", "payload": { ... } }`
-
-常用方法：先 `connect` 建立会话，再通过 `agent.chat` 发送消息并接收流式/事件；`agent.cancel` 取消当前任务。
-
----
-
-## 开发
+## 测试
 
 ```bash
-# 单元/集成测试（含 config/desktop-config、gateway/utils、server agents e2e）
+# 单元/集成测试（含 config、gateway、server e2e）
 npm test
 
 # 仅 e2e
@@ -260,7 +377,35 @@ npm run test:e2e
 npm run test:memory
 ```
 
-测试分布：`test/config/` 桌面配置、`test/gateway/` 网关工具方法、`test/server/` Nest 后端 e2e。
+测试分布：`test/config/` 桌面配置、`test/gateway/` 网关、`test/server/` Nest 后端 e2e。
+
+---
+
+# 附录
+
+## Gateway API 简述
+
+- **请求**：`{ "type": "request", "id": "<id>", "method": "<method>", "params": { ... } }`
+- **成功响应**：`{ "type": "response", "id": "<id>", "result": { ... } }`
+- **错误响应**：`{ "type": "response", "id": "<id>", "error": { "message": "..." } }`
+- **服务端事件**：如 `agent.chunk`（流式输出）、`agent.tool`（工具调用）等，格式为 `{ "type": "event", "event": "...", "payload": { ... } }`
+
+常用流程：先 `connect` 建立会话，再通过 `agent.chat` 发送消息并接收流式/事件；`agent.cancel` 取消当前任务。
+
+---
+
+## 各端技术栈
+
+详见上文「各端技术栈」章节（CLI、WebSocket Gateway、Agent 核心、Desktop 后端/前端、记忆与向量、内置技能）。
+
+---
+
+## 内置技能
+
+| 技能 | 说明 |
+|------|------|
+| find-skills | 发现与安装 Cursor/Agent 技能 |
+| agent-browser | 浏览器自动化（Playwright/agent-browser CLI） |
 
 ---
 
