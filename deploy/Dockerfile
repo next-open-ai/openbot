@@ -5,7 +5,7 @@
 # Stage 1: 构建（使用完整镜像以便 node-gyp 编译 better-sqlite3 等原生模块）
 # ------------------------------------------------------------------------------
 #FROM node:20-bookworm AS builder
-FROM node:22.11.0  AS builder
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
 
 WORKDIR /app
 
