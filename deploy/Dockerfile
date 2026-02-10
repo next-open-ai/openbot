@@ -2,9 +2,9 @@
 # 构建时在 openbot 仓库根目录执行: docker build -f deploy/Dockerfile -t openbot .
 
 # ------------------------------------------------------------------------------
-# Stage 1: 构建
+# Stage 1: 构建（使用完整镜像以便 node-gyp 编译 better-sqlite3 等原生模块）
 # ------------------------------------------------------------------------------
-FROM node:20-bookworm-slim AS builder
+FROM node:20-bookworm AS builder
 
 WORKDIR /app
 
@@ -32,9 +32,10 @@ FROM node:20-bookworm-slim
 
 WORKDIR /app
 
-# 仅安装生产依赖（含 better-sqlite3 等原生模块，bookworm-slim 兼容预编译二进制）
+# 从构建阶段拷贝依赖与产物（避免在 slim 中重新编译 better-sqlite3）
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --production
 
 # 从构建阶段拷贝产物
 COPY --from=builder /app/dist ./dist
