@@ -46,7 +46,7 @@ steps:
       soa_gateway: agent.zhangyongqiao.com
       soa_gateway_cert: api-default-secret
 
-      build_tag: build-ci-template-simple-admin-${DRONE_BUILD_NUMBER}
+      build_tag: build-ci-openbot-${DRONE_BUILD_NUMBER}
 
 volumes:
   - name: mvncache
