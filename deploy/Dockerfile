@@ -6,7 +6,7 @@
 # ------------------------------------------------------------------------------
 #FROM node:20-bookworm AS builder
 #FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
-FROM FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim  AS builder
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim  AS builder
 WORKDIR /app
 
 # 根项目依赖（含 devDependencies，用于 tsc 构建）
