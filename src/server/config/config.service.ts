@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { getProviderSupport, syncDesktopConfigToModelsJson } from '../../config/desktop-config.js';
+import { getProviderSupport, syncDesktopConfigToModelsJson } from '../../core/config/desktop-config.js';
 import { AgentConfigService } from '../agent-config/agent-config.service.js';
 
 /** 模型 cost 配置，写入 models.json；缺省均为 0 */

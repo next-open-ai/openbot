@@ -106,7 +106,7 @@ Agent Manager
 ## 📁 Directory Structure
 
 ```
-desktop/
+apps/desktop/
 ├── main.js                 # Electron main process
 ├── preload.js             # Electron preload script
 ├── package.json           # Root dependencies
@@ -199,11 +199,11 @@ All three services support hot reload:
 ## 🚢 Building for Production
 
 ```bash
-cd desktop
+cd apps/desktop
 npm run build
 ```
 
-This creates platform-specific installers in `desktop/dist/`.
+This creates platform-specific installers in `apps/desktop/dist/`.
 
 ## 📄 License
 

@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
-import { agentManager } from "../../agent/agent-manager.js";
-import { getExperienceContextForUserMessage } from "../../memory/index.js";
-import { loadDesktopAgentConfig } from "../../config/desktop-config.js";
+import { agentManager } from "../../core/agent/agent-manager.js";
+import { getExperienceContextForUserMessage } from "../../core/memory/index.js";
+import { loadDesktopAgentConfig } from "../../core/config/desktop-config.js";
 
 export interface RunScheduledTaskBody {
     sessionId: string;

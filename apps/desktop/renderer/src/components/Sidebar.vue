@@ -2,7 +2,7 @@
   <div class="sidebar">
     <div class="sidebar-header">
       <div class="logo" :title="'OpenBot'">
-        <img src="@/assets/logo.png" alt="OpenBot" class="logo-image" />
+        <img src="@/assets/logo.svg" alt="OpenBot" class="logo-image" />
       </div>
     </div>
 
@@ -117,11 +117,11 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
   overflow: hidden;
   transition: transform 0.3s ease;
 }
@@ -134,7 +134,7 @@ export default {
 .logo-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .sidebar-nav {

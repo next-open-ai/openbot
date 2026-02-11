@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { agentManager } from '../../agent/agent-manager.js';
+import { agentManager } from '../../core/agent/agent-manager.js';
 import { DatabaseService } from '../database/database.service.js';
 
 export type SessionType = 'scheduled' | 'chat' | 'system';

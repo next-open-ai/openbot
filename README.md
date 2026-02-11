@@ -81,7 +81,7 @@
 |------|------|
 | 运行时 | Node.js 20+ |
 | 语言 | TypeScript 5.7 |
-| 入口 | `openbot`（bin → `dist/cli.js`） |
+| 入口 | `openbot`（bin → `dist/cli/cli.js`） |
 | 框架 | Commander（子命令：`gateway`、`login`、`config`） |
 | 配置 | `~/.openbot/agent`（API Key、模型、技能等） |
 
@@ -325,7 +325,7 @@ npm run build
 
 ## 3.1 CLI 开发
 
-- 入口：`openbot` → bin → `dist/cli.js`
+- 入口：`openbot` → bin → `dist/cli/cli.js`
 - 技术：Commander（子命令 `gateway`、`login`、`config`）、TypeScript 5.7
 - 配置与数据：`~/.openbot/agent`、`~/.openbot/desktop`（与桌面共用）
 
@@ -358,7 +358,7 @@ openbot gateway --port 38080
 ## 3.3 Desktop 开发
 
 - **后端**：NestJS（`src/server/`），前缀 `server-api`，默认端口 38081；Gateway 启动时会拉该子进程并代理 `/server-api`。
-- **前端**：Electron 28 + Vue 3 + Pinia + Vite 5，位于 `desktop/`。
+- **前端**：Electron 28 + Vue 3 + Pinia + Vite 5，位于 `apps/desktop/`。
 
 ```bash
 # 先构建核心（若未构建）

@@ -37,7 +37,7 @@ import {
     resolveInstallTarget,
     installSkillFromPath,
     installSkillByUrl,
-} from "../../src/installer/skill-installer.js";
+} from "../../src/core/installer/skill-installer.js";
 
 // 使用临时目录作为 HOME，避免污染用户目录
 const testRoot = join(tmpdir(), `openbot-installer-test-${Date.now()}`);

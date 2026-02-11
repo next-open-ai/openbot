@@ -4,7 +4,7 @@ import { DatabaseService } from '../../src/server/database/database.service.js';
 import { AgentsModule } from '../../src/server/agents/agents.module.js';
 import { AgentsService } from '../../src/server/agents/agents.service.js';
 
-jest.mock('../../src/agent/agent-manager.js', () => ({
+jest.mock('../../src/core/agent/agent-manager.js', () => ({
     agentManager: { deleteSession: jest.fn(() => true) },
 }));
 

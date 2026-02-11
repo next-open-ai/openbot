@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getOpenbotAgentDir, getOpenbotWorkspaceDir } from '../../agent/agent-dir.js';
+import { getOpenbotAgentDir, getOpenbotWorkspaceDir } from '../../core/agent/agent-dir.js';
 
 const execAsync = promisify(exec);
 

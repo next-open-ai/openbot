@@ -1,5 +1,5 @@
 import type { GatewayClient } from "../types.js";
-import { agentManager } from "../../agent/agent-manager.js";
+import { agentManager } from "../../core/agent/agent-manager.js";
 
 /**
  * Handle agent.cancel: abort the current turn for the given session.

@@ -36,11 +36,11 @@ import { handleConnection } from "./connection-handler.js";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { setBackendBaseUrl } from "./backend-url.js";
-import { ensureDesktopConfigInitialized } from "../config/desktop-config.js";
+import { ensureDesktopConfigInitialized } from "../core/config/desktop-config.js";
 import { createNestAppEmbedded } from "../server/bootstrap.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, "..", "..");
-const STATIC_DIR = join(PACKAGE_ROOT, "desktop", "renderer", "dist");
+const STATIC_DIR = join(PACKAGE_ROOT, "apps", "desktop", "renderer", "dist");
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",

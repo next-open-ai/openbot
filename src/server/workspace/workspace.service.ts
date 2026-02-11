@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { readdir, stat, rm } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 import { existsSync } from 'fs';
-import { getOpenbotWorkspaceDir } from '../../agent/agent-dir.js';
+import { getOpenbotWorkspaceDir } from '../../core/agent/agent-dir.js';
 
 export interface WorkspaceItem {
     name: string;

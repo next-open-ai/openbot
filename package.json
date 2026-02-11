@@ -3,7 +3,7 @@
     "publishConfig": {
         "access": "public"
     },
-    "version": "0.1.10",
+    "version": "0.2.1",
     "description": "CLI and library to run prompts with skill paths (Agent Skills style). Use as npm package or openbot CLI.",
     "type": "module",
     "main": "dist/index.js",
@@ -19,10 +19,10 @@
         "dist",
         "skills",
         "README.md",
-        "desktop/renderer/dist"
+        "apps/desktop/renderer/dist"
     ],
     "bin": {
-        "openbot": "./dist/cli.js"
+        "openbot": "./dist/cli/cli.js"
     },
     "dependencies": {
         "@mariozechner/pi-ai": "^0.51.2",
@@ -56,13 +56,15 @@
     "scripts": {
         "clean": "rm -rf dist",
         "build": "npm run clean && tsc",
-        "prepublishOnly": "npm run build && cd desktop && npm run build:renderer",
-        "start": "node dist/cli.js",
-        "run": "node dist/cli.js",
-        "dev": "npm run build && node dist/cli.js",
-        "desktop:dev": "cd desktop && npm run dev",
-        "desktop:build": "cd desktop && npm run build",
-        "desktop:install": "cd desktop && npm install",
+        "build:web": "cd apps/desktop && npm run build:renderer",
+        "build:all": "npm run build && npm run build:web",
+        "prepublishOnly": "npm run build && cd apps/desktop && npm run build:renderer",
+        "start": "node dist/cli/cli.js",
+        "run": "node dist/cli/cli.js",
+        "dev": "npm run build && node dist/cli/cli.js",
+        "desktop:dev": "cd apps/desktop && npm run dev",
+        "desktop:build": "cd apps/desktop && npm run build",
+        "desktop:install": "cd apps/desktop && npm install",
         "test": "jest --config test/jest.config.cjs",
         "test:memory": "node test/run-memory.mjs",
         "test:e2e": "OPENBOT_DB_PATH=:memory: jest --config test/jest.config.cjs --testPathPattern=e2e",

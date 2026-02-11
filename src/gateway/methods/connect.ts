@@ -1,5 +1,5 @@
 import type { GatewayClient, ConnectParams } from "../types.js";
-import { agentManager } from "../../agent/agent-manager.js";
+import { agentManager } from "../../core/agent/agent-manager.js";
 import { randomUUID } from "crypto";
 
 /**

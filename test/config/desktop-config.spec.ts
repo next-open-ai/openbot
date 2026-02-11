@@ -15,8 +15,8 @@ import {
     ensureProviderSupportFile,
     syncDesktopConfigToModelsJson,
     getRagEmbeddingConfigSync,
-} from "../../src/config/desktop-config.js";
-import { getOpenbotAgentDir } from "../../src/agent/agent-dir.js";
+} from "../../src/core/config/desktop-config.js";
+import { getOpenbotAgentDir } from "../../src/core/agent/agent-dir.js";
 
 describe("config/desktop-config", () => {
     let testDir: string;

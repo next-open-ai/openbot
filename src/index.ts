@@ -4,9 +4,9 @@ export {
     formatSkillsForPrompt,
     type Skill,
     type LoadSkillsFromDirOptions,
-} from "./agent/skills.js";
-export { run, type RunOptions, type RunResult } from "./agent/run.js";
-export { getOpenbotAgentDir, ensureDefaultAgentDir } from "./agent/agent-dir.js";
+} from "./core/agent/skills.js";
+export { run, type RunOptions, type RunResult } from "./core/agent/run.js";
+export { getOpenbotAgentDir, ensureDefaultAgentDir } from "./core/agent/agent-dir.js";
 export {
     resolveInstallTarget,
     installSkillByUrl,
@@ -15,7 +15,7 @@ export {
     type InstallByUrlResult,
     type InstallFromPathOptions,
     type InstallFromPathResult,
-} from "./installer/index.js";
+} from "./core/installer/index.js";
 export {
     getProviderSupport,
     ensureProviderSupportFile,
@@ -24,4 +24,4 @@ export {
     type ProviderSupportEntry,
     type ProviderSupportModel,
     type ModelSupportType,
-} from "./config/desktop-config.js";
+} from "./core/config/desktop-config.js";

@@ -7,7 +7,7 @@ You need **3 terminals** to run the complete application:
 ### Terminal 1: OpenBot Gateway
 ```bash
 cd /Users/ctrip/code/test/gravity/openbot
-node dist/cli.js gateway
+node dist/cli/cli.js gateway
 ```
 
 **Expected output:**
@@ -84,7 +84,7 @@ Once all services are running:
 **Solution:** 
 ```bash
 # Kill existing processes
-pkill -f "node dist/cli.js gateway"
+pkill -f "node dist/cli/cli.js gateway"
 pkill -f "npm run desktop:dev"
 ```
 
@@ -121,7 +121,7 @@ If something goes wrong:
 ```bash
 # Terminal 1
 Ctrl+C  # Stop gateway
-node dist/cli.js gateway  # Restart
+node dist/cli/cli.js gateway  # Restart
 
 # Terminal 2  
 Ctrl+C  # Stop desktop app

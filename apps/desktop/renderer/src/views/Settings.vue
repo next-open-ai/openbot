@@ -503,7 +503,7 @@
           
           <div class="about-card">
             <div class="logo-large">
-              <img src="@/assets/logo.png" alt="OpenBot" />
+              <img src="@/assets/logo.svg" alt="OpenBot" />
             </div>
             <h3>OpenBot Desktop</h3>
             <p class="version">v1.0.0</p>

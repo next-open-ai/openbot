@@ -1,9 +1,9 @@
 import type { GatewayClient, AgentChatParams } from "../types.js";
-import { agentManager } from "../../agent/agent-manager.js";
-import { getExperienceContextForUserMessage } from "../../memory/index.js";
+import { agentManager } from "../../core/agent/agent-manager.js";
+import { getExperienceContextForUserMessage } from "../../core/memory/index.js";
 import { send, createEvent } from "../utils.js";
 import { connectedClients } from "../clients.js";
-import { getDesktopConfig, loadDesktopAgentConfig } from "../../config/desktop-config.js";
+import { getDesktopConfig, loadDesktopAgentConfig } from "../../core/config/desktop-config.js";
 
 /**
  * Broadcast message to all clients subscribed to a session

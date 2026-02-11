@@ -2,7 +2,7 @@
  * 在 Gateway 层处理 POST /server-api/skills/install-from-path，
  * 委托核心 installer 将本地技能目录复制到全局或工作区，不依赖 Nest。
  */
-import { installSkillFromPath } from "../../installer/index.js";
+import { installSkillFromPath } from "../../core/installer/index.js";
 
 export interface InstallFromPathBody {
     path: string;

@@ -49,5 +49,5 @@ ENV NODE_ENV=production
 EXPOSE 38080
 
 # 使用 openbot CLI；默认启动 Gateway
-ENTRYPOINT ["node", "dist/cli.js"]
+ENTRYPOINT ["node", "dist/cli/cli.js"]
 CMD ["gateway", "--port", "38080"]
