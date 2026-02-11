@@ -1,37 +1,85 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import Database from 'better-sqlite3';
-import { mkdirSync, existsSync } from 'fs';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 
-@Injectable()
-export class DatabaseService implements OnModuleDestroy {
-    private db: Database.Database | null = null;
+/** RunResult compatible with better-sqlite3 for callers that use .changes / .lastInsertRowid */
+export interface RunResult {
+    changes: number;
+    lastInsertRowid: number;
+}
 
-    getDb(): Database.Database {
-        if (!this.db) {
-            const pathEnv = process.env.OPENBOT_DB_PATH;
-            const defaultDir = join(homedir(), '.openbot', 'desktop', 'data');
-            const path =
-                pathEnv === ':memory:' || pathEnv === ''
-                    ? ':memory:'
-                    : pathEnv ?? join(process.env.OPENBOT_DB_DIR ?? defaultDir, 'openbot.db');
-            if (path !== ':memory:') {
-                const dir = path.endsWith('.db') ? join(path, '..') : path;
-                if (!existsSync(dir)) {
-                    mkdirSync(dir, { recursive: true });
-                }
+/** sql.js Database type (minimal for our usage) */
+type SqlJsDatabase = {
+    run(sql: string, params?: unknown[]): void;
+    exec(sql: string): { columns: string[]; values: unknown[][] }[];
+    prepare(sql: string): {
+        bind(params: unknown[]): void;
+        step(): boolean;
+        getAsObject(): Record<string, unknown>;
+        free(): void;
+    };
+    export(): Uint8Array;
+    close(): void;
+};
+
+@Injectable()
+export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+    private sqlDb: SqlJsDatabase | null = null;
+    private dbPath: string | ':memory:' | null = null;
+    private initPromise: Promise<void> | null = null;
+
+    async onModuleInit(): Promise<void> {
+        if (this.initPromise) return this.initPromise;
+        this.initPromise = this.doInit();
+        return this.initPromise;
+    }
+
+    private async doInit(): Promise<void> {
+        const pathEnv = process.env.OPENBOT_DB_PATH;
+        const defaultDir = join(homedir(), '.openbot', 'desktop', 'data');
+        const path =
+            pathEnv === ':memory:' || pathEnv === ''
+                ? ':memory:'
+                : pathEnv ?? join(process.env.OPENBOT_DB_DIR ?? defaultDir, 'openbot.db');
+
+        if (path !== ':memory:') {
+            const dir = path.endsWith('.db') ? join(path, '..') : path;
+            if (!existsSync(dir)) {
+                mkdirSync(dir, { recursive: true });
             }
-            this.db = new Database(path);
-            this.db.pragma('journal_mode = WAL');
-            this.runMigrations();
         }
-        return this.db;
+
+        const initSqlJs = (await import('sql.js')).default;
+        const SQL = await initSqlJs();
+        let db: SqlJsDatabase;
+        if (path === ':memory:') {
+            db = new SQL.Database() as SqlJsDatabase;
+            this.dbPath = ':memory:';
+        } else {
+            if (existsSync(path)) {
+                const buf = readFileSync(path);
+                db = new SQL.Database(new Uint8Array(buf)) as SqlJsDatabase;
+            } else {
+                db = new SQL.Database() as SqlJsDatabase;
+            }
+            this.dbPath = path;
+        }
+        this.sqlDb = db;
+        db.run('PRAGMA foreign_keys = ON;');
+        this.runMigrations();
+    }
+
+    private getDb(): SqlJsDatabase {
+        if (!this.sqlDb) {
+            throw new Error('Database not initialized. Ensure onModuleInit() has completed (Nest awaits it before listening).');
+        }
+        return this.sqlDb;
     }
 
     private runMigrations(): void {
-        const db = this.db!;
-        db.exec(`
+        const db = this.getDb();
+        const ddl = `
           CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
             created_at INTEGER NOT NULL,
@@ -99,37 +147,73 @@ export class DatabaseService implements OnModuleDestroy {
           );
           CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id);
           CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at);
-        `);
-        // Add session type column if missing (scheduled vs chat)
+        `;
+        const statements = ddl.split(';').map((s) => s.trim()).filter(Boolean);
+        for (const stmt of statements) {
+            db.run(stmt + ';');
+        }
         try {
-            const info = db.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+            const info = this.all<{ name: string }>('PRAGMA table_info(sessions)', []);
             if (!info.some((c) => c.name === 'type')) {
-                db.exec(`ALTER TABLE sessions ADD COLUMN type TEXT DEFAULT 'chat'`);
+                db.run("ALTER TABLE sessions ADD COLUMN type TEXT DEFAULT 'chat';");
             }
             if (!info.some((c) => c.name === 'agent_id')) {
-                db.exec(`ALTER TABLE sessions ADD COLUMN agent_id TEXT DEFAULT 'default'`);
+                db.run("ALTER TABLE sessions ADD COLUMN agent_id TEXT DEFAULT 'default';");
             }
         } catch (_) {
             // ignore
         }
     }
 
-    run(sql: string, params: unknown[] = []): Database.RunResult {
-        return this.getDb().prepare(sql).run(...params);
+    run(sql: string, params: unknown[] = []): RunResult {
+        const db = this.getDb();
+        db.run(sql, params as unknown[]);
+        const rows = db.exec('SELECT changes() AS c, last_insert_rowid() AS id');
+        const c = rows[0]?.values?.[0]?.[0] ?? 0;
+        const id = rows[0]?.values?.[0]?.[1] ?? 0;
+        return { changes: Number(c), lastInsertRowid: Number(id) };
     }
 
     get<T>(sql: string, params: unknown[] = []): T | undefined {
-        return this.getDb().prepare(sql).get(...params) as T | undefined;
+        const db = this.getDb();
+        const stmt = db.prepare(sql);
+        try {
+            stmt.bind(params as unknown[]);
+            const hasRow = stmt.step();
+            return (hasRow ? (stmt.getAsObject() as T) : undefined);
+        } finally {
+            stmt.free();
+        }
     }
 
     all<T>(sql: string, params: unknown[] = []): T[] {
-        return this.getDb().prepare(sql).all(...params) as T[];
+        const db = this.getDb();
+        const stmt = db.prepare(sql);
+        try {
+            stmt.bind(params as unknown[]);
+            const rows: T[] = [];
+            while (stmt.step()) {
+                rows.push(stmt.getAsObject() as T);
+            }
+            return rows;
+        } finally {
+            stmt.free();
+        }
     }
 
     onModuleDestroy(): void {
-        if (this.db) {
-            this.db.close();
-            this.db = null;
+        if (!this.sqlDb) return;
+        if (this.dbPath && this.dbPath !== ':memory:') {
+            try {
+                const data = this.sqlDb.export();
+                writeFileSync(this.dbPath, Buffer.from(data));
+            } catch (e) {
+                console.error('[DatabaseService] Failed to persist database:', e);
+            }
         }
+        this.sqlDb.close();
+        this.sqlDb = null;
+        this.dbPath = null;
+        this.initPromise = null;
     }
 }

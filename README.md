@@ -45,7 +45,7 @@
 │  Agent 核心      │    │  Desktop Backend (NestJS)   │    │  Memory / 向量存储   │
 │  AgentManager   │    │  server-api/*               │    │  Vectra + 嵌入       │
 │  pi-coding-agent│    │  Agents · Skills · Tasks    │    │  compaction 扩展     │
-│  pi-ai 多模型   │    │  Auth · Users · Workspace   │    │  better-sqlite3      │
+│  pi-ai 多模型   │    │  Auth · Users · Workspace   │    │  sql.js              │
 └────────┬────────┘    └─────────────────────────────┘    └─────────────────────┘
          │
          ▼
@@ -110,7 +110,7 @@
 | 框架 | NestJS 10、Express、Socket.io |
 | 前缀 | `server-api` |
 | 模块 | Database · Agents · AgentConfig · Skills · Config · Auth · Users · Workspace · Tasks · Usage |
-| 数据 | better-sqlite3（若使用本地库） |
+| 数据 | sql.js（SQLite WASM，无需预编译） |
 
 ### Desktop 前端（Electron + Vue）
 
@@ -130,7 +130,7 @@
 | 向量索引 | Vectra（LocalIndex） |
 | 嵌入 | 远端 API（config.json 中 RAG 知识库配置的 embedding 模型；未配置时长记忆空转） |
 | 扩展 | compaction-extension（会话压缩、摘要入 prompt） |
-| 持久化 | 与 agent 目录一致的 memory 目录、better-sqlite3（若用于元数据） |
+| 持久化 | 与 agent 目录一致的 memory 目录、sql.js（若用于元数据） |
 
 ### 内置技能
 

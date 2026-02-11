@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DatabaseModule } from '../../src/server/database/database.module.js';
+import { DatabaseService } from '../../src/server/database/database.service.js';
 import { AgentsModule } from '../../src/server/agents/agents.module.js';
 import { AgentsService } from '../../src/server/agents/agents.service.js';
 
@@ -15,6 +16,8 @@ describe('AgentsService (e2e, SQLite)', () => {
         const module: TestingModule = await Test.createTestingModule({
             imports: [DatabaseModule, AgentsModule],
         }).compile();
+        const db = module.get(DatabaseService);
+        await db.onModuleInit();
         service = module.get<AgentsService>(AgentsService);
     });
 

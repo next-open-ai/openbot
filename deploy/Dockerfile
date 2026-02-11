@@ -2,7 +2,7 @@
 # 构建时在 openbot 仓库根目录执行: docker build -f deploy/Dockerfile -t openbot .
 
 # ------------------------------------------------------------------------------
-# Stage 1: 构建（使用完整镜像以便 node-gyp 编译 better-sqlite3 等原生模块）
+# Stage 1: 构建（使用 sql.js 纯 JS/WASM，无需 Python/node-gyp，任意 Node 镜像即可）
 # ------------------------------------------------------------------------------
 #FROM node:20-bookworm AS builder
 FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
@@ -27,13 +27,13 @@ COPY desktop/renderer ./desktop/renderer
 RUN cd desktop/renderer && npm ci && npm run build
 
 # ------------------------------------------------------------------------------
-# Stage 2: 运行镜像（必须用 glibc 系如 Debian，Alpine/musl 会导致 better-sqlite3 报 fcntl64 找不到）
-# 若私有仓库无 slim 标签，可改为与 builder 同镜像或使用 node:22-bookworm-slim
+# Stage 2: 运行镜像（sql.js 无原生依赖，Alpine / Debian 均可）
+# 若私有仓库无 slim 标签，可改为与 builder 同镜像或 node:22-bookworm-slim
 # ------------------------------------------------------------------------------
-FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim
 WORKDIR /app
 
-# 从构建阶段拷贝依赖与产物（builder 与 runtime 须同为 glibc，否则 better-sqlite3 会 ERR_DLOPEN_FAILED）
+# 从构建阶段拷贝依赖与产物（无原生模块，任意 Linux 镜像即可）
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 RUN npm prune --production
