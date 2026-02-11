@@ -4,9 +4,8 @@
 # ------------------------------------------------------------------------------
 # Stage 1: 构建（使用 sql.js 纯 JS/WASM，无需 Python/node-gyp，任意 Node 镜像即可）
 # ------------------------------------------------------------------------------
-#FROM node:20-bookworm AS builder
-#FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
-FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim  AS builder
+# 私有仓库若无 slim 标签，两阶段均用同一完整镜像即可
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim AS builder
 WORKDIR /app
 
 # 根项目依赖（含 devDependencies，用于 tsc 构建）
@@ -27,10 +26,9 @@ COPY apps/desktop/renderer ./apps/desktop/renderer
 RUN cd apps/desktop/renderer && npm ci && npm run build
 
 # ------------------------------------------------------------------------------
-# Stage 2: 运行镜像（sql.js 无原生依赖，Alpine / Debian 均可）
-# 若私有仓库无 slim 标签，可改为与 builder 同镜像或 node:22-bookworm-slim
+# Stage 2: 运行镜像（与 builder 同镜像；若仓库有 22.11.0-slim 可改用 slim 减小体积）
 # ------------------------------------------------------------------------------
-FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim
+FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim
 WORKDIR /app
 
 # 从构建阶段拷贝依赖与产物（无原生模块，任意 Linux 镜像即可）
