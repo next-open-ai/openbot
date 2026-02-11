@@ -182,7 +182,8 @@ class SocketService {
         if (window.location.hostname === 'localhost' && window.location.port === '5173') {
             host = 'localhost:38080';
         }
-        const url = `${protocol}//${host}`;
+        const base = `${protocol}//${host}`;
+        const url = base.replace(/\/$/, '') + '/ws';
         console.log('Connecting to Gateway WebSocket:', url);
 
         try {

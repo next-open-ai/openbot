@@ -1,8 +1,13 @@
 /**
- * WebSocket Gateway 入口：提供 WS JSON-RPC（如 agent.chat），并代理 /server-api 到 Desktop 后端（src/server/）。
- * 与 Nest Desktop Backend 是不同进程；本进程可拉 Nest 子进程并转发请求。
+ * Gateway 单进程入口：内嵌 Nest，按 path 分流。
+ * - /server-api → Nest（业务 REST）
+ * - /ws → Agent 对话 WebSocket
+ * - /ws/voice → 语音通道（占位）
+ * - /sse → SSE（占位）
+ * - /channel → 通道模块（占位）
+ * - 其余 → 静态资源
  */
-/* Avoid MaxListenersExceededWarning: Browser Tool / Playwright attach abort listeners to same AbortSignal; Node default maxListeners is 10. */
+/* Avoid MaxListenersExceededWarning */
 const Et = (globalThis as any).EventTarget;
 if (Et?.prototype?.addEventListener && Et.prototype.setMaxListeners) {
     const add = Et.prototype.addEventListener;
@@ -14,72 +19,29 @@ if (Et?.prototype?.addEventListener && Et.prototype.setMaxListeners) {
     };
 }
 
+import express from "express";
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from "http";
 import { WebSocketServer } from "ws";
-import { createServer, request as httpRequest, type Server, type IncomingMessage, type ServerResponse, type RequestOptions } from "http";
-import { handleConnection } from "./connection-handler.js";
 import { readFile, stat } from "fs/promises";
 import { join, extname, dirname } from "path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "fs";
-import { spawn, type ChildProcess } from "child_process";
-import { createServer as createNetServer } from "net";
+
+import { PATHS } from "./paths.js";
+import { authHookServerApi, authHookChannel, authHookSse, authHookWs } from "./auth-hooks.js";
+import { handleChannel } from "./channel-handler.js";
+import { handleSse } from "./sse-handler.js";
+import { handleVoiceUpgrade } from "./voice-handler.js";
+import { handleConnection } from "./connection-handler.js";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { setBackendBaseUrl } from "./backend-url.js";
 import { ensureDesktopConfigInitialized } from "../config/desktop-config.js";
-
+import { createNestAppEmbedded } from "../server/bootstrap.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
-/** 包根目录（dist/gateway 的上级的上级），npm 安装后静态资源在 desktop/renderer/dist */
 const PACKAGE_ROOT = join(__dirname, "..", "..");
 const STATIC_DIR = join(PACKAGE_ROOT, "desktop", "renderer", "dist");
 
-/**
- * Find an available port starting from startPort
- */
-async function findAvailablePort(startPort: number): Promise<number> {
-    let port = startPort;
-    while (true) {
-        try {
-            await new Promise<void>((resolve, reject) => {
-                const server = createNetServer();
-                server.once("error", (err: any) => {
-                    if (err.code === "EADDRINUSE") {
-                        resolve(); // Port taken, try next
-                    } else {
-                        reject(err);
-                    }
-                });
-                server.once("listening", () => {
-                    server.close(() => resolve()); // Port available
-                });
-                server.listen(port);
-            });
-            // If we get here and the server listened successfully (then closed), checking if it was actually available logic needs care.
-            // Actually the above logic is slightly flawed for "resolve on error".
-            // Let's refine:
-            // If listen succeeds -> port is free. return it.
-            // If EADDRINUSE -> port busy. loop continue.
-
-            const isAvailable = await new Promise<boolean>((resolve) => {
-                const server = createNetServer();
-                server.once("error", () => resolve(false));
-                server.once("listening", () => {
-                    server.close(() => resolve(true));
-                });
-                server.listen(port);
-            });
-
-            if (isAvailable) return port;
-            port++;
-        } catch (e) {
-            port++;
-        }
-    }
-}
-
-/**
- * MIME types for static files
- */
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",
     ".js": "text/javascript",
@@ -96,156 +58,80 @@ const MIME_TYPES: Record<string, string> = {
     ".eot": "application/vnd.ms-fontobject",
 };
 
-/**
- * Start WebSocket gateway server
- */
 export async function startGatewayServer(port: number = 38080): Promise<{
     httpServer: Server;
     wss: WebSocketServer;
+    port: number;
     close: () => Promise<void>;
 }> {
     await ensureDesktopConfigInitialized();
     console.log(`Starting gateway server on port ${port}...`);
 
-    // 1. Find available port for Desktop Server
-    const backendPort = await findAvailablePort(38081);
-    console.log(`Found available port for Desktop Server: ${backendPort}`);
-    setBackendBaseUrl(`http://localhost:${backendPort}`);
+    setBackendBaseUrl(`http://localhost:${port}`);
 
-    // 2. Start Desktop Server（从包根目录找 dist/server，npm 全局安装时也能启动）
-    let backendProcess: ChildProcess | null = null;
-    const serverPath = join(PACKAGE_ROOT, "dist", "server", "main.js");
+    const { app: nestApp, express: nestExpress } = await createNestAppEmbedded();
 
-    if (existsSync(serverPath)) {
-        console.log(`Spawning Desktop Server at ${serverPath}...`);
-        backendProcess = spawn("node", [serverPath], {
-            cwd: PACKAGE_ROOT,
-            env: { ...process.env, PORT: backendPort.toString() },
-            stdio: ["ignore", "pipe", "pipe"], // Pipe stdout/stderr to capture logs
+    const gatewayExpress = express();
+
+    gatewayExpress.get(PATHS.HEALTH, (_req, res) => {
+        res.status(200).json({ status: "ok", timestamp: Date.now() });
+    });
+
+    gatewayExpress.post(PATHS.RUN_SCHEDULED_TASK, async (req, res) => {
+        await handleRunScheduledTask(req, res);
+    });
+
+    gatewayExpress.post(`${PATHS.SERVER_API}/skills/install-from-path`, async (req, res) => {
+        const body = await new Promise<string>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            req.on("data", (chunk: Buffer) => chunks.push(chunk));
+            req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
+            req.on("error", reject);
         });
-
-        backendProcess.stdout?.on("data", (data: Buffer) => {
-            const str = data.toString().trim();
-            if (str) console.log(`[Desktop Server] ${str}`);
-        });
-
-        backendProcess.stderr?.on("data", (data: Buffer) => {
-            const str = data.toString().trim();
-            if (str) console.error(`[Desktop Server Error] ${str}`);
-        });
-
-        backendProcess.on("exit", (code: number | null) => {
-            if (code !== 0 && code !== null) {
-                console.error(`Desktop Server exited with code ${code}`);
-            }
-        });
-    } else {
-        console.warn("⚠️ Desktop Server build not found. Skipping auto-start.");
-        console.warn("   Run 'npm run desktop:build' to build the server.");
-    }
-
-    // Create HTTP server
-    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-        // Simple health check endpoint
-        if (req.url === "/health") {
-            res.writeHead(200, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ status: "ok", timestamp: Date.now() }));
-            return;
-        }
-
-        // Scheduled task: run agent and POST assistant message back to Nest
-        const pathname = req.url?.split("?")[0] || "";
-        if (req.method === "POST" && pathname === "/run-scheduled-task") {
-            await handleRunScheduledTask(req, res);
-            return;
-        }
-
-        // 本地技能目录安装：在 Gateway 层直接处理，不依赖 Nest，保证桌面端稳定可用
-        if (req.method === "POST" && pathname === "/server-api/skills/install-from-path") {
-            const body = await new Promise<string>((resolve, reject) => {
-                const chunks: Buffer[] = [];
-                req.on("data", (chunk) => chunks.push(chunk));
-                req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
-                req.on("error", reject);
-            });
-            try {
-                const parsed = JSON.parse(body || "{}") as { path?: string; scope?: string; workspace?: string };
-                const result = await handleInstallSkillFromPath({
-                    path: parsed.path ?? "",
-                    scope: parsed.scope === "workspace" ? "workspace" : "global",
-                    workspace: parsed.workspace,
-                });
-                res.writeHead(200, { "Content-Type": "application/json" });
-                res.end(JSON.stringify(result));
-            } catch (err: unknown) {
-                const message = err instanceof Error ? err.message : String(err);
-                const code = message.includes("required") || message.includes("不存在") || message.includes("SKILL.md") || message.includes("目录名") ? 400 : 500;
-                res.writeHead(code, { "Content-Type": "application/json" });
-                res.end(JSON.stringify({ success: false, message }));
-            }
-            return;
-        }
-
-        // Proxy API requests to Backend (prefixed with /server-api)
-        if (req.url && req.url.startsWith("/server-api")) {
-            const options: RequestOptions = {
-                hostname: "localhost",
-                port: backendPort, // Use discovered port
-                path: req.url,
-                method: req.method,
-                headers: req.headers,
-            };
-
-            const proxyReq = httpRequest(options, (proxyRes) => {
-                res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
-                proxyRes.pipe(res, { end: true });
-            });
-
-            proxyReq.on("error", (err) => {
-                console.error(`Proxy error to :${backendPort}`, err);
-                if (!res.headersSent) {
-                    res.writeHead(502, { "Content-Type": "application/json" });
-                    res.end(JSON.stringify({ error: "Bad Gateway", message: "Failed to connect to backend server" }));
-                }
-            });
-
-            req.pipe(proxyReq, { end: true });
-            return;
-        }
-
-        // Serve static files (from package root so npm install works)
         try {
-            const staticDir = STATIC_DIR;
-            // Normalize URL to remove query parameters and ensuring it starts with /
-            const urlPath = req.url?.split("?")[0] || "/";
+            const parsed = JSON.parse(body || "{}") as { path?: string; scope?: string; workspace?: string };
+            const result = await handleInstallSkillFromPath({
+                path: parsed.path ?? "",
+                scope: parsed.scope === "workspace" ? "workspace" : "global",
+                workspace: parsed.workspace,
+            });
+            res.status(200).json(result);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            const code = message.includes("required") || message.includes("不存在") || message.includes("SKILL.md") || message.includes("目录名") ? 400 : 500;
+            res.status(code).json({ success: false, message });
+        }
+    });
 
-            // Determine file path
-            let filePath = join(staticDir, urlPath === "/" ? "index.html" : urlPath);
+    gatewayExpress.use(PATHS.SERVER_API, authHookServerApi, nestExpress);
 
-            // Check if file exists
-            try {
-                const stats = await stat(filePath);
-                if (stats.isDirectory()) {
-                    filePath = join(filePath, "index.html");
-                    await stat(filePath); // Check if index.html exists
-                }
-            } catch {
-                // File not found
-                // SPA Fallback: serve index.html for non-API requests accepting HTML
-                if (req.headers.accept?.includes("text/html") && req.method === "GET") {
-                    filePath = join(staticDir, "index.html");
-                } else {
-                    res.writeHead(404, { "Content-Type": "text/plain" });
-                    res.end("Not Found");
-                    return;
-                }
+    gatewayExpress.use(PATHS.CHANNEL, authHookChannel, (req, res) => handleChannel(req, res));
+
+    gatewayExpress.use(PATHS.SSE, authHookSse, (req, res) => handleSse(req, res));
+
+    gatewayExpress.use(async (req, res) => {
+        const staticDir = STATIC_DIR;
+        const urlPath = req.url?.split("?")[0] || "/";
+        let filePath = join(staticDir, urlPath === "/" ? "index.html" : urlPath);
+        try {
+            const stats = await stat(filePath);
+            if (stats.isDirectory()) {
+                filePath = join(filePath, "index.html");
+                await stat(filePath);
             }
-
-            // Read and serve file
+        } catch {
+            if (req.headers.accept?.includes("text/html") && req.method === "GET") {
+                filePath = join(staticDir, "index.html");
+            } else {
+                res.writeHead(404, { "Content-Type": "text/plain" });
+                res.end("Not Found");
+                return;
+            }
+        }
+        try {
             const content = await readFile(filePath);
             const ext = extname(filePath).toLowerCase();
             const contentType = MIME_TYPES[ext] || "application/octet-stream";
-
             res.writeHead(200, { "Content-Type": contentType });
             res.end(content);
         } catch (error) {
@@ -255,50 +141,46 @@ export async function startGatewayServer(port: number = 38080): Promise<{
         }
     });
 
-    // Create WebSocket server
-    const wss = new WebSocketServer({ server: httpServer });
+    const httpServer = createServer(gatewayExpress);
 
-    // Handle new connections
-    wss.on("connection", (ws, req) => {
-        handleConnection(ws, req);
+    const wss = new WebSocketServer({ noServer: true });
+    wss.on("connection", (ws, req) => handleConnection(ws, req));
+
+    httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
+        const path = req.url?.split("?")[0] || "";
+        if (handleVoiceUpgrade(req, socket, head)) {
+            return;
+        }
+        const isAgentWs = path === PATHS.WS || path === "/";
+        if (isAgentWs && authHookWs(req, path)) {
+            wss.handleUpgrade(req, socket, head, (ws) => {
+                wss.emit("connection", ws, req);
+            });
+        } else {
+            socket.destroy();
+        }
     });
 
-    // Start listening
-    await new Promise<void>((resolve) => {
+    const actualPort = await new Promise<number>((resolve) => {
         httpServer.listen(port, () => {
-            console.log(`✅ Gateway server listening on ws://localhost:${port}`);
-            console.log(`   Health check: http://localhost:${port}/health`);
-            resolve();
+            const addr = httpServer.address();
+            const p = typeof addr === "object" && addr && "port" in addr ? addr.port : port;
+            console.log(`✅ Gateway server listening on ws://localhost:${p}`);
+            console.log(`   Health: http://localhost:${p}${PATHS.HEALTH}`);
+            console.log(`   API:    http://localhost:${p}${PATHS.SERVER_API}`);
+            console.log(`   WS:     ws://localhost:${p}${PATHS.WS}`);
+            resolve(p);
         });
     });
 
-    // Cleanup function
     const close = async () => {
         console.log("Closing gateway server...");
-
-        // Stop Desktop Server
-        if (backendProcess) {
-            console.log("Stopping Desktop Server...");
-            backendProcess.kill();
-        }
-
-        // Close all WebSocket connections
-        wss.clients.forEach((client) => {
-            client.close();
-        });
-
-        // Close WebSocket server
-        await new Promise<void>((resolve) => {
-            wss.close(() => resolve());
-        });
-
-        // Close HTTP server
-        await new Promise<void>((resolve) => {
-            httpServer.close(() => resolve());
-        });
-
+        await nestApp.close();
+        wss.clients.forEach((c) => c.close());
+        await new Promise<void>((r) => wss.close(() => r()));
+        await new Promise<void>((r) => httpServer.close(() => r()));
         console.log("Gateway server closed");
     };
 
-    return { httpServer, wss, close };
+    return { httpServer, wss, port: actualPort, close };
 }
