@@ -36,7 +36,7 @@
          ▼                        ▼                             ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            Gateway Server (Node)                             │
-│  • 静态资源 • 自动发现端口 • 子进程拉起 Desktop Server                        │
+│  • 内嵌 Nest（/server-api）• 按 path 分流 • 静态资源 • 自动发现端口             │
 └────────────────────────────────────┬────────────────────────────────────────┘
                                       │
          ┌────────────────────────────┼────────────────────────────┐
@@ -56,8 +56,8 @@
 ```
 
 - **CLI**：直接调用 Agent 核心，单次提示或批量脚本。
-- **WebSocket Gateway**（`src/gateway/`）：对外提供 WebSocket（JSON-RPC），供 Web/移动端连接；负责起端口、拉 Nest 后端子进程、代理 `/server-api` 请求。**与「Desktop 后端」是不同进程。**
-- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；默认端口 38081。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
+- **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。供 Web/移动端连接。
+- **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；可被 Gateway 内嵌或独立监听（默认端口 38081）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
 
@@ -65,10 +65,11 @@
 
 | 目录 | 说明 |
 |------|------|
-| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`。 |
-| `src/gateway/` | **WebSocket 网关**，独立进程，提供 WS JSON-RPC 并代理到 Desktop 后端。 |
-| `src/agent/` | Agent 核心（CLI 与 Gateway 共用）。 |
-| `src/config/` | 桌面配置（~/.openbot/desktop）：config.json、agents.json、provider-support.json；CLI 与 Gateway 共用。 |
+| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`；可内嵌到 Gateway 或独立监听。 |
+| `src/gateway/` | **WebSocket 网关**，单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）。 |
+| `src/core/` | **公共核心**：`agent/`（AgentManager、pi-coding-agent）、`config/`（桌面配置）、`memory/`、`installer/`、`tools/`；CLI 与 Gateway 共用。 |
+| `src/cli/` | CLI 入口（`cli.ts`），构建后 `dist/cli/cli.js`。 |
+| `apps/desktop/` | 桌面端（Electron + Vue），前端构建产物由 Gateway 提供。 |
 | `examples/workspace/` | 示例工作区数据（仅示例/测试用）。真实工作区根目录为 `~/.openbot/workspace/`。 |
 
 ---
@@ -91,7 +92,8 @@
 |------|------|
 | 协议 | JSON-RPC over WebSocket（`ws`） |
 | 端口 | 默认 38080，可 `-p` 指定 |
-| 职责 | 连接管理、消息路由、静态资源、拉 Nest 子进程 |
+| 架构 | 单进程内嵌 Nest；按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源 |
+| 职责 | 连接管理、消息路由、鉴权钩子、静态资源（Desktop 前端） |
 | 方法 | `connect`、`agent.chat`、`agent.cancel`、`subscribe_session`、`unsubscribe_session` 等 |
 
 ### Agent 核心
@@ -341,7 +343,7 @@ openbot --help
 
 ## 3.2 Web 开发（Gateway + 前端）
 
-- **Gateway**：`src/gateway/`，默认端口 38080，可 `-p` 指定；协议 JSON-RPC over WebSocket；职责包括连接管理、消息路由、静态资源、拉 Nest 子进程。
+- **Gateway**：`src/gateway/`，默认端口 38080，可 `-p` 指定；单进程内嵌 Nest，按 path 分流（`/server-api`、`/ws`、静态资源等）；协议 JSON-RPC over WebSocket；职责包括连接管理、消息路由、鉴权、静态资源。
 - **方法**：`connect`、`agent.chat`、`agent.cancel`、`subscribe_session`、`unsubscribe_session` 等。
 
 本地启动网关：
