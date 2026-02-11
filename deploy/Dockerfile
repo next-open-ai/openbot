@@ -5,8 +5,8 @@
 # Stage 1: 构建（使用 sql.js 纯 JS/WASM，无需 Python/node-gyp，任意 Node 镜像即可）
 # ------------------------------------------------------------------------------
 #FROM node:20-bookworm AS builder
-FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
-
+#FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0  AS builder
+FROM FROM ccr.ccs.tencentyun.com/windwithlife/node:22.11.0-slim  AS builder
 WORKDIR /app
 
 # 根项目依赖（含 devDependencies，用于 tsc 构建）
@@ -21,10 +21,10 @@ COPY skills ./skills
 # 构建主包（产出 dist/）
 RUN npm run build
 
-# 构建 Desktop 前端静态资源（Gateway 会从 desktop/renderer/dist 提供 Web UI）
-COPY desktop/package.json desktop/package-lock.json desktop/
-COPY desktop/renderer ./desktop/renderer
-RUN cd desktop/renderer && npm ci && npm run build
+# 构建 Desktop 前端静态资源（Gateway 会从 apps/desktop/renderer/dist 提供 Web UI）
+COPY apps/desktop/package.json apps/desktop/package-lock.json apps/desktop/
+COPY apps/desktop/renderer ./apps/desktop/renderer
+RUN cd apps/desktop/renderer && npm ci && npm run build
 
 # ------------------------------------------------------------------------------
 # Stage 2: 运行镜像（sql.js 无原生依赖，Alpine / Debian 均可）
@@ -41,7 +41,7 @@ RUN npm prune --production
 # 从构建阶段拷贝产物
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/skills ./skills
-COPY --from=builder /app/desktop/renderer/dist ./desktop/renderer/dist
+COPY --from=builder /app/apps/desktop/renderer/dist ./apps/desktop/renderer/dist
 
 ENV NODE_ENV=production
 
