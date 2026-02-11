@@ -14,6 +14,13 @@ import {
     syncDesktopConfigToModelsJson,
     ensureDesktopConfigInitialized,
 } from "../core/config/desktop-config.js";
+import {
+    writeGatewayPid,
+    removeGatewayPidFile,
+    serviceInstall,
+    serviceUninstall,
+    serviceStop,
+} from "./service.js";
 
 const require = createRequire(import.meta.url);
 const PKG = require("../../package.json") as { version: string };
@@ -165,18 +172,47 @@ program
             process.exit(1);
         }
 
+        writeGatewayPid();
         const { startGatewayServer } = await import("../gateway/index.js");
         const { close } = await startGatewayServer(port);
 
-        // Handle graceful shutdown
         const shutdown = async () => {
             console.log("\nShutting down...");
+            removeGatewayPidFile();
             await close();
             process.exit(0);
         };
 
         process.on("SIGINT", shutdown);
         process.on("SIGTERM", shutdown);
+    });
+
+// Service: 开机自启 install / uninstall，以及 stop
+const serviceCmd = program
+    .command("service")
+    .description("Gateway 开机/登录自启与停止（Linux cron、macOS LaunchAgent、Windows 计划任务）");
+
+serviceCmd
+    .command("install")
+    .description("添加开机/登录自启：下次重启或登录后自动启动 gateway")
+    .action(() => {
+        const nodePath = process.execPath;
+        const cliPath = join(__dirname, "cli.js");
+        serviceInstall({ nodePath, cliPath });
+    });
+
+serviceCmd
+    .command("uninstall")
+    .description("移除开机/登录自启")
+    .action(() => {
+        serviceUninstall();
+    });
+
+serviceCmd
+    .command("stop")
+    .description("停止当前运行的 gateway 进程")
+    .action(() => {
+        serviceStop();
     });
 
 // Login command（写入桌面 config；可选 model，不传则取该 provider 第一个模型，补齐后可直接运行）

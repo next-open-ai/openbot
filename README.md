@@ -55,22 +55,55 @@
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **CLI**：直接调用 Agent 核心，单次提示或批量脚本。
-- **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。供 Web/移动端连接。
+- **CLI**：直接调用 Agent 核心，单次提示或批量脚本；可启动 Gateway（`openbot gateway`）及配置开机自启（`openbot service install/uninstall`）。
+- **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。供 Web/移动端连接；支持以开机/登录自启方式常驻（Linux cron、macOS LaunchAgent、Windows 计划任务）。
 - **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；可被 Gateway 内嵌或独立监听（默认端口 38081）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
+
+### 项目目录结构
+
+```
+openbot/
+├── src/                    # 源码（构建输出 dist/）
+│   ├── core/               # 公共核心，CLI 与 Gateway 共用
+│   │   ├── agent/          # AgentManager、run、技能与配置
+│   │   ├── config/         # 桌面配置（~/.openbot/desktop）
+│   │   ├── memory/         # 向量存储、嵌入、compaction
+│   │   ├── installer/      # 技能安装
+│   │   └── tools/          # 内置工具（browser、install-skill、save-experience 等）
+│   ├── cli/                # CLI 入口与 service 子命令
+│   │   ├── cli.ts          # 主入口，构建为 dist/cli/cli.js
+│   │   └── service.ts      # 开机自启 install/uninstall/stop
+│   ├── gateway/            # WebSocket 网关（内嵌 Nest、path 分流）
+│   ├── server/             # Desktop 后端（NestJS）
+│   ├── cli.ts              # 兼容入口，仅转发到 cli/cli.js
+│   └── index.ts            # 包导出
+├── apps/
+│   ├── desktop/            # Electron + Vue 桌面端
+│   ├── web/                # 预留
+│   ├── mobile/             # 预留
+│   ├── miniprogram/        # 预留
+│   └── browser-extension/  # 预留
+├── deploy/                 # Docker、K8s 等部署
+├── test/                   # 单元与 e2e 测试
+├── examples/               # 示例（含 workspace、gateway-client）
+└── skills/                 # 内置技能（find-skills、agent-browser）
+```
 
 ### 目录与模块对应
 
 | 目录 | 说明 |
 |------|------|
-| `src/server/` | **Desktop 后端**（NestJS），HTTP API，前缀 `server-api`；可内嵌到 Gateway 或独立监听。 |
-| `src/gateway/` | **WebSocket 网关**，单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）。 |
 | `src/core/` | **公共核心**：`agent/`（AgentManager、pi-coding-agent）、`config/`（桌面配置）、`memory/`、`installer/`、`tools/`；CLI 与 Gateway 共用。 |
-| `src/cli/` | CLI 入口（`cli.ts`），构建后 `dist/cli/cli.js`。 |
-| `apps/desktop/` | 桌面端（Electron + Vue），前端构建产物由 Gateway 提供。 |
-| `examples/workspace/` | 示例工作区数据（仅示例/测试用）。真实工作区根目录为 `~/.openbot/workspace/`。 |
+| `src/cli/` | **CLI**：`cli.ts` 主入口（构建为 `dist/cli/cli.js`），`service.ts` 提供开机自启（install/uninstall/stop）。 |
+| `src/gateway/` | **WebSocket 网关**：单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）。 |
+| `src/server/` | **Desktop 后端**（NestJS），HTTP API 前缀 `server-api`；可内嵌到 Gateway 或独立监听。 |
+| `apps/desktop/` | **桌面端**（Electron + Vue），前端构建产物由 Gateway 提供。 |
+| `deploy/` | Dockerfile、K8s 等部署配置。 |
+| `test/` | 单元与 e2e 测试（config、gateway、server、installer）。 |
+| `examples/` | 示例工作区、gateway 客户端等。真实工作区根目录为 `~/.openbot/workspace/`。 |
+| `skills/` | 内置技能（SKILL.md 规范）。 |
 
 ---
 
@@ -83,8 +116,9 @@
 | 运行时 | Node.js 20+ |
 | 语言 | TypeScript 5.7 |
 | 入口 | `openbot`（bin → `dist/cli/cli.js`） |
-| 框架 | Commander（子命令：`gateway`、`login`、`config`） |
-| 配置 | `~/.openbot/agent`（API Key、模型、技能等） |
+| 框架 | Commander（子命令：`gateway`、`login`、`config`、`service`） |
+| 配置 | `~/.openbot/agent`（API Key、模型、技能等）；`~/.openbot/desktop`（与桌面共用） |
+| 开机自启 | `openbot service install` / `uninstall`（Linux cron、macOS LaunchAgent、Windows 计划任务）；`openbot service stop` 停止当前 gateway |
 
 ### WebSocket Gateway
 
@@ -270,6 +304,8 @@ openbot "总结一下当前有哪些技能"
 openbot gateway --port 38080
 ```
 
+若需网关开机/登录自启，可执行 `openbot service install`（支持 Linux / macOS / Windows）；移除自启用 `openbot service uninstall`，停止当前网关用 `openbot service stop`。
+
 客户端连接 `ws://localhost:38080`，使用 JSON-RPC 调用 `connect`、`agent.chat`、`agent.cancel` 等（详见下方「Gateway API 简述」）。  
 前端可自行实现或使用仓库内 Web 示例（若有）。
 
@@ -328,8 +364,9 @@ npm run build
 ## 3.1 CLI 开发
 
 - 入口：`openbot` → bin → `dist/cli/cli.js`
-- 技术：Commander（子命令 `gateway`、`login`、`config`）、TypeScript 5.7
+- 技术：Commander（子命令 `gateway`、`login`、`config`、`service`）、TypeScript 5.7
 - 配置与数据：`~/.openbot/agent`、`~/.openbot/desktop`（与桌面共用）
+- Gateway 开机自启：`openbot service install` / `uninstall` / `stop`（见 `src/cli/service.ts`）
 
 修改 CLI 后重新构建并本地安装：
 
@@ -359,7 +396,7 @@ openbot gateway --port 38080
 
 ## 3.3 Desktop 开发
 
-- **后端**：NestJS（`src/server/`），前缀 `server-api`，默认端口 38081；Gateway 启动时会拉该子进程并代理 `/server-api`。
+- **后端**：NestJS（`src/server/`），前缀 `server-api`，默认端口 38081；Gateway 内嵌时直接挂载该 Express，无独立子进程。
 - **前端**：Electron 28 + Vue 3 + Pinia + Vite 5，位于 `apps/desktop/`。
 
 ```bash
