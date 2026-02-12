@@ -50,8 +50,9 @@ function createTray() {
     const iconPath = path.join(__dirname, 'assets', 'tray.png');
     let icon = nativeImage.createFromPath(iconPath);
     if (icon.isEmpty()) {
+        // 可见回退（原 1x1 透明会导致托盘看不见）
         const fallback = nativeImage.createFromDataURL(
-            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2P8z8Dwn4GBgQEAZAADvW2IzAAAAABJRU5ErkJggg=='
         );
         icon = fallback.resize({ width: 16, height: 16 });
     }
