@@ -32,7 +32,7 @@
     },
     "build": {
         "appId": "com.openbot.openbot",
-        "productName": "OpenBot Desktop",
+        "productName": "OpenBot",
         "icon": "build/icon.png",
         "directories": {
             "output": "dist"

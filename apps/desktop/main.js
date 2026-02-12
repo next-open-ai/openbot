@@ -47,10 +47,16 @@ function waitForGateway() {
 }
 
 function createTray() {
-    const iconPath = path.join(__dirname, 'assets', 'tray.png');
+    // macOS 菜单栏需要「模板图」（黑白+透明）才能正确显示，否则图标不显示
+    const assetsDir = path.join(__dirname, 'assets');
+    const isMac = process.platform === 'darwin';
+    let iconPath = isMac ? path.join(assetsDir, 'trayTemplate.png') : path.join(assetsDir, 'tray.png');
     let icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty() && isMac) {
+        iconPath = path.join(assetsDir, 'tray.png');
+        icon = nativeImage.createFromPath(iconPath);
+    }
     if (icon.isEmpty()) {
-        // 可见回退（原 1x1 透明会导致托盘看不见）
         const fallback = nativeImage.createFromDataURL(
             'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVQIW2P8z8Dwn4GBgQEAZAADvW2IzAAAAABJRU5ErkJggg=='
         );
@@ -98,6 +104,12 @@ async function createWindow() {
         titleBarStyle: 'hiddenInset',
         frame: true,
     });
+
+    // macOS 在窗口显示/获得焦点时可能恢复默认菜单，需再次设为空菜单
+    const clearAppMenu = () => Menu.setApplicationMenu(emptyMenu);
+    mainWindow.once('ready-to-show', clearAppMenu);
+    mainWindow.on('show', clearAppMenu);
+    mainWindow.on('focus', clearAppMenu);
 
     // 打包安装后 NODE_ENV 可能未设置，以 app.isPackaged 为准，否则会误走 5173 导致白屏
     const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
@@ -161,7 +173,11 @@ function registerIpcHandlers() {
     });
 }
 
+// 空应用菜单（Electron 文档：setApplicationMenu(null) 会恢复默认菜单，故必须设为空菜单而非 null）
+const emptyMenu = Menu.buildFromTemplate([]);
+
 app.whenReady().then(async () => {
+    Menu.setApplicationMenu(emptyMenu);
     registerIpcHandlers();
 
     try {
