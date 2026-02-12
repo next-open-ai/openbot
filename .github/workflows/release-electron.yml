@@ -28,6 +28,9 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
+      - name: 安装桌面端及 renderer 依赖
+        run: npm run desktop:install
+
       - name: 构建Windows应用
         run: npm run desktop:pack
         env:
@@ -59,6 +62,9 @@ jobs:
 
       - name: 安装依赖
         run: npm ci
+
+      - name: 安装桌面端及 renderer 依赖
+        run: npm run desktop:install
 
       - name: 构建macOS应用
         run: npm run desktop:pack
