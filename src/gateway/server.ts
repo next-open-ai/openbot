@@ -40,7 +40,9 @@ import { ensureDesktopConfigInitialized } from "../core/config/desktop-config.js
 import { createNestAppEmbedded } from "../server/bootstrap.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, "..", "..");
-const STATIC_DIR = join(PACKAGE_ROOT, "apps", "desktop", "renderer", "dist");
+/** 内嵌到 Electron 时由主进程设置 OPENBOT_STATIC_DIR，指向打包后的 renderer/dist */
+const STATIC_DIR =
+    process.env.OPENBOT_STATIC_DIR || join(PACKAGE_ROOT, "apps", "desktop", "renderer", "dist");
 
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",

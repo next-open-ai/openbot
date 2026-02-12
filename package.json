@@ -64,6 +64,7 @@
         "dev": "npm run build && node dist/cli/cli.js",
         "desktop:dev": "cd apps/desktop && npm run dev",
         "desktop:build": "cd apps/desktop && npm run build",
+        "desktop:pack": "npm run build && cd apps/desktop && npm run build",
         "desktop:install": "cd apps/desktop && npm install",
         "test": "jest --config test/jest.config.cjs",
         "test:memory": "node test/run-memory.mjs",

@@ -192,8 +192,29 @@ openbot/
 
 适用于：使用 **CLI**，或在自有环境中运行 **Gateway（Web）**。
 
+### 前置环境准备
+
+需先安装 **Node.js 20+**（推荐 20 或 22；24 较新，部分依赖可能需本地编译环境）。任选一种方式安装即可：
+
+| 方式 | 说明 |
+|------|------|
+| **官网安装包** | 打开 [nodejs.org](https://nodejs.org/)，下载 LTS 并安装；安装后终端执行 `node -v` 应显示 v20.x 或更高。 |
+| **nvm（推荐）** | 多版本切换方便：`curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh \| bash`，重启终端后 `nvm install 20`、`nvm use 20`。 |
+| **macOS (Homebrew)** | `brew install node@20`，或 `brew install nvm` 再用 nvm 安装 20。 |
+| **Windows** | 使用 [nodejs.org](https://nodejs.org/) 安装包，或 `winget install OpenJS.NodeJS.LTS`。 |
+| **Linux** | 使用发行版包管理器（如 `apt install nodejs`）或 [nvm](https://github.com/nvm-sh/nvm) 安装。 |
+
+安装后请确认：
+
 ```bash
-# 全局安装（测试过node版本：20/22 24太新，有一些库要本地编译环境）
+node -v   # 应为 v20.x 或 v22.x
+npm -v    # 能正常输出版本号
+```
+
+### 安装命令
+
+```bash
+# 全局安装（测试过 node 版本：20/22；24 太新，部分库需本地编译环境）
 npm install -g @next-open-ai/openbot
 ```
 
@@ -231,6 +252,8 @@ npm link   # 或 npm install -g . 本地全局安装
 
 - 从 [Releases](https://github.com/next-open-ai/openbot/releases) 下载对应平台的安装包（macOS / Windows）。
 - 安装后启动 OpenBot Desktop，按界面引导配置 API Key 与默认模型即可使用。
+
+安装包由仓库通过 **Desktop 打包** 流程生成（见下方「三、开发 → 3.3 Desktop 开发 → Desktop 打包」）。
 
 首次使用建议在设置中配置默认 Provider/模型，或通过 CLI 执行 `openbot login <provider> <apiKey> [model]` / `openbot config set-model <provider> <modelId>`（与桌面端共用 `~/.openbot/desktop/` 配置）。
 
@@ -409,6 +432,33 @@ npm run desktop:dev
 # 仅安装桌面依赖
 npm run desktop:install
 ```
+
+### Desktop 打包
+
+从源码构建可安装的桌面安装包（DMG/NSIS/AppImage），供发布或本地安装使用。
+
+**命令（在仓库根目录执行）：**
+
+```bash
+npm run desktop:pack
+```
+
+该命令会依次执行：
+
+1. **根目录构建**：`npm run build`，生成 `dist/`（含 Gateway、Server、Agent 等）。
+2. **桌面构建**：`cd apps/desktop && npm run build`，其中包含：
+   - **build:gateway**：若需则再次构建根目录 `dist`；
+   - **build:copy-gateway**：将根目录 `dist` 复制到 `apps/desktop/gateway-dist`，写入 `package.json`（`type: "module"` + 生产依赖），并执行 `npm install --production`，得到带 `node_modules` 的 gateway 运行时；
+   - **build:renderer**：Vite 构建前端到 `renderer/dist`；
+   - **electron-builder**：打包为各平台安装包，并将 `gateway-dist` 作为 **extraResources** 拷贝到应用内 `Contents/Resources/dist`（含 Gateway 代码与依赖），无需用户安装 Node 即可运行。
+
+**产出物：**
+
+- **macOS**：`apps/desktop/dist/` 下生成 `.dmg`、`.zip`（如 `OpenBot Desktop-0.1.1-arm64.dmg`）；
+- **Windows**：nsis 安装程序；
+- **Linux**：AppImage。
+
+安装包安装后，Gateway 与前端均内嵌在应用内，用户无需单独安装 Node.js。
 
 ---
 

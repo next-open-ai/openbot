@@ -1,59 +1,85 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { pathToFileURL } = require('url');
 const http = require('http');
 
-let mainWindow;
-let gatewayProcess;
-const GATEWAY_PORT = 38080;
-
-// Start OpenBot Gateway
-function startGateway() {
-    const gatewayPath = path.join(__dirname, '..', 'dist', 'gateway', 'server.js');
-
-    if (process.env.NODE_ENV !== 'production') {
-        // In development, gateway might be running separately, but we can also spawn it if needed.
-        // For now, let's assume dev runs it separately or we rely on the one spawned by CLI if we run `openbot gateway`
-        console.log('Development mode: Gateway should be started separately or via CLI');
-        return;
-    }
-
-    console.log('Starting Gateway process...');
-    gatewayProcess = spawn('node', [gatewayPath], {
-        cwd: path.join(__dirname, '..'),
-        stdio: 'inherit',
-        env: { ...process.env, PORT: GATEWAY_PORT.toString() }
-    });
+// Electron 主进程缺少 Web API 全局，gateway 依赖链（如 undici）需要 File
+if (typeof globalThis.File === 'undefined') {
+    try {
+        globalThis.File = require('node:buffer').File;
+    } catch (_) {}
 }
 
-// Wait for Gateway to be ready
+let mainWindow = null;
+let gatewayClose = null;
+let gatewayStartError = null; // Gateway 启动失败时的错误信息，用于错误页展示
+let tray = null;
+const GATEWAY_PORT = 38080;
+
+/** 主进程内启动 Gateway（dev 与打包均可用），不 spawn 子进程 */
+async function startGatewayInProcess() {
+    if (app.isPackaged) {
+        process.env.OPENBOT_STATIC_DIR = path.join(__dirname, 'renderer', 'dist');
+    }
+    // 打包后 dist 通过 extraResources 放在 Contents/Resources/dist，可直接 import
+    const serverPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'dist', 'gateway', 'server.js')
+        : path.join(__dirname, '..', '..', 'dist', 'gateway', 'server.js');
+    const { startGatewayServer } = await import(pathToFileURL(serverPath).href);
+    const result = await startGatewayServer(GATEWAY_PORT);
+    gatewayClose = result.close;
+    return result;
+}
+
+/** 等待 Gateway 就绪（用于内嵌启动后轮询） */
 function waitForGateway() {
     return new Promise((resolve) => {
         const check = () => {
             const req = http.get(`http://localhost:${GATEWAY_PORT}/health`, (res) => {
-                if (res.statusCode === 200) {
-                    resolve();
-                } else {
-                    setTimeout(check, 500);
-                }
+                if (res.statusCode === 200) resolve();
+                else setTimeout(check, 500);
             });
-
-            req.on('error', () => {
-                setTimeout(check, 500);
-            });
-
+            req.on('error', () => setTimeout(check, 500));
             req.end();
         };
         check();
     });
 }
 
+function createTray() {
+    const iconPath = path.join(__dirname, 'assets', 'tray.png');
+    let icon = nativeImage.createFromPath(iconPath);
+    if (icon.isEmpty()) {
+        const fallback = nativeImage.createFromDataURL(
+            'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+        );
+        icon = fallback.resize({ width: 16, height: 16 });
+    }
+    tray = new Tray(icon);
+    tray.setToolTip('OpenBot');
+    const menu = Menu.buildFromTemplate([
+        { label: '打开 OpenBot', click: () => showMainWindow() },
+        { type: 'separator' },
+        { label: '退出', click: () => app.quit() },
+    ]);
+    tray.setContextMenu(menu);
+    tray.on('click', () => showMainWindow());
+}
+
+function showMainWindow() {
+    if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+        return;
+    }
+    createWindow();
+}
+
 async function createWindow() {
-    // Wait for Gateway before showing window
-    if (process.env.NODE_ENV === 'production') {
+    if (gatewayClose) {
         process.stdout.write('Waiting for Gateway...');
         await waitForGateway();
-        console.log('Gateway is ready!');
+        console.log(' Gateway ready.');
     }
 
     mainWindow = new BrowserWindow({
@@ -72,23 +98,34 @@ async function createWindow() {
         frame: true,
     });
 
-    // Load the Frontend
-    // In development: Vite dev server (5173)
-    // In production: Gateway static file serving (38080)
-    const isDev = process.env.NODE_ENV !== 'production';
-    const startUrl = isDev
-        ? 'http://localhost:5173'
-        : `http://localhost:${GATEWAY_PORT}`;
+    // 打包安装后 NODE_ENV 可能未设置，以 app.isPackaged 为准，否则会误走 5173 导致白屏
+    const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+    let startUrl;
+    if (isDev) {
+        startUrl = 'http://localhost:5173';
+    } else if (gatewayClose) {
+        startUrl = `http://localhost:${GATEWAY_PORT}`;
+    } else {
+        // Gateway 未启动（打包后无法连上），显示错误页，避免请求 localhost 失败
+        const errMsg = gatewayStartError ? String(gatewayStartError).replace(/</g, '&lt;').replace(/>/g, '&gt;') : '';
+        startUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(`
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>OpenBot</title></head><body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0f1e;color:#e0e0e0;font-family:system-ui,sans-serif;padding:24px;box-sizing:border-box">
+<div style="max-width:520px;text-align:center">
+  <h1 style="color:#ff6b6b;margin-bottom:16px">服务未就绪</h1>
+  <p>Gateway 未能启动，请关闭本窗口后重新打开应用。</p>
+  ${errMsg ? `<pre style="text-align:left;background:#1a1a2e;padding:12px;border-radius:8px;font-size:12px;overflow:auto;margin:16px 0">${errMsg}</pre>` : ''}
+  <p style="color:#888;font-size:14px;margin-top:24px">若问题持续，请确认端口 ${GATEWAY_PORT} 未被占用，或查看终端/控制台完整错误。</p>
+</div>
+</body></html>`);
+    }
 
-    console.log(`Loading URL: ${startUrl}`);
+    console.log('Loading URL:', startUrl.startsWith('data:') ? '(error page)' : startUrl);
     mainWindow.loadURL(startUrl);
 
-    // Show window when ready
     mainWindow.once('ready-to-show', () => {
         mainWindow.show();
     });
 
-    // Open DevTools in development
     if (isDev) {
         mainWindow.webContents.openDevTools();
     }
@@ -98,7 +135,6 @@ async function createWindow() {
     });
 }
 
-// IPC handlers (register in whenReady so they are bound to the same main process that creates the window)
 function registerIpcHandlers() {
     ipcMain.handle('get-app-version', () => app.getVersion());
     ipcMain.handle('minimize-window', () => {
@@ -124,28 +160,46 @@ function registerIpcHandlers() {
     });
 }
 
-// App lifecycle
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     registerIpcHandlers();
-    startGateway();
+
+    try {
+        await startGatewayInProcess();
+    } catch (err) {
+        gatewayStartError = err.message || String(err);
+        console.error('Failed to start Gateway in process:', gatewayStartError);
+        if (!app.isPackaged) {
+            console.log('Dev tip: run "npm run build" at repo root, or start gateway separately: openbot gateway');
+        }
+    }
+    createTray();
     createWindow();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
+        } else {
+            showMainWindow();
         }
     });
 });
 
 app.on('window-all-closed', () => {
+    if (tray) {
+        return;
+    }
     if (process.platform !== 'darwin') {
         app.quit();
     }
 });
 
-app.on('before-quit', () => {
-    if (gatewayProcess) {
-        console.log('Killing Gateway process...');
-        gatewayProcess.kill();
+app.on('before-quit', async () => {
+    if (gatewayClose) {
+        console.log('Closing gateway...');
+        await gatewayClose();
+    }
+    if (tray) {
+        tray.destroy();
+        tray = null;
     }
 });

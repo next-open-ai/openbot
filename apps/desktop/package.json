@@ -8,7 +8,9 @@
         "dev:renderer": "cd renderer && npm run dev",
         "dev:electron": "sleep 5 && electron .",
         "build:renderer": "cd renderer && npm run build",
-        "build": "npm run build:renderer && electron-builder",
+        "build:gateway": "cd ../.. && npm run build",
+        "build:copy-gateway": "node scripts/copy-gateway.js",
+        "build": "npm run build:gateway && npm run build:copy-gateway && npm run build:renderer && electron-builder",
         "postinstall": "cd renderer && npm install"
     },
     "keywords": [
@@ -35,15 +37,15 @@
         "files": [
             "main.js",
             "preload.js",
-            {
-                "from": "../dist",
-                "to": "dist",
-                "filter": [
-                    "**/*"
-                ]
-            },
             "renderer/dist/**/*",
             "assets/**/*"
+        ],
+        "extraResources": [
+            {
+                "from": "gateway-dist",
+                "to": "dist",
+                "filter": ["**/*"]
+            }
         ],
         "mac": {
             "category": "public.app-category.productivity"
