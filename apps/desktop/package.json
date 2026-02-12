@@ -34,6 +34,7 @@
         "appId": "com.openbot.openbot",
         "productName": "OpenBot",
         "icon": "build/icon.png",
+        "publish": null,
         "directories": {
             "output": "dist"
         },
