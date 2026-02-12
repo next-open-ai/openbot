@@ -27,4 +27,4 @@ const pkg = {
 };
 fs.writeFileSync(path.join(to, 'package.json'), JSON.stringify(pkg, null, 2));
 
-execSync('npm install --production', { cwd: to, stdio: 'inherit', shell: true });
+execSync('npm install --production', { cwd: to, stdio: 'inherit' });
