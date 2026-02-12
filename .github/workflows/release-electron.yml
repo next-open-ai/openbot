@@ -41,10 +41,9 @@ jobs:
         with:
           name: windows-build
           path: |
-            dist/*.exe
-            dist/*.msi
-            dist/*.zip
-            !dist/win-*  # 排除临时文件
+            apps/desktop/dist/*.exe
+            apps/desktop/dist/*.msi
+            apps/desktop/dist/*.zip
           if-no-files-found: warn
 
   # macOS 构建任务
@@ -77,9 +76,9 @@ jobs:
         with:
           name: macos-build
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.pkg
+            apps/desktop/dist/*.dmg
+            apps/desktop/dist/*.zip
+            apps/desktop/dist/*.pkg
           if-no-files-found: warn
 
  
