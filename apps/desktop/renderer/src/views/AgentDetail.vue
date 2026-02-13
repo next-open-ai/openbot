@@ -151,6 +151,68 @@
             </div>
           </div>
 
+          <!-- MCP 配置 -->
+          <div v-show="activeTab === 'mcp'" class="tab-panel mcp-panel">
+            <h2 class="panel-title">{{ t('agents.mcpConfig') }}</h2>
+            <p class="form-hint">{{ t('agents.mcpConfigHint') }}</p>
+            <div class="mcp-list">
+              <div
+                v-for="(item, index) in mcpServers"
+                :key="index"
+                class="mcp-item card-glass"
+              >
+                <span class="mcp-item-text">{{ mcpServerDisplayText(item) }}</span>
+                <div class="mcp-item-actions">
+                  <button type="button" class="link-btn" @click="startEditMcp(index)">
+                    {{ t('common.edit') }}
+                  </button>
+                  <button type="button" class="link-btn danger" @click="removeMcpServer(index)">
+                    {{ t('common.delete') }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div v-if="mcpFormVisible || mcpEditingIndex >= 0" class="mcp-form card-glass">
+              <h3 class="config-section-title">{{ mcpEditingIndex >= 0 ? t('agents.editMcpServer') : t('agents.addMcpServer') }}</h3>
+              <div class="form-group">
+                <label>{{ t('agents.mcpCommand') }}</label>
+                <input
+                  v-model="mcpForm.command"
+                  type="text"
+                  class="form-input"
+                  :placeholder="t('agents.mcpCommandPlaceholder')"
+                />
+              </div>
+              <div class="form-group">
+                <label>{{ t('agents.mcpArgs') }}</label>
+                <input
+                  v-model="mcpForm.argsStr"
+                  type="text"
+                  class="form-input"
+                  :placeholder="t('agents.mcpArgsPlaceholder')"
+                />
+              </div>
+              <p v-if="mcpFormError" class="form-hint form-hint-warn">{{ mcpFormError }}</p>
+              <div class="mcp-form-actions">
+                <button type="button" class="btn-secondary" @click="cancelMcpForm">
+                  {{ t('common.cancel') }}
+                </button>
+                <button type="button" class="btn-primary" @click="saveMcpServer">
+                  {{ mcpEditingIndex >= 0 ? t('agents.saveMcpServer') : t('agents.addMcpServer') }}
+                </button>
+              </div>
+            </div>
+            <button v-else type="button" class="btn-secondary" @click="openAddMcp">
+              {{ t('agents.addMcpServer') }}
+            </button>
+            <p class="form-hint" style="margin-top: 1rem;">{{ t('agents.mcpSaveHint') }}</p>
+            <div class="mcp-save-row">
+              <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
+                {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
+              </button>
+            </div>
+          </div>
+
           </div>
       </div>
 
@@ -269,6 +331,7 @@ export default {
     const tabs = computed(() => [
       { id: 'config', label: t('agents.basicConfig'), icon: '⚙️' },
       { id: 'skills', label: t('agents.skillsConfig'), icon: '🎯' },
+      { id: 'mcp', label: t('agents.mcpConfig'), icon: '🔌' },
     ]);
 
     const configForm = ref({ name: '' });
@@ -294,6 +357,66 @@ export default {
 
     const canDeleteWorkspaceSkill = computed(() => agent.value && !agent.value.isDefault && agent.value.workspace !== 'default');
     const renderedSkillContent = computed(() => (skillDetailContent.value ? marked(skillDetailContent.value) : ''));
+
+    /** MCP 服务器列表（与 Skill 类似，配到智能体；创建 Session 时传入） */
+    const mcpServers = ref([]);
+    const mcpForm = ref({ command: '', argsStr: '' });
+    const mcpEditingIndex = ref(-1);
+    const mcpFormError = ref('');
+    /** 是否正在显示「添加」表单（点击添加按钮后为 true，保存/取消后为 false） */
+    const mcpFormVisible = ref(false);
+
+    function normalizeMcpItem(item) {
+      if (!item || item.transport !== 'stdio') return { transport: 'stdio', command: '', args: [] };
+      const args = Array.isArray(item.args) ? item.args : (typeof item.args === 'string' ? item.args.split(/[\s,]+/).filter(Boolean) : []);
+      return { transport: 'stdio', command: (item.command || '').trim(), args };
+    }
+    function mcpServerDisplayText(item) {
+      const cmd = item?.command || '';
+      const a = (item?.args || []).join(' ');
+      return a ? `${cmd} ${a}`.trim() : cmd;
+    }
+    function openAddMcp() {
+      mcpEditingIndex.value = -1;
+      mcpForm.value = { command: '', argsStr: '' };
+      mcpFormError.value = '';
+      mcpFormVisible.value = true;
+    }
+    function startEditMcp(index) {
+      const item = mcpServers.value[index];
+      if (!item) return;
+      mcpEditingIndex.value = index;
+      mcpForm.value = { command: item.command || '', argsStr: (item.args || []).join(' ') };
+      mcpFormError.value = '';
+    }
+    function cancelMcpForm() {
+      mcpEditingIndex.value = -1;
+      mcpForm.value = { command: '', argsStr: '' };
+      mcpFormError.value = '';
+      mcpFormVisible.value = false;
+    }
+    function saveMcpServer() {
+      mcpFormError.value = '';
+      const cmd = (mcpForm.value.command || '').trim();
+      if (!cmd) {
+        mcpFormError.value = t('agents.mcpCommandRequired');
+        return;
+      }
+      const argsStr = (mcpForm.value.argsStr || '').trim();
+      const args = argsStr ? argsStr.split(/[\s,]+/).filter(Boolean) : [];
+      const newItem = { transport: 'stdio', command: cmd, args };
+      if (mcpEditingIndex.value >= 0) {
+        mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+      } else {
+        mcpServers.value = [...mcpServers.value, newItem];
+      }
+      cancelMcpForm();
+    }
+    function removeMcpServer(index) {
+      mcpServers.value = mcpServers.value.filter((_, i) => i !== index);
+      if (mcpEditingIndex.value === index) cancelMcpForm();
+      else if (mcpEditingIndex.value > index) mcpEditingIndex.value -= 1;
+    }
 
     function getProviderDisplayName(providerId) {
       const alias = configRef.value?.providers?.[providerId]?.alias?.trim();
@@ -327,16 +450,20 @@ export default {
             provider: agent.value.provider ?? '',
             model: agent.value.model ?? '',
           };
+          const raw = agent.value.mcpServers;
+          mcpServers.value = Array.isArray(raw) ? raw.map(normalizeMcpItem).filter((m) => (m.command || '').trim()) : [];
         } else if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name };
           modelForm.value = { provider: '', model: '' };
+          mcpServers.value = [];
         }
       } catch (e) {
         if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name };
           modelForm.value = { provider: '', model: '' };
+          mcpServers.value = [];
         } else {
           agent.value = null;
         }
@@ -356,6 +483,7 @@ export default {
         payload.model = modelForm.value.model || undefined;
         const item = selectedModelItem.value;
         if (item && item.modelItemCode) payload.modelItemCode = item.modelItemCode;
+        payload.mcpServers = mcpServers.value;
         await agentConfigAPI.updateAgent(agent.value.id, payload);
         if (!agent.value.isDefault) {
           agent.value.name = configForm.value.name || agent.value.workspace;
@@ -433,9 +561,10 @@ export default {
 
     async function loadSkills() {
       if (!agent.value) return;
+      const workspace = (agent.value.workspace || '').trim() || 'default';
       skillsLoading.value = true;
       try {
-        const res = await skillsAPI.getSkills(agent.value.workspace);
+        const res = await skillsAPI.getSkills(workspace);
         agentSkills.value = res.data?.data ?? [];
       } catch (e) {
         agentSkills.value = [];
@@ -574,6 +703,17 @@ export default {
       confirmDeleteSkill,
       deleteSkillTarget,
       doDeleteSkill,
+      mcpServers,
+      mcpForm,
+      mcpFormVisible,
+      mcpEditingIndex,
+      mcpFormError,
+      mcpServerDisplayText,
+      openAddMcp,
+      startEditMcp,
+      cancelMcpForm,
+      saveMcpServer,
+      removeMcpServer,
     };
   },
 };
@@ -1113,6 +1253,52 @@ export default {
 
 .skill-delete {
   font-size: var(--font-size-sm);
+}
+
+.mcp-panel .panel-title {
+  margin-bottom: var(--spacing-sm);
+}
+.mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+.mcp-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+}
+.mcp-item-text {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+.mcp-item-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+.mcp-form {
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  margin-bottom: var(--spacing-md);
+}
+.mcp-form .config-section-title {
+  margin-top: 0;
+}
+.mcp-form-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+.mcp-save-row {
+  margin-top: var(--spacing-lg);
 }
 
 .add-skill-modal .form-hint {

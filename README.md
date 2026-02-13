@@ -251,7 +251,18 @@ npm link   # 或 npm install -g . 本地全局安装
 适用于：仅使用 **桌面端**，无需 Node 环境。
 
 - 从 [Releases](https://github.com/next-open-ai/openbot/releases) 下载对应平台的安装包（macOS / Windows）。
-- 安装后启动 OpenBot Desktop，按界面引导配置 API Key 与默认模型即可使用。
+- 安装后启动 OpenBot，按界面引导配置 API Key 与默认模型即可使用。
+
+**macOS 若提示「已损坏、无法打开」**：因安装包未做 Apple 公证，从浏览器下载后会被系统加上「隔离」属性，出现“已损坏”的误报。请用**终端**去掉隔离属性后即可正常打开（一次性操作）：
+
+1. 将下载的 `.dmg` 打开，把 `OpenBot.app` 拖到「应用程序」文件夹（或你想放的目录）。
+2. 打开「终端」（应用程序 → 实用工具 → 终端），执行（路径按你实际放置位置修改）：
+   ```bash
+   xattr -c /Applications/OpenBot.app
+   find /Applications/OpenBot.app -exec xattr -c {} \; 2>/dev/null
+   ```
+   若系统支持递归可简化为：`xattr -cr /Applications/OpenBot.app`
+3. 之后像普通应用一样打开 OpenBot 即可，无需再右键或重复操作。
 
 安装包由仓库通过 **Desktop 打包** 流程生成（见下方「三、开发 → 3.3 Desktop 开发 → Desktop 打包」）。
 

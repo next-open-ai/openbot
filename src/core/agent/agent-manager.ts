@@ -18,6 +18,8 @@ import { existsSync, mkdirSync } from "node:fs";
 import { createCompactionMemoryExtensionFactory } from "../memory/compaction-extension.js";
 import { getCompactionContextForSystemPrompt } from "../memory/index.js";
 import { createBrowserTool, createSaveExperienceTool, createInstallSkillTool } from "../tools/index.js";
+import { createMcpToolsForSession } from "../mcp/index.js";
+import type { McpServerConfig } from "../mcp/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
 import { getOpenbotAgentDir, getOpenbotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
 import { formatSkillsForPrompt } from "./skills.js";
@@ -192,6 +194,8 @@ For downloads, provide either a direct URL or a selector to click.`;
         apiKey?: string;
         maxSessions?: number;
         targetAgentId?: string;
+        /** MCP 服务器配置列表（与 Skill 类似，配到 Agent 后在创建 Session 时传入） */
+        mcpServers?: McpServerConfig[];
     } = {}): Promise<AgentSession> {
         const now = Date.now();
         if (this.sessions.has(sessionId)) {
@@ -278,6 +282,14 @@ For downloads, provide either a direct URL or a selector to click.`;
             ls: createLsTool(sessionWorkspaceDir),
         };
 
+        const mcpTools = await createMcpToolsForSession({ mcpServers: options.mcpServers });
+        const customTools = [
+            createBrowserTool(sessionWorkspaceDir),
+            createSaveExperienceTool(sessionId),
+            createInstallSkillTool(options.targetAgentId),
+            ...mcpTools,
+        ];
+
         const { session } = await createAgentSession({
             agentDir: this.agentDir,
             sessionManager: CoreSessionManager.inMemory(),
@@ -285,11 +297,7 @@ For downloads, provide either a direct URL or a selector to click.`;
             modelRegistry,
             cwd: sessionWorkspaceDir,
             resourceLoader: loader,
-            customTools: [
-                createBrowserTool(sessionWorkspaceDir),
-                createSaveExperienceTool(sessionId),
-                createInstallSkillTool(options.targetAgentId),
-            ],
+            customTools,
             baseToolsOverride: coreTools,
         } as any);
 

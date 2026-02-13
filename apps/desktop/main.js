@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require
 const path = require('path');
 const { pathToFileURL } = require('url');
 const http = require('http');
+const os = require('os');
 
 // Electron 主进程缺少 Web API 全局，gateway 依赖链（如 undici）需要 File
 if (typeof globalThis.File === 'undefined') {
@@ -18,8 +19,18 @@ const GATEWAY_PORT = 38080;
 
 /** 主进程内启动 Gateway（dev 与打包均可用），不 spawn 子进程 */
 async function startGatewayInProcess() {
+    // 与 AgentConfigService 使用相同的 home 解析，确保工作区/技能目录一致（~/.openbot/workspace、~/.openbot/agent）
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+    process.env.OPENBOT_WORKSPACE_DIR = process.env.OPENBOT_WORKSPACE_DIR || path.join(homeDir, '.openbot', 'workspace');
+    process.env.OPENBOT_AGENT_DIR = process.env.OPENBOT_AGENT_DIR || path.join(homeDir, '.openbot', 'agent');
     if (app.isPackaged) {
         process.env.OPENBOT_STATIC_DIR = path.join(__dirname, 'renderer', 'dist');
+        // 打包后系统技能目录在 Resources/skills（由 electron-builder extraResources 复制）
+        process.env.OPENBOT_SYSTEM_SKILLS_DIR = path.resolve(process.resourcesPath, 'skills');
+    } else {
+        // 开发环境：main.js 在 apps/desktop，仓库根目录 skills 为 openbot/skills（使用绝对路径）
+        const devSkillsDir = path.resolve(__dirname, '..', '..', 'skills');
+        process.env.OPENBOT_SYSTEM_SKILLS_DIR = devSkillsDir;
     }
     // 打包后 dist 通过 extraResources 放在 Contents/Resources/dist，可直接 import
     const serverPath = app.isPackaged

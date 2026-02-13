@@ -23,6 +23,23 @@ export interface Skill {
 /** 工作区技能名仅允许英文、数字、下划线、连字符 */
 const SKILL_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
+/**
+ * 系统技能目录：仅两条规则，不做复杂搜索。
+ * - 运行时/打包：由桌面 main 或部署方设置 OPENBOT_SYSTEM_SKILLS_DIR，用该目录。
+ * - 开发/测试：未设置时仅尝试「当前工作目录下的 skills」（从项目根启动时即项目目录下的 skills）。
+ */
+function resolveSystemSkillsDir(): string | null {
+    const envDir = process.env.OPENBOT_SYSTEM_SKILLS_DIR?.trim();
+    if (envDir) {
+        const abs = resolve(envDir);
+        if (existsSync(abs)) return abs;
+        return null;
+    }
+    const cwdSkills = resolve(process.cwd(), 'skills');
+    if (existsSync(cwdSkills)) return cwdSkills;
+    return null;
+}
+
 /** 技能目录与来源：全局=OPENBOT_AGENT_DIR/skills，系统=项目根/skills，工作区=OPENBOT_WORKSPACE_DIR/xxx/skills */
 @Injectable()
 export class SkillsService {
@@ -35,15 +52,15 @@ export class SkillsService {
 
         // 全局技能：OPENBOT_AGENT_DIR/skills（默认 ~/.openbot/agent/skills）
         const globalSkillsDir = join(getOpenbotAgentDir(), 'skills');
-        // 系统技能：当前项目代码根目录下的 skills
-        const systemSkillsDir = resolve(cwd, 'skills');
+        // 系统技能：OPENBOT_SYSTEM_SKILLS_DIR 或 cwd/skills（仅此两种）
+        const systemSkillsDir = resolveSystemSkillsDir();
         // 工作区技能：OPENBOT_WORKSPACE_DIR/<name>/skills（默认 ~/.openbot/workspace/xxx/skills）
         const workspaceSkillsDir = join(getOpenbotWorkspaceDir(), workspaceName, 'skills');
 
         if (existsSync(globalSkillsDir)) {
             this.skillPaths.push({ path: globalSkillsDir, source: 'global' });
         }
-        if (existsSync(systemSkillsDir)) {
+        if (systemSkillsDir) {
             this.skillPaths.push({ path: systemSkillsDir, source: 'system' });
         }
         if (existsSync(workspaceSkillsDir)) {
@@ -248,7 +265,19 @@ export class SkillsService {
     /** 仅返回指定工作区下的技能（文件目录管理，不涉及 SQLite） */
     async getSkillsForWorkspace(workspaceName: string): Promise<Skill[]> {
         const skillPath = this.getWorkspaceSkillsDir(workspaceName);
-        if (!existsSync(skillPath)) return [];
+        if (!existsSync(skillPath)) {
+            if (workspaceName === DEFAULT_AGENT_ID || workspaceName === 'default') {
+                try {
+                    await mkdir(skillPath, { recursive: true });
+                } catch (e) {
+                    console.warn(`[skills] 创建 default 工作区技能目录失败: ${skillPath}`, e);
+                }
+            }
+            if (!existsSync(skillPath)) {
+                console.warn(`[skills] 工作区技能目录不存在，返回空列表: workspace=${workspaceName}, path=${skillPath}`);
+                return [];
+            }
+        }
 
         const skills: Skill[] = [];
         try {
@@ -259,11 +288,19 @@ export class SkillsService {
                     const stats = await stat(fullPath);
                     if (!stats.isDirectory()) continue;
                     const skillMdPath = join(fullPath, 'SKILL.md');
-                    if (!existsSync(skillMdPath)) continue;
-                    const content = await readFile(skillMdPath, 'utf-8');
-                    skills.push(this.parseSkillFile(entry, content, fullPath, 'workspace'));
+                    const skillJsonPath = join(fullPath, 'skill.json');
+                    const packageJsonPath = join(fullPath, 'package.json');
+                    if (existsSync(skillMdPath)) {
+                        const content = await readFile(skillMdPath, 'utf-8');
+                        skills.push(this.parseSkillFile(entry, content, fullPath, 'workspace'));
+                    } else if (existsSync(skillJsonPath)) {
+                        const skill = await this.parseSkillJson(entry, skillJsonPath, fullPath);
+                        if (skill) skills.push(skill);
+                    } else if (existsSync(packageJsonPath)) {
+                        const skill = await this.parseSkillJson(entry, packageJsonPath, fullPath);
+                        if (skill) skills.push(skill);
+                    }
                 } catch (entryError: any) {
-                    // 跳过无效条目：ENOENT（目录已删/损坏的符号链接）、无权限等
                     if (entryError?.code !== 'ENOENT') {
                         console.warn(`Skipping workspace skill entry ${entry}:`, entryError?.message ?? entryError);
                     }
@@ -275,16 +312,39 @@ export class SkillsService {
         return skills;
     }
 
+    /** 从 skill.json 或 package.json 解析出 Skill（兼容无 SKILL.md 的 npm 风格技能目录） */
+    private async parseSkillJson(entryName: string, jsonPath: string, fullPath: string): Promise<Skill | null> {
+        try {
+            const content = await readFile(jsonPath, 'utf-8');
+            const data = JSON.parse(content) as { name?: string; description?: string };
+            const name = (data.name || entryName).trim() || entryName;
+            const description = (data.description || '').trim() || 'No description available';
+            return { name: entryName, description, path: fullPath, source: 'workspace' };
+        } catch {
+            return null;
+        }
+    }
+
     async getSkillContentForWorkspace(workspaceName: string, name: string): Promise<string | null> {
         const skillPath = this.getWorkspaceSkillsDir(workspaceName);
         const fullPath = join(skillPath, name);
         const skillMdPath = join(fullPath, 'SKILL.md');
-        if (!existsSync(skillMdPath)) return null;
-        try {
-            return await readFile(skillMdPath, 'utf-8');
-        } catch {
-            return null;
+        const readmePath = join(fullPath, 'README.md');
+        if (existsSync(skillMdPath)) {
+            try {
+                return await readFile(skillMdPath, 'utf-8');
+            } catch {
+                return null;
+            }
         }
+        if (existsSync(readmePath)) {
+            try {
+                return await readFile(readmePath, 'utf-8');
+            } catch {
+                return null;
+            }
+        }
+        return null;
     }
 
     /** 在工作区下新增技能（创建目录 + SKILL.md） */

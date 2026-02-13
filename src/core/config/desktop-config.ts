@@ -59,6 +59,9 @@ interface DesktopConfigJson {
     rag?: { embeddingProvider?: string; embeddingModel?: string };
 }
 
+/** MCP 服务器配置（与 core/mcp 类型一致，避免 core/config 依赖 core/mcp 实现） */
+export type DesktopMcpServerConfig = import("../mcp/index.js").McpServerConfig;
+
 interface AgentItem {
     id: string;
     name?: string;
@@ -67,6 +70,8 @@ interface AgentItem {
     model?: string;
     /** 匹配 config.configuredModels 中的 modelItemCode，优先于 provider/model */
     modelItemCode?: string;
+    /** MCP 服务器列表，创建 Session 时传入（与 Skill 类似） */
+    mcpServers?: DesktopMcpServerConfig[];
 }
 
 interface AgentsFile {
@@ -148,6 +153,8 @@ export interface DesktopAgentConfig {
     apiKey?: string;
     /** 工作区名，来自 agents.json 的 agent.workspace 或 agent.id */
     workspace?: string;
+    /** MCP 服务器配置，创建 Session 时传入 */
+    mcpServers?: DesktopMcpServerConfig[];
 }
 
 /**
@@ -214,6 +221,7 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
         }
     }
     let workspaceName: string = resolvedAgentId;
+    let mcpServers: DesktopMcpServerConfig[] | undefined;
 
     if (existsSync(agentsPath)) {
         try {
@@ -224,6 +232,9 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
             if (agent) {
                 if (agent.workspace) workspaceName = agent.workspace;
                 else if (agent.id) workspaceName = agent.id;
+                if (agent.mcpServers && Array.isArray(agent.mcpServers)) {
+                    mcpServers = agent.mcpServers;
+                }
                 if (agent.modelItemCode && Array.isArray(config.configuredModels)) {
                     const configured = config.configuredModels.find((m) => m.modelItemCode === agent.modelItemCode);
                     if (configured) {
@@ -249,7 +260,7 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
             ? provConfig.apiKey.trim()
             : undefined;
 
-    return { provider, model, apiKey: apiKey ?? undefined, workspace: workspaceName };
+    return { provider, model, apiKey: apiKey ?? undefined, workspace: workspaceName, mcpServers };
 }
 
 /** 供 CLI config list 使用：从桌面 config 读出的配置列表项 */

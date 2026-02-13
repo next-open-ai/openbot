@@ -70,6 +70,7 @@ export async function handleRunScheduledTask(
             provider,
             modelId,
             apiKey,
+            mcpServers: agentConfig?.mcpServers,
         });
         let assistantContent = "";
         let turnPromptTokens = 0;

@@ -82,6 +82,7 @@ async function handleAgentChatInner(
             apiKey,
             maxSessions: maxAgentSessions,
             targetAgentId: effectiveTargetAgentId,
+            mcpServers: agentConfig?.mcpServers,
         });
     } catch (err: any) {
         const msg = err?.message ?? String(err);

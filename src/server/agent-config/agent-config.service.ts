@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
+import type { McpServerConfig } from '../../core/mcp/index.js';
 
 /** 工作空间名仅允许英文、数字、下划线、连字符 */
 const WORKSPACE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
@@ -24,6 +25,8 @@ export interface AgentConfigItem {
     modelItemCode?: string;
     /** 是否为系统缺省智能体（主智能体），不可删除 */
     isDefault?: boolean;
+    /** MCP 服务器配置列表，创建 Session 时传入（与 Skill 类似） */
+    mcpServers?: McpServerConfig[];
 }
 
 interface AgentsFile {
@@ -149,7 +152,7 @@ export class AgentConfigService {
         return agent;
     }
 
-    async updateAgent(id: string, updates: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode'>>): Promise<AgentConfigItem> {
+    async updateAgent(id: string, updates: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode' | 'mcpServers'>>): Promise<AgentConfigItem> {
         if (id === DEFAULT_AGENT_ID) {
             await this.ensureDefaultWorkspace();
         }
@@ -170,6 +173,7 @@ export class AgentConfigService {
         if (updates.provider !== undefined) agent.provider = updates.provider;
         if (updates.model !== undefined) agent.model = updates.model;
         if (updates.modelItemCode !== undefined) agent.modelItemCode = updates.modelItemCode;
+        if (updates.mcpServers !== undefined) agent.mcpServers = updates.mcpServers;
         await this.writeAgentsFile(file);
         return { ...agent, isDefault: agent.id === DEFAULT_AGENT_ID };
     }

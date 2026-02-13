@@ -1,6 +1,6 @@
 {
     "name": "@openbot/openbot-desktop",
-    "version": "0.2.8",
+    "version": "0.2.18",
     "description": "OpenBot Desktop - Professional agent management application",
     "main": "main.js",
     "scripts": {
@@ -48,6 +48,13 @@
             {
                 "from": "gateway-dist",
                 "to": "dist",
+                "filter": [
+                    "**/*"
+                ]
+            },
+            {
+                "from": "../../skills",
+                "to": "skills",
                 "filter": [
                     "**/*"
                 ]
