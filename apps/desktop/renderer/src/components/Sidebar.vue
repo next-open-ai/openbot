@@ -117,18 +117,14 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 60px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06));
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  width: 48px;
+  height: 48px;
   overflow: hidden;
-  transition: transform 0.3s ease;
+  transition: opacity 0.2s ease;
 }
 
 .logo:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(100, 100, 255, 0.2);
+  opacity: 0.9;
 }
 
 .logo-image {
