@@ -9,7 +9,7 @@ import { resolveMcpServersForSession } from "./config.js";
 import { getMcpToolDefinitions } from "./operator.js";
 
 export type { McpServerConfig, McpServerConfigStdio, McpServerConfigSse, McpTool } from "./types.js";
-export { resolveMcpServersForSession, stdioConfigKey } from "./config.js";
+export { resolveMcpServersForSession, stdioConfigKey, sseConfigKey, mcpConfigKey } from "./config.js";
 export { McpClient } from "./client.js";
 export { getMcpToolDefinitions, shutdownMcpClients } from "./operator.js";
 export { mcpToolToToolDefinition, mcpToolsToToolDefinitions } from "./adapter.js";

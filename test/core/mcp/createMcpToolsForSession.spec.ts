@@ -14,11 +14,12 @@ describe("core/mcp/createMcpToolsForSession", () => {
         expect(tools).toEqual([]);
     });
 
-    it("returns empty array when only sse config (skipped)", async () => {
+    it("returns empty array when only sse config and connection fails", async () => {
         const tools = await createMcpToolsForSession({
             mcpServers: [{ transport: "sse", url: "http://localhost:9999" }],
         });
-        expect(tools).toEqual([]);
+        expect(Array.isArray(tools)).toBe(true);
+        expect(tools.length).toBe(0);
     });
 
     it("does not throw when stdio command is invalid (connection fails)", async () => {

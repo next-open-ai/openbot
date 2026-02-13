@@ -14,10 +14,12 @@ export interface McpServerConfigStdio {
     env?: Record<string, string>;
 }
 
-/** SSE 传输：预留，二期实现 */
+/** SSE/HTTP 远程传输：通过 URL POST JSON-RPC 请求 */
 export interface McpServerConfigSse {
     transport: "sse";
+    /** 远程 MCP 服务地址（如 https://example.com/mcp） */
     url: string;
+    /** 可选请求头（如 Authorization） */
     headers?: Record<string, string>;
 }
 
@@ -65,4 +67,12 @@ export interface JsonRpcResponse<T = unknown> {
     id: number | string;
     result?: T;
     error?: { code: number; message: string; data?: unknown };
+}
+
+/** 传输层抽象：stdio / sse 等实现此接口供 McpClient 使用 */
+export interface IMcpTransport {
+    start(): Promise<void>;
+    request(req: JsonRpcRequest, timeoutMs?: number): Promise<JsonRpcResponse>;
+    close(): Promise<void>;
+    readonly isConnected: boolean;
 }

@@ -1,8 +1,8 @@
 /**
  * MCP 配置解析单元测试
  */
-import { resolveMcpServersForSession, stdioConfigKey } from "../../../src/core/mcp/config.js";
-import type { McpServerConfigStdio } from "../../../src/core/mcp/types.js";
+import { resolveMcpServersForSession, stdioConfigKey, sseConfigKey } from "../../../src/core/mcp/config.js";
+import type { McpServerConfigStdio, McpServerConfigSse } from "../../../src/core/mcp/types.js";
 
 describe("core/mcp/config", () => {
     describe("resolveMcpServersForSession", () => {
@@ -21,7 +21,7 @@ describe("core/mcp/config", () => {
             const out = resolveMcpServersForSession(input);
             expect(out).toHaveLength(1);
             expect(out[0].transport).toBe("stdio");
-            expect(out[0].command).toBe("npx");
+            expect((out[0] as McpServerConfigStdio).command).toBe("npx");
             expect((out[0] as McpServerConfigStdio).args).toEqual(["-y", "mcp-server"]);
         });
 
@@ -30,9 +30,12 @@ describe("core/mcp/config", () => {
             expect(resolveMcpServersForSession(input)).toHaveLength(0);
         });
 
-        it("skips sse config (not implemented)", () => {
+        it("keeps valid sse config", () => {
             const input = [{ transport: "sse" as const, url: "http://localhost:8080" }];
-            expect(resolveMcpServersForSession(input)).toHaveLength(0);
+            const out = resolveMcpServersForSession(input);
+            expect(out).toHaveLength(1);
+            expect(out[0].transport).toBe("sse");
+            expect((out[0] as any).url).toBe("http://localhost:8080");
         });
 
         it("filters invalid entries", () => {
@@ -44,7 +47,7 @@ describe("core/mcp/config", () => {
             ] as any;
             const out = resolveMcpServersForSession(input);
             expect(out).toHaveLength(1);
-            expect(out[0].command).toBe("ok");
+            expect((out[0] as McpServerConfigStdio).command).toBe("ok");
         });
     });
 
@@ -59,6 +62,14 @@ describe("core/mcp/config", () => {
             const a: McpServerConfigStdio = { transport: "stdio", command: "node", args: ["a"] };
             const b: McpServerConfigStdio = { transport: "stdio", command: "node", args: ["b"] };
             expect(stdioConfigKey(a)).not.toBe(stdioConfigKey(b));
+        });
+    });
+
+    describe("sseConfigKey", () => {
+        it("returns stable key for same config", () => {
+            const a: McpServerConfigSse = { transport: "sse", url: "https://x.com" };
+            const b: McpServerConfigSse = { transport: "sse", url: "https://x.com" };
+            expect(sseConfigKey(a)).toBe(sseConfigKey(b));
         });
     });
 });

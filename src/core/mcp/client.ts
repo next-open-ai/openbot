@@ -1,10 +1,11 @@
 /**
  * MCP 客户端：连接、list_tools、call_tool、断开。
- * 仅实现 Tools 能力；Resources/Prompts 预留。
+ * 支持 stdio（本地进程）与 sse（远程 HTTP）两种传输。
  */
 
-import type { McpServerConfigStdio, McpTool, McpToolCallResult } from "./types.js";
-import { StdioTransport } from "./transport/stdio.js";
+import type { McpTool, McpToolCallResult, IMcpTransport } from "./types.js";
+import { createTransport } from "./transport/index.js";
+import type { McpServerConfig } from "./types.js";
 
 export interface McpClientOptions {
     initTimeoutMs?: number;
@@ -12,17 +13,22 @@ export interface McpClientOptions {
 }
 
 export class McpClient {
-    private config: McpServerConfigStdio;
-    private transport: StdioTransport;
+    private transport: IMcpTransport;
     private _tools: McpTool[] | null = null;
     private _requestId = 0;
 
-    constructor(config: McpServerConfigStdio, options: McpClientOptions = {}) {
-        this.config = config;
-        this.transport = new StdioTransport(config, {
-            initTimeoutMs: options.initTimeoutMs,
-            requestTimeoutMs: options.requestTimeoutMs,
-        });
+    constructor(configOrTransport: McpServerConfig | IMcpTransport, options: McpClientOptions = {}) {
+        if (
+            typeof (configOrTransport as IMcpTransport).request === "function" &&
+            typeof (configOrTransport as IMcpTransport).start === "function"
+        ) {
+            this.transport = configOrTransport as IMcpTransport;
+        } else {
+            this.transport = createTransport(configOrTransport as McpServerConfig, {
+                initTimeoutMs: options.initTimeoutMs,
+                requestTimeoutMs: options.requestTimeoutMs,
+            });
+        }
     }
 
     /** 建立连接并完成握手；成功后可使用 listTools / callTool */

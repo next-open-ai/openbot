@@ -155,12 +155,16 @@
           <div v-show="activeTab === 'mcp'" class="tab-panel mcp-panel">
             <h2 class="panel-title">{{ t('agents.mcpConfig') }}</h2>
             <p class="form-hint">{{ t('agents.mcpConfigHint') }}</p>
+
             <div class="mcp-list">
               <div
                 v-for="(item, index) in mcpServers"
                 :key="index"
                 class="mcp-item card-glass"
               >
+                <span class="mcp-item-badge" :class="item.transport === 'sse' ? 'badge-remote' : 'badge-local'">
+                  {{ item.transport === 'sse' ? t('agents.mcpTransportSse') : t('agents.mcpTransportStdio') }}
+                </span>
                 <span class="mcp-item-text">{{ mcpServerDisplayText(item) }}</span>
                 <div class="mcp-item-actions">
                   <button type="button" class="link-btn" @click="startEditMcp(index)">
@@ -172,26 +176,77 @@
                 </div>
               </div>
             </div>
+
             <div v-if="mcpFormVisible || mcpEditingIndex >= 0" class="mcp-form card-glass">
               <h3 class="config-section-title">{{ mcpEditingIndex >= 0 ? t('agents.editMcpServer') : t('agents.addMcpServer') }}</h3>
+
               <div class="form-group">
-                <label>{{ t('agents.mcpCommand') }}</label>
-                <input
-                  v-model="mcpForm.command"
-                  type="text"
-                  class="form-input"
-                  :placeholder="t('agents.mcpCommandPlaceholder')"
-                />
+                <label class="form-label">{{ t('agents.mcpTransportType') }}</label>
+                <div class="mcp-transport-tabs">
+                  <button
+                    type="button"
+                    class="transport-tab"
+                    :class="{ active: mcpForm.transport === 'stdio' }"
+                    @click="mcpForm.transport = 'stdio'"
+                  >
+                    <span class="transport-tab-icon">🖥️</span>
+                    <span class="transport-tab-label">{{ t('agents.mcpTransportStdio') }}</span>
+                    <span class="transport-tab-hint">{{ t('agents.mcpTransportStdioHint') }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="transport-tab"
+                    :class="{ active: mcpForm.transport === 'sse' }"
+                    @click="mcpForm.transport = 'sse'"
+                  >
+                    <span class="transport-tab-icon">🌐</span>
+                    <span class="transport-tab-label">{{ t('agents.mcpTransportSse') }}</span>
+                    <span class="transport-tab-hint">{{ t('agents.mcpTransportSseHint') }}</span>
+                  </button>
+                </div>
               </div>
-              <div class="form-group">
-                <label>{{ t('agents.mcpArgs') }}</label>
-                <input
-                  v-model="mcpForm.argsStr"
-                  type="text"
-                  class="form-input"
-                  :placeholder="t('agents.mcpArgsPlaceholder')"
-                />
-              </div>
+
+              <template v-if="mcpForm.transport === 'stdio'">
+                <div class="form-group">
+                  <label class="form-label">{{ t('agents.mcpCommand') }}</label>
+                  <input
+                    v-model="mcpForm.command"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.mcpCommandPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">{{ t('agents.mcpArgs') }}</label>
+                  <input
+                    v-model="mcpForm.argsStr"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.mcpArgsPlaceholder')"
+                  />
+                </div>
+              </template>
+              <template v-else>
+                <div class="form-group">
+                  <label class="form-label">{{ t('agents.mcpUrl') }}</label>
+                  <input
+                    v-model="mcpForm.url"
+                    type="url"
+                    class="form-input"
+                    :placeholder="t('agents.mcpUrlPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label class="form-label">{{ t('agents.mcpHeaders') }}</label>
+                  <textarea
+                    v-model="mcpForm.headersStr"
+                    class="form-input form-textarea"
+                    rows="2"
+                    :placeholder="t('agents.mcpHeadersPlaceholder')"
+                  />
+                </div>
+              </template>
+
               <p v-if="mcpFormError" class="form-hint form-hint-warn">{{ mcpFormError }}</p>
               <div class="mcp-form-actions">
                 <button type="button" class="btn-secondary" @click="cancelMcpForm">
@@ -202,10 +257,10 @@
                 </button>
               </div>
             </div>
-            <button v-else type="button" class="btn-secondary" @click="openAddMcp">
+            <button v-else type="button" class="btn-secondary btn-add-mcp" @click="openAddMcp">
               {{ t('agents.addMcpServer') }}
             </button>
-            <p class="form-hint" style="margin-top: 1rem;">{{ t('agents.mcpSaveHint') }}</p>
+            <p class="form-hint mcp-save-hint">{{ t('agents.mcpSaveHint') }}</p>
             <div class="mcp-save-row">
               <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
                 {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
@@ -386,25 +441,56 @@ export default {
 
     /** MCP 服务器列表（与 Skill 类似，配到智能体；创建 Session 时传入） */
     const mcpServers = ref([]);
-    const mcpForm = ref({ command: '', argsStr: '' });
+    const mcpForm = ref({
+      transport: 'stdio',
+      command: '',
+      argsStr: '',
+      url: '',
+      headersStr: '',
+    });
     const mcpEditingIndex = ref(-1);
     const mcpFormError = ref('');
     /** 是否正在显示「添加」表单（点击添加按钮后为 true，保存/取消后为 false） */
     const mcpFormVisible = ref(false);
 
     function normalizeMcpItem(item) {
-      if (!item || item.transport !== 'stdio') return { transport: 'stdio', command: '', args: [] };
+      if (!item || typeof item !== 'object') return null;
+      if (item.transport === 'sse') {
+        const url = (item.url || '').trim();
+        if (!url) return null;
+        let headers = item.headers;
+        if (typeof item.headers === 'string') {
+          try {
+            headers = item.headers.trim() ? JSON.parse(item.headers) : undefined;
+          } catch {
+            headers = undefined;
+          }
+        }
+        return { transport: 'sse', url, headers };
+      }
+      const cmd = (item.command || '').trim();
       const args = Array.isArray(item.args) ? item.args : (typeof item.args === 'string' ? item.args.split(/[\s,]+/).filter(Boolean) : []);
-      return { transport: 'stdio', command: (item.command || '').trim(), args };
+      return { transport: 'stdio', command: cmd, args };
     }
     function mcpServerDisplayText(item) {
-      const cmd = item?.command || '';
-      const a = (item?.args || []).join(' ');
+      if (!item) return '';
+      if (item.transport === 'sse') return item.url || '';
+      const cmd = item.command || '';
+      const a = (item.args || []).join(' ');
       return a ? `${cmd} ${a}`.trim() : cmd;
+    }
+    function getDefaultMcpForm() {
+      return {
+        transport: 'stdio',
+        command: '',
+        argsStr: '',
+        url: '',
+        headersStr: '',
+      };
     }
     function openAddMcp() {
       mcpEditingIndex.value = -1;
-      mcpForm.value = { command: '', argsStr: '' };
+      mcpForm.value = getDefaultMcpForm();
       mcpFormError.value = '';
       mcpFormVisible.value = true;
     }
@@ -412,29 +498,70 @@ export default {
       const item = mcpServers.value[index];
       if (!item) return;
       mcpEditingIndex.value = index;
-      mcpForm.value = { command: item.command || '', argsStr: (item.args || []).join(' ') };
+      if (item.transport === 'sse') {
+        mcpForm.value = {
+          transport: 'sse',
+          command: '',
+          argsStr: '',
+          url: item.url || '',
+          headersStr: item.headers && typeof item.headers === 'object' ? JSON.stringify(item.headers, null, 0) : '',
+        };
+      } else {
+        mcpForm.value = {
+          transport: 'stdio',
+          command: item.command || '',
+          argsStr: (item.args || []).join(' '),
+          url: '',
+          headersStr: '',
+        };
+      }
       mcpFormError.value = '';
     }
     function cancelMcpForm() {
       mcpEditingIndex.value = -1;
-      mcpForm.value = { command: '', argsStr: '' };
+      mcpForm.value = getDefaultMcpForm();
       mcpFormError.value = '';
       mcpFormVisible.value = false;
     }
     function saveMcpServer() {
       mcpFormError.value = '';
-      const cmd = (mcpForm.value.command || '').trim();
-      if (!cmd) {
-        mcpFormError.value = t('agents.mcpCommandRequired');
-        return;
-      }
-      const argsStr = (mcpForm.value.argsStr || '').trim();
-      const args = argsStr ? argsStr.split(/[\s,]+/).filter(Boolean) : [];
-      const newItem = { transport: 'stdio', command: cmd, args };
-      if (mcpEditingIndex.value >= 0) {
-        mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+      if (mcpForm.value.transport === 'sse') {
+        const url = (mcpForm.value.url || '').trim();
+        if (!url) {
+          mcpFormError.value = t('agents.mcpUrlRequired');
+          return;
+        }
+        let headers;
+        const headersStr = (mcpForm.value.headersStr || '').trim();
+        if (headersStr) {
+          try {
+            headers = JSON.parse(headersStr);
+            if (typeof headers !== 'object' || headers === null) headers = undefined;
+          } catch {
+            mcpFormError.value = t('agents.mcpHeadersInvalidJson');
+            return;
+          }
+        }
+        const newItem = { transport: 'sse', url, headers };
+        if (mcpEditingIndex.value >= 0) {
+          mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+        } else {
+          mcpServers.value = [...mcpServers.value, newItem];
+        }
       } else {
-        mcpServers.value = [...mcpServers.value, newItem];
+        const cmd = (mcpForm.value.command || '').trim();
+        if (!cmd) {
+          mcpFormError.value = t('agents.mcpCommandRequired');
+          return;
+        }
+        const argsStr = (mcpForm.value.argsStr || '').trim();
+        const args = argsStr ? argsStr.split(/[\s,]+/).filter(Boolean) : [];
+        const newItem = { transport: 'stdio', command: cmd, args };
+        if (mcpEditingIndex.value >= 0) {
+          mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+        } else {
+          mcpServers.value = [...mcpServers.value, newItem];
+        }
       }
       cancelMcpForm();
     }
@@ -477,7 +604,9 @@ export default {
             model: agent.value.model ?? '',
           };
           const raw = agent.value.mcpServers;
-          mcpServers.value = Array.isArray(raw) ? raw.map(normalizeMcpItem).filter((m) => (m.command || '').trim()) : [];
+          mcpServers.value = Array.isArray(raw)
+            ? raw.map(normalizeMcpItem).filter((m) => m && (m.transport === 'sse' ? (m.url || '').trim() : (m.command || '').trim()))
+            : [];
         } else if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name };
@@ -1318,12 +1447,31 @@ export default {
 .mcp-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--spacing-md);
   padding: var(--spacing-md) var(--spacing-lg);
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
 }
+.mcp-item-badge {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.mcp-item-badge.badge-local {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--color-accent-primary);
+}
+.mcp-item-badge.badge-remote {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
 .mcp-item-text {
+  flex: 1;
+  min-width: 0;
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
@@ -1336,16 +1484,75 @@ export default {
 }
 .mcp-form {
   padding: var(--spacing-lg);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
   margin-bottom: var(--spacing-md);
 }
 .mcp-form .config-section-title {
   margin-top: 0;
+  margin-bottom: var(--spacing-lg);
+}
+.mcp-transport-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+.mcp-form .transport-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-lg);
+  border: 2px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s;
+}
+.mcp-form .transport-tab:hover {
+  border-color: var(--color-bg-elevated);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+.mcp-form .transport-tab.active {
+  border-color: var(--color-accent-primary);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--color-accent-primary);
+}
+.transport-tab-icon {
+  font-size: 1.5rem;
+}
+.transport-tab-label {
+  font-weight: 600;
+  font-size: var(--font-size-base);
+}
+.transport-tab-hint {
+  font-size: var(--font-size-sm);
+  opacity: 0.85;
+  line-height: 1.35;
+}
+.mcp-form .form-label {
+  display: block;
+  margin-bottom: var(--spacing-xs);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.mcp-form .form-textarea {
+  min-height: 60px;
+  resize: vertical;
+  font-family: var(--font-mono, monospace);
 }
 .mcp-form-actions {
   display: flex;
   gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+}
+.btn-add-mcp {
+  margin-bottom: var(--spacing-md);
+}
+.mcp-save-hint {
   margin-top: var(--spacing-md);
 }
 .mcp-save-row {
