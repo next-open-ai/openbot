@@ -53,6 +53,14 @@
         </div>
         <div 
           class="nav-item" 
+          :class="{ active: activeTab === 'tags' }"
+          @click="activeTab = 'tags'"
+        >
+          <span class="nav-icon">🏷️</span>
+          {{ t('settings.tagsManagement') }}
+        </div>
+        <div 
+          class="nav-item" 
           :class="{ active: activeTab === 'about' }"
           @click="activeTab = 'about'"
         >
@@ -497,6 +505,11 @@
           <SettingsSkills />
         </div>
 
+        <!-- Tags Tab -->
+        <div v-show="activeTab === 'tags'" class="tab-content">
+          <SettingsTags />
+        </div>
+
         <!-- About Tab -->
         <div v-show="activeTab === 'about'" class="tab-content">
           <h2 class="tab-title">{{ t('settings.about') }}</h2>
@@ -658,12 +671,13 @@ import { useAuthStore } from '@/store/modules/auth';
 import { useI18n } from '@/composables/useI18n';
 import { usersAPI } from '@/api';
 import SettingsSkills from '@/components/SettingsSkills.vue';
+import SettingsTags from '@/components/SettingsTags.vue';
 
-const SETTINGS_TABS = ['general', 'agent', 'models', 'knowledge', 'users', 'skills', 'about'];
+const SETTINGS_TABS = ['general', 'agent', 'models', 'knowledge', 'users', 'skills', 'tags', 'about'];
 
 export default {
   name: 'Settings',
-  components: { SettingsSkills },
+  components: { SettingsSkills, SettingsTags },
   setup() {
     const route = useRoute();
     const router = useRouter();

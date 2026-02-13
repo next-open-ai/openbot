@@ -8,17 +8,33 @@
         </button>
       </div>
       <div class="sessions-list">
-        <button
+        <div
           v-for="session in sessions"
           :key="session.id"
-          type="button"
-          class="session-item"
+          class="session-item-wrap"
           :class="{ active: currentSessionId === session.id }"
-          @click="$emit('select', session.id)"
         >
-          <span class="session-title">{{ sessionTitle(session) }}</span>
-          <span class="session-badge" :class="`badge-${session.status}`">{{ session.status }}</span>
-        </button>
+          <button
+            type="button"
+            class="session-item"
+            @click="$emit('select', session.id)"
+          >
+            <span class="session-title">{{ sessionTitle(session) }}</span>
+            <span class="session-badge" :class="`badge-${session.status}`">{{ session.status }}</span>
+          </button>
+          <button
+            type="button"
+            class="session-item-delete"
+            :title="t('common.delete') || '删除'"
+            @click.stop="$emit('delete', session.id)"
+          >
+            <svg class="icon-delete" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              <line x1="10" y1="11" x2="10" y2="17"/>
+              <line x1="14" y1="11" x2="14" y2="17"/>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -35,7 +51,7 @@ export default {
     sessions: { type: Array, default: () => [] },
     currentSessionId: { type: String, default: null },
   },
-  emits: ['create', 'select'],
+  emits: ['create', 'select', 'delete'],
   setup() {
     const router = useRouter();
     const { t } = useI18n();
@@ -119,13 +135,31 @@ export default {
   padding: var(--spacing-sm);
 }
 
+.session-item-wrap {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+  border-radius: var(--radius-md);
+  transition: background var(--transition-fast);
+}
+
+.session-item-wrap:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.session-item-wrap.active .session-item {
+  background: var(--color-bg-tertiary);
+  border-left: 3px solid var(--color-accent-primary);
+  padding-left: calc(var(--spacing-md) - 3px);
+}
+
 .session-item {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: 100%;
+  min-width: 0;
   padding: var(--spacing-md);
-  margin-bottom: var(--spacing-xs);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -140,10 +174,30 @@ export default {
   background: var(--color-bg-tertiary);
 }
 
-.session-item.active {
-  background: var(--color-bg-tertiary);
-  border-left: 3px solid var(--color-accent-primary);
-  padding-left: calc(var(--spacing-md) - 3px);
+.session-item-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.session-item-delete:hover {
+  color: var(--color-error, #e53e3e);
+  background: var(--color-bg-elevated);
+}
+
+.icon-delete {
+  width: 14px;
+  height: 14px;
 }
 
 .session-title {

@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { createCompactionMemoryExtensionFactory } from "../memory/compaction-extension.js";
 import { getCompactionContextForSystemPrompt } from "../memory/index.js";
-import { createBrowserTool, createSaveExperienceTool, createInstallSkillTool } from "../tools/index.js";
+import { createBrowserTool, createSaveExperienceTool, createInstallSkillTool, createGetBookmarkTagsTool, createSaveBookmarkTool } from "../tools/index.js";
 import { createMcpToolsForSession } from "../mcp/index.js";
 import type { McpServerConfig } from "../mcp/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
@@ -287,6 +287,8 @@ For downloads, provide either a direct URL or a selector to click.`;
             createBrowserTool(sessionWorkspaceDir),
             createSaveExperienceTool(sessionId),
             createInstallSkillTool(options.targetAgentId),
+            createGetBookmarkTagsTool(),
+            createSaveBookmarkTool(),
             ...mcpTools,
         ];
 

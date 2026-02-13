@@ -5,6 +5,7 @@ import {
     Delete,
     Body,
     Param,
+    Header,
     HttpException,
     HttpStatus,
 } from '@nestjs/common';
@@ -33,6 +34,7 @@ export class AgentsController {
     }
 
     @Get('sessions')
+    @Header('Cache-Control', 'no-store')
     getSessions() {
         const sessions = this.agentsService.getSessions();
         return {
@@ -55,10 +57,7 @@ export class AgentsController {
 
     @Delete('sessions/:id')
     async deleteSession(@Param('id') id: string) {
-        const deleted = await this.agentsService.deleteSession(id);
-        if (!deleted) {
-            throw new HttpException('Session not found', HttpStatus.NOT_FOUND);
-        }
+        await this.agentsService.deleteSession(id);
         return {
             success: true,
             message: 'Session deleted',

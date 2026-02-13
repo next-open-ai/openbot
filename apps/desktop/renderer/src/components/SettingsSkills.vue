@@ -44,7 +44,7 @@
         <div class="panel-actions">
           <button type="button" class="btn-secondary" @click="openSmartInstall">{{ t('agents.installSmart') }}</button>
           <button type="button" class="btn-secondary" @click="showLocalInstallModal = true">{{ t('agents.installLocal') }}</button>
-          <button type="button" class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
+          <button v-if="false" type="button" class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
         </div>
       </div>
       <div v-if="globalLoading" class="loading-state"><div class="spinner"></div><p>{{ t('common.loading') }}</p></div>
@@ -53,7 +53,7 @@
         <div class="empty-actions">
           <button class="btn-secondary" @click="openSmartInstall">{{ t('agents.installSmart') }}</button>
           <button class="btn-secondary" @click="showLocalInstallModal = true">{{ t('agents.installLocal') }}</button>
-          <button class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
+          <button v-if="false" class="btn-primary" @click="openManualInstall">{{ t('agents.installManual') }}</button>
         </div>
       </div>
       <div v-else class="skills-grid">
@@ -142,8 +142,32 @@
       :show="showLocalInstallModal"
       scope="global"
       @close="showLocalInstallModal = false"
-      @installed="loadAllSkills"
+      @installed="onLocalInstalled"
     />
+    <!-- 本地安装成功提示 -->
+    <transition name="fade">
+      <div v-if="installSuccessPayload" class="modal-backdrop" @click.self="installSuccessPayload = null">
+        <div class="modal-content card-glass install-success-modal">
+          <div class="modal-header">
+            <h2>{{ t('agents.installSuccess') }}</h2>
+            <button type="button" class="close-btn" @click="installSuccessPayload = null">✕</button>
+          </div>
+          <div class="modal-body">
+            <p v-if="installSuccessPayload?.name" class="install-success-row">
+              <span class="label">{{ t('agents.installSuccessName') }}:</span>
+              <span class="value">{{ installSuccessPayload.name }}</span>
+            </p>
+            <p class="install-success-row install-success-dir">
+              <span class="label">{{ t('agents.installSuccessDir') }}:</span>
+              <span class="value dir" :title="installSuccessPayload?.installDir">{{ installSuccessPayload?.installDir }}</span>
+            </p>
+            <div class="modal-footer-actions">
+              <button type="button" class="btn-primary" @click="installSuccessPayload = null">{{ t('common.confirm') }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -178,6 +202,7 @@ export default {
     const deleteSaving = ref(false);
     const showSmartModal = ref(false);
     const showLocalInstallModal = ref(false);
+    const installSuccessPayload = ref(null);
 
     const systemSkills = computed(() => allSkills.value.filter((s) => (s.source || 'system') === 'system'));
     const globalSkills = computed(() => allSkills.value.filter((s) => (s.source || 'global') === 'global'));
@@ -215,6 +240,11 @@ export default {
       detailSkill.value = skill;
       detailContent.value = '';
       skillsAPI.getSkillContent(skill.name).then((r) => { detailContent.value = r.data?.data?.content ?? ''; }).catch(() => {});
+    }
+
+    function onLocalInstalled(payload) {
+      loadAllSkills();
+      installSuccessPayload.value = payload && (payload.installDir || payload.name) ? payload : null;
     }
 
     function openManualInstall() {
@@ -300,6 +330,8 @@ export default {
       doDelete,
       showSmartModal,
       showLocalInstallModal,
+      installSuccessPayload,
+      onLocalInstalled,
       openSmartInstall,
       closeSmartInstall,
       smartInstallDialogTitle,
@@ -309,6 +341,25 @@ export default {
 </script>
 
 <style scoped>
+.install-success-modal {
+  max-width: 520px;
+}
+.install-success-row {
+  margin: var(--spacing-sm) 0;
+}
+.install-success-row .label {
+  color: var(--color-text-secondary);
+  margin-right: var(--spacing-sm);
+}
+.install-success-row .value.dir {
+  word-break: break-all;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+.install-success-dir {
+  margin-top: var(--spacing-md);
+}
+
 .settings-skills {
   padding-bottom: var(--spacing-2xl);
 }

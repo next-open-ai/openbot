@@ -54,6 +54,16 @@ export const skillsAPI = {
             scope: options?.scope,
             workspace: options?.workspace,
         }),
+    /** 从上传的 zip 安装技能（浏览器端使用）。file 为 File 对象 */
+    installSkillFromUpload: (file, options) => {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('scope', options?.scope ?? 'global');
+        form.append('workspace', options?.workspace ?? 'default');
+        return apiClient.post('/skills/install-from-upload', form, {
+            headers: { 'Content-Type': undefined },
+        });
+    },
 };
 
 // Config API（先配 supported providers，再配模型；数据来自 provider-support + config）
@@ -94,6 +104,23 @@ export const tasksAPI = {
 export const usageAPI = {
     getTotal: () => apiClient.get('/usage/total'),
     record: (dto) => apiClient.post('/usage', dto),
+};
+
+// Tags API（收藏标签，供 URL 收藏技能使用）
+export const tagsAPI = {
+    list: () => apiClient.get('/tags'),
+    get: (id) => apiClient.get(`/tags/${id}`),
+    create: (body) => apiClient.post('/tags', body),
+    update: (id, body) => apiClient.put(`/tags/${id}`, body),
+    delete: (id) => apiClient.delete(`/tags/${id}`),
+};
+
+// Saved items API（URL 收藏）
+export const savedItemsAPI = {
+    list: (params) => apiClient.get('/saved-items', { params: params || {} }),
+    get: (id) => apiClient.get(`/saved-items/${id}`),
+    create: (body) => apiClient.post('/saved-items', body),
+    delete: (id) => apiClient.delete(`/saved-items/${id}`),
 };
 
 // Workspace API

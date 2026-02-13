@@ -199,10 +199,12 @@ export class AgentsService {
         return r ? this.rowToSession(r) : undefined;
     }
 
-    async deleteSession(sessionId: string): Promise<boolean> {
-        agentManager.deleteSession(sessionId);
+    async deleteSession(sessionId: string): Promise<void> {
         const result = this.db.run('DELETE FROM sessions WHERE id = ?', [sessionId]);
-        return result.changes > 0;
+        if (result.changes > 0) {
+            this.db.persist();
+        }
+        agentManager.deleteSession(sessionId);
     }
 
     getMessageHistory(sessionId: string): ChatMessage[] {

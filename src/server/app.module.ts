@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module.js';
 import { WorkspaceModule } from './workspace/workspace.module.js';
 import { TasksModule } from './tasks/tasks.module.js';
 import { UsageModule } from './usage/usage.module.js';
+import { SavedItemsModule } from './saved-items/saved-items.module.js';
 
 @Module({
     imports: [
@@ -22,6 +23,7 @@ import { UsageModule } from './usage/usage.module.js';
         WorkspaceModule,
         TasksModule,
         UsageModule,
+        SavedItemsModule,
     ],
 })
 export class AppModule {}

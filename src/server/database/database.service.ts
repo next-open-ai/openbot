@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 
 /** RunResult compatible with better-sqlite3 for callers that use .changes / .lastInsertRowid */
@@ -44,7 +44,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
                 : pathEnv ?? join(process.env.OPENBOT_DB_DIR ?? defaultDir, 'openbot.db');
 
         if (path !== ':memory:') {
-            const dir = path.endsWith('.db') ? join(path, '..') : path;
+            const resolvedPath = resolve(path);
+            const dir = resolvedPath.endsWith('.db') ? join(resolvedPath, '..') : resolvedPath;
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
@@ -57,17 +58,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             db = new SQL.Database() as SqlJsDatabase;
             this.dbPath = ':memory:';
         } else {
-            if (existsSync(path)) {
-                const buf = readFileSync(path);
+            const absolutePath = resolve(path);
+            if (existsSync(absolutePath)) {
+                const buf = readFileSync(absolutePath);
                 db = new SQL.Database(new Uint8Array(buf)) as SqlJsDatabase;
             } else {
                 db = new SQL.Database() as SqlJsDatabase;
             }
-            this.dbPath = path;
+            this.dbPath = absolutePath;
         }
         this.sqlDb = db;
         db.run('PRAGMA foreign_keys = ON;');
         this.runMigrations();
+        if (path !== ':memory:') {
+            this.persistIfFile();
+            console.log('[DatabaseService] Database file:', this.dbPath);
+        }
     }
 
     private getDb(): SqlJsDatabase {
@@ -147,6 +153,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           );
           CREATE INDEX IF NOT EXISTS idx_token_usage_session_id ON token_usage(session_id);
           CREATE INDEX IF NOT EXISTS idx_token_usage_created_at ON token_usage(created_at);
+
+          CREATE TABLE IF NOT EXISTS tags (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS saved_items (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            title TEXT,
+            workspace TEXT NOT NULL DEFAULT 'default',
+            created_at INTEGER NOT NULL
+          );
+          CREATE TABLE IF NOT EXISTS saved_item_tags (
+            saved_item_id TEXT NOT NULL,
+            tag_id TEXT NOT NULL,
+            PRIMARY KEY (saved_item_id, tag_id),
+            FOREIGN KEY (saved_item_id) REFERENCES saved_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+          );
+          CREATE INDEX IF NOT EXISTS idx_saved_item_tags_tag_id ON saved_item_tags(tag_id);
         `;
         const statements = ddl.split(';').map((s) => s.trim()).filter(Boolean);
         for (const stmt of statements) {
@@ -168,10 +196,31 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     run(sql: string, params: unknown[] = []): RunResult {
         const db = this.getDb();
         db.run(sql, params as unknown[]);
+        this.persistIfFile();
         const rows = db.exec('SELECT changes() AS c, last_insert_rowid() AS id');
         const c = rows[0]?.values?.[0]?.[0] ?? 0;
         const id = rows[0]?.values?.[0]?.[1] ?? 0;
         return { changes: Number(c), lastInsertRowid: Number(id) };
+    }
+
+    /**
+     * 使用文件 DB 时立即落盘。每次 run() 写入后都会调用，保证「每次保存马上写到磁盘」。
+     * 落盘失败时重新抛出，便于上层返回错误、前端不乐观更新，避免「删了但重启又出现」。
+     */
+    private persistIfFile(): void {
+        if (!this.sqlDb || !this.dbPath || this.dbPath === ':memory:') return;
+        try {
+            const data = this.sqlDb.export();
+            writeFileSync(this.dbPath, Buffer.from(data));
+        } catch (e) {
+            console.error('[DatabaseService] Failed to persist database:', e);
+            throw e;
+        }
+    }
+
+    /** 供删除等关键操作后显式落盘，确保删除结果持久化 */
+    persist(): void {
+        this.persistIfFile();
     }
 
     get<T>(sql: string, params: unknown[] = []): T | undefined {

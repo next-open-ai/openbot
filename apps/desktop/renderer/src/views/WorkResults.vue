@@ -12,23 +12,40 @@
       </button>
     </div>
 
-    <div class="results-tabs">
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'documents' }"
-        @click="activeTab = 'documents'"
-      >
-        {{ t('workResults.documents') }}
-      </button>
-      <button
-        class="tab-btn"
-        :class="{ active: activeTab === 'news' }"
-        @click="activeTab = 'news'"
-      >
-        {{ t('workResults.news') }}
-      </button>
-    </div>
+    <div class="results-layout">
+      <aside class="results-sidebar card-glass">
+        <nav class="results-nav">
+          <button
+            type="button"
+            class="nav-item"
+            :class="{ active: activeTab === 'documents' }"
+            @click="activeTab = 'documents'"
+          >
+            <span class="nav-icon">📂</span>
+            {{ t('workResults.documentsTab') }}
+          </button>
+          <button
+            type="button"
+            class="nav-item"
+            :class="{ active: activeTab === 'bookmarks' }"
+            @click="activeTab = 'bookmarks'; loadBookmarks()"
+          >
+            <span class="nav-icon">🔖</span>
+            {{ t('workResults.bookmarks') }}
+          </button>
+          <button
+            type="button"
+            class="nav-item"
+            :class="{ active: activeTab === 'news' }"
+            @click="activeTab = 'news'"
+          >
+            <span class="nav-icon">📰</span>
+            {{ t('workResults.news') }}
+          </button>
+        </nav>
+      </aside>
 
+      <main class="results-main">
     <!-- 文档 Tab -->
     <div v-show="activeTab === 'documents'" class="tab-panel documents-panel">
       <div class="doc-toolbar">
@@ -144,6 +161,58 @@
       </template>
     </div>
 
+    <!-- 收藏 Tab -->
+    <div v-show="activeTab === 'bookmarks'" class="tab-panel bookmarks-panel">
+      <div v-if="bookmarksLoading" class="loading-state">
+        <div class="spinner"></div>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+      <div v-else-if="bookmarks.length === 0" class="empty-state">
+        <div class="empty-icon">🔖</div>
+        <p>{{ t('workResults.noBookmarks') }}</p>
+        <p class="text-secondary">{{ t('workResults.noBookmarksHint') }}</p>
+      </div>
+      <ul v-else class="bookmarks-list">
+        <li v-for="item in bookmarks" :key="item.id" class="bookmark-item card-glass">
+          <div class="bookmark-main">
+            <a :href="item.url" target="_blank" rel="noopener noreferrer" class="bookmark-title">
+              {{ item.title || item.url }}
+            </a>
+            <p v-if="item.title && item.url !== item.title" class="bookmark-url">{{ item.url }}</p>
+            <div v-if="item.tagNames?.length" class="bookmark-tags">
+              <span v-for="tag in item.tagNames" :key="tag" class="tag-pill">{{ tag }}</span>
+            </div>
+          </div>
+          <div class="bookmark-actions">
+            <a :href="item.url" target="_blank" rel="noopener noreferrer" class="link-btn">
+              {{ t('workResults.openLink') }}
+            </a>
+            <button type="button" class="link-btn danger" @click="confirmDeleteBookmark(item)">
+              {{ t('common.delete') }}
+            </button>
+          </div>
+        </li>
+      </ul>
+      <transition name="fade">
+        <div v-if="deleteBookmarkTarget" class="modal-backdrop" @click.self="deleteBookmarkTarget = null">
+          <div class="modal-content card-glass delete-confirm-modal">
+            <div class="modal-header">
+              <h2>{{ t('common.delete') }}</h2>
+              <button type="button" class="close-btn" @click="deleteBookmarkTarget = null">✕</button>
+            </div>
+            <div class="modal-body">
+              <p>{{ t('workResults.deleteBookmarkConfirm') }}</p>
+              <p class="delete-target-name">{{ deleteBookmarkTarget?.title || deleteBookmarkTarget?.url }}</p>
+              <div class="modal-footer-actions">
+                <button type="button" class="btn-secondary" @click="deleteBookmarkTarget = null">{{ t('common.close') }}</button>
+                <button type="button" class="btn-danger" @click="doDeleteBookmark">{{ t('common.delete') }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </div>
+
     <!-- 新闻 Tab -->
     <div v-show="activeTab === 'news'" class="tab-panel news-panel">
       <div class="empty-state">
@@ -151,6 +220,9 @@
         <p>{{ t('workResults.noNews') }}</p>
         <p class="text-secondary">{{ t('workResults.noNewsHint') }}</p>
       </div>
+    </div>
+
+      </main>
     </div>
 
     <!-- Preview modal -->
@@ -246,7 +318,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from '@/composables/useI18n';
 import apiClient from '@/api';
-import { workspaceAPI, configAPI } from '@/api';
+import { workspaceAPI, configAPI, savedItemsAPI } from '@/api';
 import { useSettingsStore } from '@/store/modules/settings';
 
 const PREVIEW_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'pdf', 'txt', 'html', 'htm', 'md', 'json']);
@@ -269,6 +341,9 @@ export default {
     const previewTextContent = ref(null);
     const previewHtmlContent = ref(null);
     const deleteTarget = ref(null);
+    const bookmarks = ref([]);
+    const bookmarksLoading = ref(false);
+    const deleteBookmarkTarget = ref(null);
 
     const docPathParts = computed(() =>
       docPath.value ? docPath.value.split('/').filter(Boolean) : []
@@ -401,6 +476,35 @@ export default {
       }
     }
 
+    async function loadBookmarks() {
+      bookmarksLoading.value = true;
+      try {
+        const res = await savedItemsAPI.list();
+        bookmarks.value = res.data?.data ?? [];
+      } catch (e) {
+        console.error('List bookmarks failed', e);
+        bookmarks.value = [];
+      } finally {
+        bookmarksLoading.value = false;
+      }
+    }
+
+    function confirmDeleteBookmark(item) {
+      deleteBookmarkTarget.value = item;
+    }
+
+    async function doDeleteBookmark() {
+      if (!deleteBookmarkTarget.value) return;
+      const id = deleteBookmarkTarget.value.id;
+      deleteBookmarkTarget.value = null;
+      try {
+        await savedItemsAPI.delete(id);
+        loadBookmarks();
+      } catch (e) {
+        console.error('Delete bookmark failed', e);
+      }
+    }
+
     async function switchWorkspace(name) {
       try {
         await configAPI.updateConfig({ defaultAgentId: name });
@@ -434,6 +538,9 @@ export default {
       imageFiles,
       nonImageItems,
       docLoading,
+      bookmarks,
+      bookmarksLoading,
+      deleteBookmarkTarget,
       previewItem,
       previewType,
       previewUrl,
@@ -447,6 +554,9 @@ export default {
       closePreview,
       confirmDelete,
       doDelete,
+      loadBookmarks,
+      confirmDeleteBookmark,
+      doDeleteBookmark,
       switchWorkspace,
     };
   },
@@ -481,31 +591,64 @@ export default {
   color: var(--color-text-primary);
 }
 
-.results-tabs {
+.results-layout {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-lg);
+  gap: var(--spacing-lg);
+  overflow: hidden;
 }
 
-.tab-btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border-radius: var(--radius-md);
+.results-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
-  background: var(--color-bg-secondary);
+}
+
+.results-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.results-nav .nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
   color: var(--color-text-secondary);
-  font-weight: 500;
+  font-size: var(--font-size-base);
+  text-align: left;
+  cursor: pointer;
   transition: var(--transition-fast);
 }
 
-.tab-btn:hover {
+.results-nav .nav-item:hover {
   background: var(--color-bg-tertiary);
   color: var(--color-text-primary);
 }
 
-.tab-btn.active {
+.results-nav .nav-item.active {
   background: var(--color-accent-primary);
   color: white;
-  border-color: var(--color-accent-primary);
+}
+
+.results-nav .nav-icon {
+  font-size: 1.1rem;
+}
+
+.results-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .tab-panel {
@@ -612,6 +755,62 @@ export default {
   font-weight: 600;
   color: var(--color-text-secondary);
   margin: 0 0 var(--spacing-md);
+}
+
+/* Bookmarks panel */
+.bookmarks-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+.bookmark-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+}
+.bookmark-main {
+  flex: 1;
+  min-width: 0;
+}
+.bookmark-title {
+  font-weight: 500;
+  color: var(--color-accent-primary);
+  text-decoration: none;
+  word-break: break-all;
+  display: block;
+  margin-bottom: var(--spacing-xs);
+}
+.bookmark-title:hover {
+  text-decoration: underline;
+}
+.bookmark-url {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-tertiary);
+  margin: 0 0 var(--spacing-sm);
+  word-break: break-all;
+}
+.bookmark-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+.tag-pill {
+  font-size: var(--font-size-xs);
+  padding: 2px var(--spacing-sm);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-full);
+  color: var(--color-text-secondary);
+}
+.bookmark-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
 }
 
 .empty-state.small {

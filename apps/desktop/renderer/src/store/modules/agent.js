@@ -12,6 +12,8 @@ export const useAgentStore = defineStore('agent', {
         isStreaming: false,
         toolExecutions: [],
         totalTokens: 0,
+        /** 为 true 时根路径 / 不自动跳转最近会话（新建对话/切换智能体后清除 stay query 时用，跨组件实例生效） */
+        skipRedirectToRecentOnce: false,
     }),
 
     getters: {
@@ -23,9 +25,11 @@ export const useAgentStore = defineStore('agent', {
         async fetchSessions() {
             try {
                 const response = await agentAPI.getSessions();
-                this.sessions = response.data.data;
+                const list = response?.data?.data ?? response?.data;
+                this.sessions = Array.isArray(list) ? list : [];
             } catch (error) {
                 console.error('Failed to fetch sessions:', error);
+                this.sessions = [];
             }
         },
 
@@ -50,14 +54,18 @@ export const useAgentStore = defineStore('agent', {
         async deleteSession(sessionId) {
             try {
                 await agentAPI.deleteSession(sessionId);
-                this.sessions = this.sessions.filter(s => s.id !== sessionId);
-                if (this.currentSession?.id === sessionId) {
-                    this.currentSession = null;
-                    this.messages = [];
-                }
             } catch (error) {
-                console.error('Failed to delete session:', error);
-                throw error;
+                if (error?.response?.status === 404) {
+                    // 后端未找到该 session（已删或未持久化），仍从本地列表移除以保持界面一致
+                } else {
+                    console.error('Failed to delete session:', error);
+                    throw error;
+                }
+            }
+            this.sessions = this.sessions.filter(s => s.id !== sessionId);
+            if (this.currentSession?.id === sessionId) {
+                this.currentSession = null;
+                this.messages = [];
             }
         },
 
@@ -107,16 +115,17 @@ export const useAgentStore = defineStore('agent', {
 
         /**
          * @param {string} message
-         * @param {{ targetAgentId?: string }} [options] - targetAgentId: 具体 agentId 或 "global"|"all"；不传则用 currentSession.agentId
+         * @param {{ targetAgentId?: string, agentId?: string }} [options] - agentId: 新建会话时使用的智能体（无 currentSession 时）；targetAgentId: 发消息目标
          */
         async sendMessage(message, options = {}) {
             if (!message.trim()) return;
 
-            // Lazy Session Creation: If no current session, create one now
+            // Lazy Session Creation: If no current session, create one now（使用传入的 agentId 或 default）
             if (!this.currentSession) {
                 try {
                     const title = message.trim().substring(0, 50);
-                    const session = await this.createSession({ title });
+                    const agentId = options?.agentId ?? 'default';
+                    const session = await this.createSession({ agentId, title });
                     this.currentSession = session;
                     await socketService.connectToSession(session.id, session.agentId, session.type);
                 } catch (error) {

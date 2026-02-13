@@ -8,8 +8,8 @@
         </div>
         <div class="modal-body">
           <p class="form-hint">{{ t('agents.installLocalHint') }}</p>
-          <div v-if="!hasElectron" class="form-error">{{ t('agents.installLocalDesktopOnly') }}</div>
-          <template v-else>
+          <!-- 桌面端：选择目录安装 -->
+          <template v-if="hasElectron">
             <div class="path-row">
               <span v-if="selectedPath" class="path-text" :title="selectedPath">{{ selectedPath }}</span>
               <span v-else class="path-placeholder">{{ t('skills.selectFolder') }}</span>
@@ -29,7 +29,42 @@
                 type="button"
                 class="btn-primary"
                 :disabled="!selectedPath || saving"
-                @click="doInstall"
+                @click="doInstallFromPath"
+              >
+                {{ saving ? t('common.loading') : t('agents.installConfirm') }}
+              </button>
+            </div>
+          </template>
+          <!-- 浏览器端：上传 zip 安装 -->
+          <template v-else>
+            <p class="form-hint form-hint-upload">{{ t('agents.installLocalZipHint') }}</p>
+            <div class="path-row upload-row">
+              <input
+                ref="zipInputRef"
+                type="file"
+                accept=".zip"
+                class="file-input"
+                @change="onZipSelected"
+              />
+              <span v-if="selectedFile" class="path-text" :title="selectedFile.name">{{ selectedFile.name }}</span>
+              <span v-else class="path-placeholder">{{ t('agents.installLocalSelectZip') }}</span>
+              <button
+                type="button"
+                class="btn-secondary btn-pick"
+                :disabled="saving"
+                @click="triggerZipInput"
+              >
+                {{ t('agents.installLocalChooseZip') }}
+              </button>
+            </div>
+            <p v-if="error" class="form-error">{{ error }}</p>
+            <div class="modal-footer-actions">
+              <button type="button" class="btn-secondary" @click="close">{{ t('common.close') }}</button>
+              <button
+                type="button"
+                class="btn-primary"
+                :disabled="!selectedFile || saving"
+                @click="doInstallFromUpload"
               >
                 {{ saving ? t('common.loading') : t('agents.installConfirm') }}
               </button>
@@ -63,11 +98,14 @@ export default {
     const hasElectron = computed(() => typeof window !== 'undefined' && !!window.electronAPI?.showOpenDirectoryDialog);
 
     const selectedPath = ref('');
+    const selectedFile = ref(null);
+    const zipInputRef = ref(null);
     const error = ref('');
     const saving = ref(false);
 
     function close() {
       selectedPath.value = '';
+      selectedFile.value = null;
       error.value = '';
       emit('close');
     }
@@ -83,18 +121,50 @@ export default {
       }
     }
 
-    async function doInstall() {
+    function triggerZipInput() {
+      zipInputRef.value?.click();
+    }
+
+    function onZipSelected(ev) {
+      const file = ev.target?.files?.[0];
+      if (file && file.name.toLowerCase().endsWith('.zip')) selectedFile.value = file;
+      else selectedFile.value = null;
+      if (zipInputRef.value) zipInputRef.value.value = '';
+    }
+
+    async function doInstallFromPath() {
       const path = selectedPath.value?.trim();
       if (!path || saving.value) return;
       error.value = '';
       saving.value = true;
       try {
-        await skillsAPI.installSkillFromPath(path, {
+        const res = await skillsAPI.installSkillFromPath(path, {
           scope: props.scope,
           workspace: props.scope === 'workspace' ? props.workspace : undefined,
         });
-        emit('installed');
+        const data = res.data?.data ?? {};
         close();
+        emit('installed', { installDir: data.installDir, name: data.name });
+      } catch (e) {
+        error.value = e.response?.data?.message || e.message || t('agents.installFailed');
+      } finally {
+        saving.value = false;
+      }
+    }
+
+    async function doInstallFromUpload() {
+      const file = selectedFile.value;
+      if (!file || saving.value) return;
+      error.value = '';
+      saving.value = true;
+      try {
+        const res = await skillsAPI.installSkillFromUpload(file, {
+          scope: props.scope,
+          workspace: props.scope === 'workspace' ? props.workspace : undefined,
+        });
+        const data = res.data?.data ?? {};
+        close();
+        emit('installed', { installDir: data.installDir, name: data.name });
       } catch (e) {
         error.value = e.response?.data?.message || e.message || t('agents.installFailed');
       } finally {
@@ -105,6 +175,7 @@ export default {
     watch(visible, (v) => {
       if (!v) {
         selectedPath.value = '';
+        selectedFile.value = null;
         error.value = '';
       }
     });
@@ -114,11 +185,16 @@ export default {
       visible,
       hasElectron,
       selectedPath,
+      selectedFile,
+      zipInputRef,
       error,
       saving,
       close,
       pickDirectory,
-      doInstall,
+      triggerZipInput,
+      onZipSelected,
+      doInstallFromPath,
+      doInstallFromUpload,
     };
   },
 };
@@ -170,5 +246,11 @@ export default {
 }
 .form-error {
   margin-top: var(--spacing-sm);
+}
+.file-input {
+  display: none;
+}
+.form-hint-upload {
+  margin-bottom: var(--spacing-sm);
 }
 </style>

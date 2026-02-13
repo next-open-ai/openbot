@@ -7,6 +7,7 @@ import { existsSync } from "fs";
 import { join, resolve, basename } from "path";
 import { tmpdir } from "os";
 import { randomUUID } from "crypto";
+import AdmZip from "adm-zip";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { homedir } from "os";
@@ -167,4 +168,103 @@ export async function installSkillFromPath(
     const srcResolved = await realpath(pathToUse).catch(() => pathToUse);
     await cp(srcResolved, destPath, { recursive: true });
     return { installDir: targetDir, name: baseName };
+}
+
+/** 上传 zip 包最大体积（字节） */
+const MAX_UPLOAD_ZIP_BYTES = 10 * 1024 * 1024;
+
+export interface InstallFromUploadOptions {
+    scope: "global" | "workspace";
+    workspace?: string;
+}
+
+/** 解压后忽略的条目（系统/打包产生的噪音） */
+const IGNORED_ZIP_ENTRIES = new Set(["__MACOSX", ".DS_Store", ".git", "Thumbs.db"]);
+
+function isIgnoredZipEntry(name: string): boolean {
+    if (!name || name.includes("..")) return true;
+    if (IGNORED_ZIP_ENTRIES.has(name)) return true;
+    if (name.startsWith(".")) return true;
+    return false;
+}
+
+/**
+ * 从上传的 zip 安装技能：解压到临时目录，校验为单个技能目录（含 SKILL.md），再复制到目标。
+ * 支持两种 zip 结构：① 单个顶层目录且内含 SKILL.md；② 根目录直接含 SKILL.md（将视为技能根目录）。
+ */
+export async function installSkillFromUpload(
+    zipBuffer: Buffer,
+    options: InstallFromUploadOptions = { scope: "global", workspace: "default" },
+): Promise<InstallFromPathResult> {
+    if (zipBuffer.length > MAX_UPLOAD_ZIP_BYTES) {
+        throw new Error("zip 包不能超过 10MB");
+    }
+    const tempDir = join(tmpdir(), `openbot-upload-${randomUUID()}`);
+    try {
+        await mkdir(tempDir, { recursive: true });
+        const zip = new AdmZip(zipBuffer);
+        zip.extractAllTo(tempDir, true);
+
+        const allEntries = await readdir(tempDir);
+        const entries = allEntries.filter((e) => !isIgnoredZipEntry(e));
+
+        let skillPath: string;
+
+        if (entries.length === 0) {
+            throw new Error("zip 解压后未得到有效内容，请检查 zip 是否包含技能目录或 SKILL.md");
+        }
+
+        if (entries.length === 1) {
+            const singleName = entries[0]!;
+            const candidatePath = join(tempDir, singleName);
+            const statEntry = await stat(candidatePath);
+            if (statEntry.isDirectory()) {
+                const skillMdInDir = join(candidatePath, "SKILL.md");
+                if (existsSync(skillMdInDir)) {
+                    skillPath = candidatePath;
+                } else {
+                    throw new Error("该目录下未找到 SKILL.md，请确保 zip 内技能目录根目录含有 SKILL.md 文件");
+                }
+            } else {
+                if (existsSync(join(tempDir, "SKILL.md"))) {
+                    throw new Error("zip 根目录含有 SKILL.md，但根目录下还有其它文件，请将整个技能放在一个子目录内再打包");
+                }
+                throw new Error("zip 内未找到包含 SKILL.md 的技能目录，请检查打包方式");
+            }
+        } else {
+            const skillMdAtRoot = existsSync(join(tempDir, "SKILL.md"));
+            const dirsWithSkillMd: string[] = [];
+            for (const e of entries) {
+                const p = join(tempDir, e);
+                const st = await stat(p).catch(() => null);
+                if (st?.isDirectory() && existsSync(join(p, "SKILL.md"))) dirsWithSkillMd.push(p);
+            }
+            if (dirsWithSkillMd.length === 1) {
+                skillPath = dirsWithSkillMd[0]!;
+            } else if (dirsWithSkillMd.length > 1) {
+                throw new Error("zip 内包含多个技能目录，请只保留一个技能目录再打包");
+            } else if (skillMdAtRoot) {
+                skillPath = tempDir;
+            } else {
+                throw new Error("zip 内未找到包含 SKILL.md 的技能目录；若为多文件打包，请将 SKILL.md 放在 zip 根目录或单个子目录内");
+            }
+        }
+
+        if (skillPath === tempDir) {
+            const baseName = "skill";
+            const wrappedDir = join(tmpdir(), `openbot-skill-wrap-${randomUUID()}`);
+            try {
+                await mkdir(wrappedDir, { recursive: true });
+                const destPath = join(wrappedDir, baseName);
+                await cp(tempDir, destPath, { recursive: true });
+                return await installSkillFromPath(destPath, options);
+            } finally {
+                await rm(wrappedDir, { recursive: true, force: true }).catch(() => {});
+            }
+        }
+
+        return await installSkillFromPath(skillPath, options);
+    } finally {
+        await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
 }

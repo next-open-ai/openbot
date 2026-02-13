@@ -34,7 +34,9 @@ import { handleSse } from "./sse-handler.js";
 import { handleVoiceUpgrade } from "./voice-handler.js";
 import { handleConnection } from "./connection-handler.js";
 import { handleRunScheduledTask } from "./methods/run-scheduled-task.js";
+import multer from "multer";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
+import { handleInstallSkillFromUpload } from "./methods/install-skill-from-upload.js";
 import { setBackendBaseUrl } from "./backend-url.js";
 import { ensureDesktopConfigInitialized } from "../core/config/desktop-config.js";
 import { createNestAppEmbedded } from "../server/bootstrap.js";
@@ -83,6 +85,11 @@ export async function startGatewayServer(port: number = 38080): Promise<{
         await handleRunScheduledTask(req, res);
     });
 
+    const uploadZip = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 10 * 1024 * 1024 },
+    });
+
     gatewayExpress.post(`${PATHS.SERVER_API}/skills/install-from-path`, async (req, res) => {
         const body = await new Promise<string>((resolve, reject) => {
             const chunks: Buffer[] = [];
@@ -104,6 +111,29 @@ export async function startGatewayServer(port: number = 38080): Promise<{
             res.status(code).json({ success: false, message });
         }
     });
+
+    gatewayExpress.post(
+        `${PATHS.SERVER_API}/skills/install-from-upload`,
+        authHookServerApi,
+        uploadZip.single("file"),
+        async (req, res) => {
+            try {
+                const file = (req as any).file;
+                const buffer = file?.buffer;
+                if (!buffer || !Buffer.isBuffer(buffer)) {
+                    return res.status(400).json({ success: false, message: "请上传 zip 文件" });
+                }
+                const scope = (req as any).body?.scope === "workspace" ? "workspace" : "global";
+                const workspace = (req as any).body?.workspace ?? "default";
+                const result = await handleInstallSkillFromUpload({ buffer, scope, workspace });
+                res.status(200).json(result);
+            } catch (err: unknown) {
+                const message = err instanceof Error ? err.message : String(err);
+                const code = message.includes("请上传") || message.includes("SKILL.md") || message.includes("目录") || message.includes("10MB") ? 400 : 500;
+                res.status(code).json({ success: false, message });
+            }
+        },
+    );
 
     gatewayExpress.use(PATHS.SERVER_API, authHookServerApi, nestExpress);
 
