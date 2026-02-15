@@ -28,6 +28,7 @@
           {{ t('settings.modelsNav') }}
         </div>
         <div 
+          v-if="showRagTab"
           class="nav-item" 
           :class="{ active: activeTab === 'knowledge' }"
           @click="activeTab = 'knowledge'; initKnowledgeTab()"
@@ -423,8 +424,8 @@
           </div>
         </transition>
 
-        <!-- 知识库 Tab（RAG 长记忆 embedding 配置） -->
-        <div v-show="activeTab === 'knowledge'" class="tab-content">
+        <!-- 知识库 Tab（RAG 长记忆 embedding 配置）：通过 showRagTab 控制是否展示 -->
+        <div v-show="showRagTab && activeTab === 'knowledge'" class="tab-content">
           <h2 class="tab-title">{{ t('settings.knowledgeTitle') }}</h2>
           <div class="settings-hint-block">
             <span class="settings-hint-icon">ℹ️</span>
@@ -674,6 +675,8 @@ import SettingsSkills from '@/components/SettingsSkills.vue';
 import SettingsTags from '@/components/SettingsTags.vue';
 
 const SETTINGS_TABS = ['general', 'agent', 'models', 'knowledge', 'users', 'skills', 'tags', 'about'];
+    /** 是否显示 RAG/知识库 Tab（设为 false 可隐藏，相关代码与逻辑保留） */
+    const showRagTab = false;
 
 export default {
   name: 'Settings',
@@ -1390,6 +1393,7 @@ export default {
 
     return {
       t,
+      showRagTab,
       activeTab,
       config,
       localConfig,

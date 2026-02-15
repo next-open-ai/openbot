@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { readdir, stat, rm } from 'fs/promises';
+import { readdir, stat, rm, mkdir, writeFile } from 'fs/promises';
 import { join, resolve, relative } from 'path';
 import { existsSync } from 'fs';
+import { homedir } from 'os';
 import { getOpenbotWorkspaceDir } from '../../core/agent/agent-dir.js';
 
 export interface WorkspaceItem {
@@ -97,5 +98,46 @@ export class WorkspaceService {
         const normalized = relativePath.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\/+/, '');
         const parts = normalized.split('/').filter((p) => p !== '..' && p !== '.');
         return parts.join('/');
+    }
+
+    /** Ensure workspace/.favorite directory exists. */
+    async ensureFavoriteDir(workspaceName: string): Promise<string> {
+        const root = resolve(this.getWorkspaceRoot(workspaceName));
+        const favoriteDir = join(root, '.favorite');
+        if (!existsSync(favoriteDir)) {
+            await mkdir(favoriteDir, { recursive: true });
+        }
+        return favoriteDir;
+    }
+
+    /**
+     * Write buffer to workspace/.favorite/{filename}. Returns relative path (e.g. .favorite/xxx).
+     */
+    async writeFileInFavorite(workspaceName: string, filename: string, buffer: Buffer): Promise<string> {
+        const dir = await this.ensureFavoriteDir(workspaceName);
+        const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200) || 'download';
+        const absolutePath = join(dir, safeName);
+        await writeFile(absolutePath, buffer);
+        return `.favorite/${safeName}`;
+    }
+
+    /**
+     * Write buffer to a user-chosen directory. targetDir must be absolute and under homedir or workspace root.
+     * Returns the full path of the written file.
+     */
+    async writeFileToDir(targetDir: string, filename: string, buffer: Buffer): Promise<string> {
+        const home = homedir();
+        const workspaceRoot = getOpenbotWorkspaceDir();
+        const normalized = resolve(targetDir);
+        if (!normalized.startsWith(resolve(home)) && !normalized.startsWith(resolve(workspaceRoot))) {
+            throw new Error('Target directory must be under user home or workspace root');
+        }
+        if (!existsSync(normalized)) {
+            await mkdir(normalized, { recursive: true });
+        }
+        const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200) || 'download';
+        const absolutePath = join(normalized, safeName);
+        await writeFile(absolutePath, buffer);
+        return absolutePath;
     }
 }

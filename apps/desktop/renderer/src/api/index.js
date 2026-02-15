@@ -121,6 +121,9 @@ export const savedItemsAPI = {
     get: (id) => apiClient.get(`/saved-items/${id}`),
     create: (body) => apiClient.post('/saved-items', body),
     delete: (id) => apiClient.delete(`/saved-items/${id}`),
+    /** 将收藏的 URL 下载到当前工作空间的 .favorite 目录 */
+    downloadToWorkspace: (id, body = {}) =>
+        apiClient.post(`/saved-items/${id}/download-to-workspace`, body),
 };
 
 // Workspace API

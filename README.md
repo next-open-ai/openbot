@@ -1,10 +1,9 @@
 # OpenBot
-
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**OpenBot** 是基于 Agent Skills 与编码智能体（Coding Agent）的**一体化 AI 助手平台**，支持 CLI、WebSocket 网关与桌面端。通过可插拔技能（Skills）、浏览器自动化、代码执行与长期记忆，为开发与日常任务提供可扩展的 AI 工作流。除提供可自我升级扩展的 AI Agent 引擎及多通道、多终端接入外，后续将支持 MCP 以降低 Token 消耗与大模型幻觉，并接入现有 AI Agent 生态（下一步计划接入 Coze）。
+**一个桌面级OpenClaw实现** 是基于 Agent Skills的**一体化 AI 助手平台**，核心部分支持 CLI、WebSocket 网关与桌面端。除提供可自我升级扩展的 AI Agent 引擎及多通道、多终端接入外，后续将支持 MCP 以降低 Token 消耗与大模型幻觉，并接入现有AI Agent 生态，成为一个互联互通的Agent平台。
 
 ---
 
