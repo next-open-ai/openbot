@@ -3,7 +3,7 @@
     "publishConfig": {
         "access": "public"
     },
-    "version": "0.3.2",
+    "version": "0.3.16",
     "description": "CLI and library to run prompts with skill paths (Agent Skills style). Use as npm package or openbot CLI.",
     "type": "module",
     "main": "dist/index.js",
