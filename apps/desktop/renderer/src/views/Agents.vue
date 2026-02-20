@@ -6,7 +6,7 @@
         <p class="text-secondary">{{ t('agents.subtitle') }}</p>
         <p class="text-secondary agents-hint">{{ t('agents.defaultWorkHint') }}</p>
       </div>
-      <button class="btn-primary" @click="showCreateModal = true">
+      <button type="button" class="btn-add-agent" @click="showCreateModal = true">
         <span class="btn-icon">+</span>
         {{ t('agents.addAgent') }}
       </button>
@@ -17,7 +17,7 @@
       <p>{{ t('common.loading') }}</p>
     </div>
     <div v-else-if="agents.length === 0" class="empty-state">
-      <div class="empty-icon">🤖</div>
+      <div class="empty-icon">✨</div>
       <p>{{ t('agents.noAgents') }}</p>
       <p class="text-secondary">{{ t('agents.noAgentsHint') }}</p>
       <button class="btn-primary mt-4" @click="showCreateModal = true">
@@ -32,7 +32,7 @@
         class="agent-card card-glass"
       >
         <div class="card-icon-wrap">
-          <span class="card-icon">🤖</span>
+          <span class="card-icon" :aria-label="getAgentIconEmoji(agent.icon)">{{ getAgentIconEmoji(agent.icon) }}</span>
         </div>
         <h3 class="card-name">
           {{ agent.name }}
@@ -59,6 +59,22 @@
           </div>
           <div class="modal-body">
             <div class="form-group">
+              <label>{{ t('agents.agentIcon') }}</label>
+              <div class="icon-picker">
+                <button
+                  v-for="opt in agentIconOptions"
+                  :key="opt.id"
+                  type="button"
+                  class="icon-picker-btn"
+                  :class="{ active: createForm.icon === opt.id }"
+                  :title="opt.label"
+                  @click="createForm.icon = opt.id"
+                >
+                  {{ opt.emoji }}
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
               <label>{{ t('agents.displayName') }}</label>
               <input
                 v-model="createForm.name"
@@ -77,6 +93,30 @@
               />
               <p class="form-hint">{{ t('agents.workspaceNameHint') }}</p>
             </div>
+            <div class="form-group">
+              <label>{{ t('agents.defaultModel') }}</label>
+              <select v-model="createForm.defaultModelKey" class="form-input">
+                <option value="">— {{ t('agents.defaultModelCreateHint') }} —</option>
+                <option
+                  v-for="item in createModelOptions"
+                  :key="optionValueFor(item)"
+                  :value="optionValueFor(item)"
+                >
+                  {{ getModelOptionLabel(item) }}
+                </option>
+              </select>
+              <p class="form-hint">{{ t('agents.modelConfigHint') }}</p>
+            </div>
+            <div class="form-group">
+              <label>{{ t('agents.agentDescription') }}</label>
+              <textarea
+                v-model="createForm.systemPrompt"
+                class="form-input form-textarea"
+                :placeholder="t('agents.agentDescriptionPlaceholder')"
+                rows="4"
+              />
+              <p class="form-hint">{{ t('agents.agentDescriptionHint') }}</p>
+            </div>
             <p v-if="createError" class="form-error">{{ createError }}</p>
             <div class="modal-footer-actions">
               <button type="button" class="btn-secondary" @click="showCreateModal = false">
@@ -94,10 +134,11 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from '@/composables/useI18n';
-import { agentConfigAPI } from '@/api';
+import { agentConfigAPI, configAPI } from '@/api';
+import { AGENT_ICONS, AGENT_ICON_DEFAULT, getAgentIconEmoji } from '@/constants/agent-icons';
 
 /** 主智能体（default）前端兜底，接口失败或返回空时至少显示此项 */
 const FALLBACK_DEFAULT_AGENT = {
@@ -107,6 +148,10 @@ const FALLBACK_DEFAULT_AGENT = {
   isDefault: true,
 };
 
+function keyFor(provider, modelId) {
+  return (provider || '') + '::' + (modelId || '');
+}
+
 export default {
   name: 'Agents',
   setup() {
@@ -115,9 +160,35 @@ export default {
     const agents = ref([]);
     const loading = ref(true);
     const showCreateModal = ref(false);
-    const createForm = ref({ name: '', workspace: '' });
+    const config = ref(null);
+    const agentIconOptions = AGENT_ICONS;
+    const createForm = ref({
+      name: '',
+      workspace: '',
+      defaultModelKey: '',
+      systemPrompt: '',
+      icon: AGENT_ICON_DEFAULT,
+    });
     const createError = ref('');
     const createSaving = ref(false);
+
+    const createModelOptions = computed(() => {
+      const list = config.value?.configuredModels ?? [];
+      return Array.isArray(list) ? list : [];
+    });
+
+    function optionValueFor(item) {
+      if (!item) return '';
+      if (item.modelItemCode) return item.modelItemCode;
+      return keyFor(item.provider, item.modelId);
+    }
+
+    function getModelOptionLabel(item) {
+      if (!item) return '';
+      const prov = item.provider || item.providerName || '';
+      const model = item.modelId || item.model || '';
+      return prov && model ? `${prov} / ${model}` : model || prov || '—';
+    }
 
     function ensureMainAgentFirst(list) {
       const rest = (Array.isArray(list) ? list : []).filter((a) => a && a.id !== 'default');
@@ -158,13 +229,33 @@ export default {
       createError.value = '';
       createSaving.value = true;
       try {
-        const res = await agentConfigAPI.createAgent({
+        const body = {
           name: name || workspace,
           workspace,
-        });
+          systemPrompt: (createForm.value.systemPrompt || '').trim() || undefined,
+          icon: createForm.value.icon || undefined,
+        };
+        const key = (createForm.value.defaultModelKey || '').trim();
+        const list = config.value?.configuredModels ?? [];
+        if (key && Array.isArray(list) && list.length > 0) {
+          const byCode = list.find((m) => m.modelItemCode === key);
+          const byKey = list.find((m) => keyFor(m.provider, m.modelId) === key);
+          const item = byCode || byKey;
+          if (item) {
+            body.provider = item.provider;
+            body.model = item.modelId;
+            body.modelItemCode = item.modelItemCode;
+          }
+        }
+        if (!body.provider && (config.value?.defaultProvider || config.value?.defaultModel)) {
+          body.provider = config.value.defaultProvider;
+          body.model = config.value.defaultModel;
+          body.modelItemCode = config.value.defaultModelItemCode;
+        }
+        const res = await agentConfigAPI.createAgent(body);
         const agent = res.data?.data;
         showCreateModal.value = false;
-        createForm.value = { name: '', workspace: '' };
+        createForm.value = { name: '', workspace: '', defaultModelKey: '', systemPrompt: '', icon: AGENT_ICON_DEFAULT };
         await loadAgents();
         if (agent) router.push(`/agents/${agent.id}`);
       } catch (e) {
@@ -174,6 +265,19 @@ export default {
         createSaving.value = false;
       }
     }
+
+    async function loadConfig() {
+      try {
+        const res = await configAPI.getConfig();
+        config.value = res.data?.data ?? res.data ?? null;
+      } catch (_) {
+        config.value = null;
+      }
+    }
+
+    watch(showCreateModal, (visible) => {
+      if (visible) loadConfig();
+    });
 
     onMounted(loadAgents);
 
@@ -185,6 +289,11 @@ export default {
       createForm,
       createError,
       createSaving,
+      createModelOptions,
+      agentIconOptions,
+      getAgentIconEmoji,
+      optionValueFor,
+      getModelOptionLabel,
       doCreate,
     };
   },
@@ -225,6 +334,27 @@ export default {
   opacity: 0.9;
 }
 
+.btn-add-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-accent-primary);
+  background: transparent;
+  border: 1px solid var(--color-accent-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.btn-add-agent:hover {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+  border-color: var(--color-accent-secondary);
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -241,6 +371,36 @@ export default {
 
 .btn-primary:hover:not(:disabled) {
   filter: brightness(1.1);
+}
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.icon-picker-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.icon-picker-btn:hover {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-text-tertiary);
+}
+
+.icon-picker-btn.active {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: var(--color-accent-primary);
 }
 
 .btn-primary:disabled {
@@ -457,6 +617,11 @@ export default {
   background: var(--color-bg-secondary);
   color: var(--color-text-primary);
   font-size: var(--font-size-base);
+}
+
+.form-input.form-textarea {
+  min-height: 88px;
+  resize: vertical;
 }
 
 .form-hint {

@@ -38,8 +38,19 @@ import multer from "multer";
 import { handleInstallSkillFromPath } from "./methods/install-skill-from-path.js";
 import { handleInstallSkillFromUpload } from "./methods/install-skill-from-upload.js";
 import { setBackendBaseUrl } from "./backend-url.js";
-import { ensureDesktopConfigInitialized } from "../core/config/desktop-config.js";
+import { ensureDesktopConfigInitialized, getChannelsConfigSync } from "../core/config/desktop-config.js";
 import { createNestAppEmbedded } from "../server/bootstrap.js";
+import { registerChannel, startAllChannels, stopAllChannels } from "./channel/registry.js";
+import { createFeishuChannel } from "./channel/adapters/feishu.js";
+import { setChannelSessionPersistence } from "./channel/session-persistence.js";
+import {
+    setSessionCurrentAgentResolver,
+    setSessionCurrentAgentUpdater,
+    setAgentListProvider,
+    setCreateAgentProvider,
+} from "../core/session-current-agent.js";
+import { AgentsService } from "../server/agents/agents.service.js";
+import { AgentConfigService } from "../server/agent-config/agent-config.service.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, "..", "..");
 /** 内嵌到 Electron 时由主进程设置 OPENBOT_STATIC_DIR，指向打包后的 renderer/dist */
@@ -74,6 +85,28 @@ export async function startGatewayServer(port: number = 38080): Promise<{
     setBackendBaseUrl(`http://localhost:${port}`);
 
     const { app: nestApp, express: nestExpress } = await createNestAppEmbedded();
+
+    try {
+        const agentsService = nestApp.get(AgentsService);
+        setChannelSessionPersistence(agentsService);
+        setSessionCurrentAgentResolver((sessionId) => agentsService.getSession(sessionId)?.agentId);
+        setSessionCurrentAgentUpdater((sessionId, agentId) => agentsService.updateSessionAgentId(sessionId, agentId));
+        const agentConfigService = nestApp.get(AgentConfigService);
+        setAgentListProvider(() =>
+            agentConfigService.listAgents().then((agents) => agents.map((a) => ({ id: a.id, name: a.name }))),
+        );
+        setCreateAgentProvider(async (params) => {
+            try {
+                const agent = await agentConfigService.createAgent(params);
+                return { id: agent.id, name: agent.name };
+            } catch (e: any) {
+                const msg = e?.message ?? e?.response?.message ?? String(e);
+                return { error: msg };
+            }
+        });
+    } catch (e) {
+        console.warn("[Gateway] Channel session persistence / session-agent bridge unavailable:", e);
+    }
 
     const gatewayExpress = express();
 
@@ -205,8 +238,29 @@ export async function startGatewayServer(port: number = 38080): Promise<{
         });
     });
 
+    // 通道：根据配置注册并启动（如飞书 WebSocket）
+    const channelsConfig = getChannelsConfigSync();
+    const feishuCfg = channelsConfig.feishu;
+    if (feishuCfg?.enabled && feishuCfg.appId?.trim() && feishuCfg.appSecret?.trim()) {
+        try {
+            console.log("[Channel] Starting Feishu (WebSocket)...");
+            const feishuChannel = createFeishuChannel({
+                appId: feishuCfg.appId.trim(),
+                appSecret: feishuCfg.appSecret.trim(),
+                defaultAgentId: feishuCfg.defaultAgentId?.trim() || "default",
+            });
+            registerChannel(feishuChannel);
+            await startAllChannels();
+        } catch (e) {
+            console.warn("Feishu channel start failed:", e);
+        }
+    } else if (feishuCfg?.enabled) {
+        console.warn("[Channel] Feishu is enabled but appId or appSecret is missing; skip start. Check Settings → Channels.");
+    }
+
     const close = async () => {
         console.log("Closing gateway server...");
+        await stopAllChannels();
         await nestApp.close();
         wss.clients.forEach((c) => c.close());
         await new Promise<void>((r) => wss.close(() => r()));

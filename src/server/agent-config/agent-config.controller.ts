@@ -21,7 +21,18 @@ export class AgentConfigController {
     }
 
     @Post()
-    async createAgent(@Body() body: { name: string; workspace: string }) {
+    async createAgent(
+        @Body()
+        body: {
+            name: string;
+            workspace: string;
+            provider?: string;
+            model?: string;
+            modelItemCode?: string;
+            systemPrompt?: string;
+            icon?: string;
+        },
+    ) {
         const agent = await this.agentConfigService.createAgent(body);
         return { success: true, data: agent };
     }
@@ -29,7 +40,7 @@ export class AgentConfigController {
     @Put(':id')
     async updateAgent(
         @Param('id') id: string,
-        @Body() body: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode' | 'mcpServers'>>,
+        @Body() body: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode' | 'mcpServers' | 'systemPrompt' | 'icon'>>,
     ) {
         const agent = await this.agentConfigService.updateAgent(id, body);
         return { success: true, data: agent };

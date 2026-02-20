@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage, shell } = require('electron');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const http = require('http');
@@ -37,6 +37,7 @@ async function startGatewayInProcess() {
         ? path.join(process.resourcesPath, 'dist', 'gateway', 'server.js')
         : path.join(__dirname, '..', '..', 'dist', 'gateway', 'server.js');
     const { startGatewayServer } = await import(pathToFileURL(serverPath).href);
+    process.env.PORT = String(GATEWAY_PORT);
     const result = await startGatewayServer(GATEWAY_PORT);
     gatewayClose = result.close;
     return result;
@@ -46,7 +47,7 @@ async function startGatewayInProcess() {
 function waitForGateway() {
     return new Promise((resolve) => {
         const check = () => {
-            const req = http.get(`http://localhost:${GATEWAY_PORT}/health`, (res) => {
+            const req = http.get(`http://127.0.0.1:${GATEWAY_PORT}/health`, (res) => {
                 if (res.statusCode === 200) resolve();
                 else setTimeout(check, 500);
             });
@@ -116,17 +117,21 @@ async function createWindow() {
         frame: true,
     });
 
-    // macOS 在窗口显示/获得焦点时可能恢复默认菜单，需再次设为空菜单
-    const clearAppMenu = () => Menu.setApplicationMenu(emptyMenu);
-    mainWindow.once('ready-to-show', clearAppMenu);
-    mainWindow.on('show', clearAppMenu);
-    mainWindow.on('focus', clearAppMenu);
+    // 未打包（如 npm run desktop:dev）：显示系统默认菜单，便于测试；打包后使用空菜单
+    const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
+    const showSystemMenu = !app.isPackaged;
+    const setAppMenu = () => Menu.setApplicationMenu(showSystemMenu ? null : emptyMenu);
+    if (showSystemMenu) {
+        Menu.setApplicationMenu(null);
+    }
+    mainWindow.once('ready-to-show', setAppMenu);
+    mainWindow.on('show', setAppMenu);
+    mainWindow.on('focus', setAppMenu);
 
     // 打包安装后 NODE_ENV 可能未设置，以 app.isPackaged 为准，否则会误走 5173 导致白屏
-    const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
     let startUrl;
     if (isDev) {
-        startUrl = 'http://localhost:5173';
+        startUrl = 'http://127.0.0.1:5173';
     } else if (gatewayClose) {
         startUrl = `http://localhost:${GATEWAY_PORT}`;
     } else {
@@ -161,6 +166,7 @@ async function createWindow() {
 
 function registerIpcHandlers() {
     ipcMain.handle('get-app-version', () => app.getVersion());
+    ipcMain.handle('get-electron-version', () => process.versions.electron);
     ipcMain.handle('minimize-window', () => {
         if (mainWindow) mainWindow.minimize();
     });
@@ -182,13 +188,22 @@ function registerIpcHandlers() {
         if (canceled || !filePaths || filePaths.length === 0) return null;
         return filePaths[0];
     });
+    /** 在系统默认浏览器打开 http(s) 链接，或用系统默认应用打开 file:// 本地文件 */
+    ipcMain.handle('open-external', (_, url) => {
+        if (typeof url !== 'string' || !url.trim()) return;
+        const u = url.trim();
+        if (/^https?:\/\//i.test(u) || /^file:\/\//i.test(u)) shell.openExternal(u);
+    });
 }
 
 // 空应用菜单（Electron 文档：setApplicationMenu(null) 会恢复默认菜单，故必须设为空菜单而非 null）
 const emptyMenu = Menu.buildFromTemplate([]);
 
 app.whenReady().then(async () => {
-    Menu.setApplicationMenu(emptyMenu);
+    // 仅打包后使用空菜单；未打包时保留系统默认菜单（在 createWindow 中会再确认一次）
+    if (app.isPackaged) {
+        Menu.setApplicationMenu(emptyMenu);
+    }
     registerIpcHandlers();
 
     try {

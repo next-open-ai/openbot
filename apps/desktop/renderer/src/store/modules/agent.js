@@ -14,6 +14,8 @@ export const useAgentStore = defineStore('agent', {
         totalTokens: 0,
         /** 为 true 时根路径 / 不自动跳转最近会话（新建对话/切换智能体后清除 stay query 时用，跨组件实例生效） */
         skipRedirectToRecentOnce: false,
+        /** 每次整轮对话结束时自增，用于通知对话页刷新智能体列表（如 create_agent 后） */
+        agentListRefreshTrigger: 0,
     }),
 
     getters: {
@@ -48,6 +50,24 @@ export const useAgentStore = defineStore('agent', {
             } catch (error) {
                 console.error('Failed to create session:', error);
                 throw error;
+            }
+        },
+
+        /**
+         * 在当前 session 内切换 agent：更新后端并刷新本地 currentSession，下次发消息会带新 agentId。
+         */
+        async updateSessionAgentId(sessionId, agentId) {
+            await agentAPI.updateSessionAgentId(sessionId, agentId);
+            const nextAgentId = agentId ?? 'default';
+            if (this.currentSession?.id === sessionId) {
+                this.currentSession = { ...this.currentSession, agentId: nextAgentId };
+                await socketService.connectToSession(sessionId, nextAgentId, this.currentSession.type);
+            }
+            const idx = this.sessions.findIndex((s) => s.id === sessionId);
+            if (idx >= 0) {
+                this.sessions = this.sessions.map((s, i) =>
+                    i === idx ? { ...s, agentId: nextAgentId } : s
+                );
             }
         },
 
@@ -251,6 +271,7 @@ export const useAgentStore = defineStore('agent', {
             }
         },
 
+        /** turn_end：仅记录本轮 token 用量，不结束会话（多轮 tool+ 文本时会有多次）。 */
         handleMessageComplete(data) {
             if (data?.usage && (data.usage.promptTokens > 0 || data.usage.completionTokens > 0) && data.sessionId) {
                 usageAPI
@@ -263,29 +284,51 @@ export const useAgentStore = defineStore('agent', {
                     .then(() => this.fetchUsageTotal())
                     .catch((e) => console.warn('Record usage failed:', e));
             }
-            if (data.sessionId === this.currentSession?.id) {
-                const content = this.currentMessage || data.content || '';
-                if (content || this.toolExecutions.length > 0) {
-                    const assistantMessage = {
-                        id: Date.now().toString(),
-                        role: 'assistant',
-                        content,
-                        timestamp: Date.now(),
-                        toolCalls: [...this.toolExecutions],
-                        contentParts: [...this.currentStreamParts],
-                    };
-                    this.messages.push(assistantMessage);
-                    agentAPI.appendMessage(this.currentSession.id, 'assistant', content, {
-                        toolCalls: assistantMessage.toolCalls,
-                        contentParts: assistantMessage.contentParts,
-                    }).catch(() => {});
-                }
-
-                this.currentMessage = '';
-                this.currentStreamParts = [];
-                this.isStreaming = false;
-                this.toolExecutions = [];
+        },
+        /** agent_end：整轮对话真正结束，落库消息并允许再次输入。同步后端 session（含 agentId），便于对话内 switch_agent 后前端展示最新智能体。 */
+        handleConversationEnd(data) {
+            if (data?.sessionId !== this.currentSession?.id) return;
+            const content = this.currentMessage || data.content || '';
+            if (content || this.toolExecutions.length > 0) {
+                const assistantMessage = {
+                    id: Date.now().toString(),
+                    role: 'assistant',
+                    content,
+                    timestamp: Date.now(),
+                    toolCalls: [...this.toolExecutions],
+                    contentParts: [...this.currentStreamParts],
+                };
+                this.messages.push(assistantMessage);
+                agentAPI.appendMessage(this.currentSession.id, 'assistant', content, {
+                    toolCalls: assistantMessage.toolCalls,
+                    contentParts: assistantMessage.contentParts,
+                }).catch(() => {});
             }
+            this.currentMessage = '';
+            this.currentStreamParts = [];
+            this.isStreaming = false;
+            this.toolExecutions = [];
+
+            // 同步当前 session（含 agentId），对话内 switch_agent 后前端展示最新智能体
+            const sessionId = this.currentSession?.id;
+            if (sessionId) {
+                agentAPI.getSession(sessionId)
+                    .then((res) => {
+                        const session = res?.data?.data ?? res?.data;
+                        if (session && this.currentSession?.id === sessionId) {
+                            this.currentSession = session;
+                            const idx = this.sessions.findIndex((s) => s.id === sessionId);
+                            if (idx >= 0) {
+                                this.sessions = this.sessions.map((s, i) => (i === idx ? { ...s, ...session } : s));
+                            }
+                            if (socketService.currentSessionId === sessionId && session.agentId !== undefined) {
+                                socketService.connectToSession(sessionId, session.agentId, session.type ?? 'chat').catch(() => {});
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            }
+            this.agentListRefreshTrigger += 1;
         },
     },
 });

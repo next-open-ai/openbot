@@ -31,11 +31,11 @@
         <div class="section-card card-glass">
           <h3 class="section-title">{{ t('dashboard.quickActions') }}</h3>
           <div class="actions-grid">
-            <button @click="createNewSession" class="action-card btn-glass">
-              <span class="action-icon">➕</span>
+            <button @click="goToChat" class="action-card btn-glass">
+              <span class="action-icon">💬</span>
               <div class="action-details">
-                <span class="action-name">{{ t('chat.newSession') }}</span>
-                <span class="action-desc">{{ t('dashboard.newSessionDesc') }}</span>
+                <span class="action-name">{{ t('dashboard.startChat') }}</span>
+                <span class="action-desc">{{ t('dashboard.startChatDesc') }}</span>
               </div>
             </button>
             <router-link to="/skills" class="action-card btn-glass">
@@ -45,7 +45,7 @@
                 <span class="action-desc">{{ t('dashboard.browseSkillsDesc') }}</span>
               </div>
             </router-link>
-            <router-link to="/settings/agent" class="action-card btn-glass">
+            <router-link to="/agents" class="action-card btn-glass">
               <span class="action-icon">⚙️</span>
               <div class="action-details">
                 <span class="action-name">{{ t('settings.agentConfig') }}</span>
@@ -168,13 +168,11 @@ export default {
       return Number(n).toLocaleString();
     };
 
-    const createNewSession = async () => {
-      try {
-        const session = await agentStore.createSession();
-        router.push(`/chat/${session.id}`);
-      } catch (error) {
-        console.error('Failed to create session:', error);
-      }
+    /** 开始对话：有当前会话则进入该会话，否则进入对话页（不创建新会话、不做复杂逻辑） */
+    const goToChat = () => {
+      const cur = agentStore.currentSession;
+      if (cur?.id) router.push(`/chat/${cur.id}`);
+      else router.push('/chat');
     };
 
     const openSession = (sessionId) => {
@@ -194,7 +192,7 @@ export default {
       totalTokens,
       formatDate,
       formatTokens,
-      createNewSession,
+      goToChat,
       openSession,
       t,
     };
