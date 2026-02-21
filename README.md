@@ -16,6 +16,7 @@
 | **浏览器自动化** | 内置 [agent-browser](https://www.npmjs.com/package/agent-browser)，可导航、填表、截图与数据抓取 |
 | **长期记忆** | 向量存储（Vectra）+ 本地嵌入，支持经验总结与会话压缩（compaction） |
 | **多端接入** | CLI、WebSocket 网关、Electron 桌面端，同一套 Agent 核心；各端技术栈见下方「各端技术栈」 |
+| **多通道接入** | 飞书、钉钉、Telegram 等 IM 通道，Gateway 根据配置注册；入站经统一格式进 Agent，回复经通道回传 |
 | **MCP（规划中）** | 为降低 Token 消耗与大模型幻觉，后续将支持 MCP（Model Context Protocol） |
 | **生态接入（规划中）** | 接入现有 AI Agent 生态，下一步计划接入 Coze 生态 |
 
@@ -55,7 +56,7 @@
 ```
 
 - **CLI**：直接调用 Agent 核心，单次提示或批量脚本；可启动 Gateway（`openbot gateway`）及配置开机自启（`openbot service install/uninstall`）。
-- **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。供 Web/移动端连接；支持以开机/登录自启方式常驻（Linux cron、macOS LaunchAgent、Windows 计划任务）。
+- **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。根据配置注册**飞书、钉钉、Telegram** 等通道，入站消息经统一格式进入 Agent，回复经该通道发回对应平台。供 Web/移动端连接；支持以开机/登录自启方式常驻（Linux cron、macOS LaunchAgent、Windows 计划任务）。
 - **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；可被 Gateway 内嵌或独立监听（默认端口 38081）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
 - **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
@@ -96,7 +97,7 @@ openbot/
 |------|------|
 | `src/core/` | **公共核心**：`agent/`（AgentManager、pi-coding-agent）、`config/`（桌面配置）、`memory/`、`installer/`、`tools/`；CLI 与 Gateway 共用。 |
 | `src/cli/` | **CLI**：`cli.ts` 主入口（构建为 `dist/cli/cli.js`），`service.ts` 提供开机自启（install/uninstall/stop）。 |
-| `src/gateway/` | **WebSocket 网关**：单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）。 |
+| `src/gateway/` | **WebSocket 网关**：单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）；通道适配（feishu、dingtalk、telegram）在 `channel/adapters/`。 |
 | `src/server/` | **Desktop 后端**（NestJS），HTTP API 前缀 `server-api`；可内嵌到 Gateway 或独立监听。 |
 | `apps/desktop/` | **桌面端**（Electron + Vue），前端构建产物由 Gateway 提供。 |
 | `deploy/` | Dockerfile、K8s 等部署配置。 |
@@ -271,7 +272,7 @@ npm link   # 或 npm install -g . 本地全局安装
 
 # 二、使用方式
 
-按**使用端**划分：CLI、Web、Desktop；后续将支持 iOS、Android、飞书等。
+按**使用端**划分：CLI、Web、Desktop；另支持**飞书、钉钉、Telegram** 等通道（见 2.4）；后续将支持 iOS、Android 等。
 
 ## 2.1 CLI
 
@@ -353,15 +354,54 @@ openbot gateway --port 38080
 
 ---
 
-## 2.4 即将支持
+## 2.4 通道支持
+
+除 CLI、Web、Desktop 外，OpenBot 支持通过**通道**将 Agent 对接到第三方 IM/协作平台。通道在 Gateway 启动时根据配置注册并运行：入站消息经统一格式进入 Agent，回复再经该通道发回平台。
+
+### 已支持通道概览
+
+| 通道 | 入站方式 | 出站/流式 | 会话 ID 格式 |
+|------|----------|-----------|----------------|
+| **飞书** | WebSocket 事件订阅（im.message.receive_v1） | 开放 API + 流式卡片更新 | `channel:feishu:<chat_id>` |
+| **钉钉** | dingtalk-stream SDK（Stream 模式） | sessionWebhook POST | `channel:dingtalk:<conversationId>` |
+| **Telegram** | 长轮询 getUpdates | sendMessage / editMessageText 流式更新 | `channel:telegram:<chat_id>` |
+
+### 飞书
+
+**说明**：飞书通道通过飞书开放平台与机器人对接。入站使用飞书官方 **WebSocket 事件订阅**（`im.message.receive_v1`）接收用户消息；出站使用 **开放 API** 发送回复。支持**流式输出**：先发一条「思考中」的互动卡片，再随 Agent 生成内容逐次更新同一条卡片，直至整轮对话结束（`agent_end`）。
+
+- **会话与 Agent**：同一飞书会话（单聊或群聊对应一个 `chat_id`）对应一个 Agent Session（`channel:feishu:<chat_id>`），由通道配置中的 `defaultAgentId` 指定使用哪个智能体。
+- **配置项**：enabled、appId、appSecret、defaultAgentId。桌面端：**设置 → 通道** 勾选「启用飞书」并填写 App ID、App Secret；或编辑 `~/.openbot/desktop/config.json` 中 `channels.feishu`。保存后需**重启 Gateway**。
+
+### 钉钉
+
+**说明**：钉钉通道使用 **dingtalk-stream** SDK 的 **Stream 模式**接收机器人消息，通过消息中的 `sessionWebhook` 回传回复；回复发送完成后需 ack 避免钉钉重试。支持单聊、群聊及流式回复。
+
+- **会话与 Agent**：同一钉钉会话（conversationId）对应一个 Agent Session（`channel:dingtalk:<conversationId>`），由通道配置中的 `defaultAgentId` 指定智能体。
+- **配置项**：enabled、clientId、clientSecret、defaultAgentId。需在钉钉开发者后台创建企业内部应用、添加机器人能力并选择 **Stream 模式**。桌面端：**设置 → 通道** 启用钉钉并填写 Client ID、Client Secret；或编辑 `config.json` 中 `channels.dingtalk`。保存后需**重启 Gateway**。
+
+### Telegram
+
+**说明**：Telegram 通道使用官方推荐的 **长轮询**（getUpdates）接收消息，无需公网 URL。出站使用 `sendMessage` 发送、`editMessageText` 流式更新同一条消息，直至整轮结束。
+
+- **会话与 Agent**：同一 Telegram 会话（chat_id）对应一个 Agent Session（`channel:telegram:<chat_id>`），由通道配置中的 `defaultAgentId` 指定智能体。
+- **配置项**：enabled、botToken、defaultAgentId。Bot Token 通过 [@BotFather](https://t.me/BotFather) 获取。桌面端：**设置 → 通道** 启用 Telegram 并填写 Bot Token；或编辑 `config.json` 中 `channels.telegram`。保存后需**重启 Gateway**。
+
+未配置或未启用某通道时，Gateway 会跳过该通道启动；若已启用但必填项为空，控制台会提示到「设置 → 通道」检查。
+
+---
+
+## 2.5 即将支持
 
 **通道与终端**
 
 | 端 | 说明 |
 |----|------|
+| **飞书** | 已支持，见上文「2.4 通道支持」。 |
+| **钉钉** | 已支持，见上文「2.4 通道支持」。 |
+| **Telegram** | 已支持，见上文「2.4 通道支持」。 |
 | **iOS** | 规划中 |
 | **Android** | 规划中 |
-| **飞书** | 规划中 |
 
 上述端将通过 WebSocket Gateway 或专用适配与现有 Agent 核心对接。
 

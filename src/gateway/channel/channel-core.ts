@@ -103,6 +103,10 @@ export async function handleChannelMessage(
                         accumulated += delta;
                         throttled.run();
                     },
+                    onTurnEnd() {
+                        throttled.flush();
+                        if (sink.onTurnEnd) void Promise.resolve(sink.onTurnEnd(accumulated)).catch((e) => console.error("[ChannelCore] stream onTurnEnd error:", e));
+                    },
                     onDone() {
                         throttled.cancel();
                         const final = accumulated.trim() || "(无文本回复)";
@@ -112,11 +116,13 @@ export async function handleChannelMessage(
                 }
             );
             if (donePromise) await donePromise;
+            await msg.ack?.(undefined);
         } catch (err) {
             console.error("[ChannelCore] runAgent failed:", err);
             throttled.cancel();
             const fallback = accumulated.trim() || "处理时出错，请稍后再试。";
             await Promise.resolve(sink.onDone(fallback)).catch(() => {});
+            await msg.ack?.(undefined);
         }
         return;
     }
@@ -134,5 +140,6 @@ export async function handleChannelMessage(
     }
     persistChannelAssistantMessage(sessionId, replyText);
     const reply: UnifiedReply = { text: replyText };
-    await outbound.send(threadId, reply);
+    const sendResult = await outbound.send(threadId, reply);
+    await msg.ack?.(sendResult);
 }
