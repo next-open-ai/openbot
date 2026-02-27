@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { defineStore } from 'pinia';
 import { agentAPI, usageAPI } from '@/api';
 import socketService from '@/api/socket';
@@ -21,6 +22,10 @@ export const useAgentStore = defineStore('agent', {
     getters: {
         activeSessions: (state) => state.sessions.filter(s => s.status !== 'error'),
         sessionById: (state) => (id) => state.sessions.find(s => s.id === id),
+        /** 是否为桌面/Web 会话（非通道会话）。约定：id 以 channel: 开头为通道会话，否则为桌面会话 */
+        isDesktopSession: () => (s) => (s?.id != null && !String(s.id).startsWith('channel:')),
+        /** 仅桌面/Web 会话，用于左侧列表与「最近会话」重定向 */
+        desktopSessions: (state) => state.sessions.filter((s) => s?.id != null && !String(s.id).startsWith('channel:')),
     },
 
     actions: {
@@ -124,12 +129,33 @@ export const useAgentStore = defineStore('agent', {
             this.messages = [];
         },
 
+        /**
+         * 清除当前会话的全部对话记录（仅消息历史，会话保留）。
+         */
+        async clearCurrentSessionMessages() {
+            const id = this.currentSession?.id;
+            if (!id) return;
+            try {
+                await agentAPI.clearSessionMessages(id);
+                this.messages = [];
+                this.currentMessage = '';
+                this.currentStreamParts = [];
+                this.toolExecutions = [];
+                this.isStreaming = false;
+            } catch (error) {
+                console.error('Failed to clear session messages:', error);
+                throw error;
+            }
+        },
+
         async cancelCurrentTurn() {
             if (!this.currentSession?.id || !this.isStreaming) return;
             try {
-                await socketService.cancelAgent(this.currentSession.id);
+                await socketService.cancelAgent(this.currentSession.id, this.currentSession.agentId);
             } catch (error) {
                 console.error('Failed to cancel agent turn:', error);
+            } finally {
+                this.isStreaming = false;
             }
         },
 
@@ -139,6 +165,11 @@ export const useAgentStore = defineStore('agent', {
          */
         async sendMessage(message, options = {}) {
             if (!message.trim()) return;
+
+            // 桌面对话禁止使用通道会话：若当前为 channel:* 会话则视为无会话，走新建桌面会话流程
+            if (this.currentSession?.id != null && String(this.currentSession.id).startsWith('channel:')) {
+                this.currentSession = null;
+            }
 
             // Lazy Session Creation: If no current session, create one now（使用传入的 agentId 或 default）
             if (!this.currentSession) {
@@ -155,6 +186,10 @@ export const useAgentStore = defineStore('agent', {
             }
 
             try {
+                const agentIdForRequest = options?.agentId ?? this.currentSession?.agentId ?? 'default';
+                if (this.currentSession && agentIdForRequest !== this.currentSession.agentId) {
+                    await this.updateSessionAgentId(this.currentSession.id, agentIdForRequest);
+                }
                 if (this.currentSession && socketService.currentSessionId !== this.currentSession.id) {
                     await socketService.connectToSession(
                         this.currentSession.id,
@@ -179,12 +214,12 @@ export const useAgentStore = defineStore('agent', {
                 // Persist user message to NestJS (for history)
                 agentAPI.appendMessage(this.currentSession.id, 'user', message).catch(() => {});
 
-                const targetAgentId = options?.targetAgentId ?? this.currentSession?.agentId ?? 'default';
+                const targetAgentId = options?.targetAgentId ?? agentIdForRequest;
                 await socketService.sendMessage(
                     this.currentSession.id,
                     message,
                     targetAgentId,
-                    this.currentSession.agentId,
+                    agentIdForRequest,
                     this.currentSession.type,
                 );
             } catch (error) {
@@ -196,8 +231,9 @@ export const useAgentStore = defineStore('agent', {
         },
 
         handleAgentChunk(data) {
-            // Safety: Ensure we have a session selected
+            // Safety: Ensure we have a session selected and chunk belongs to current session
             if (!this.currentSession) return;
+            if (data?.sessionId != null && data.sessionId !== this.currentSession?.id) return;
 
             // Auto-start streaming if not active (handles multi-turn agent responses)
             if (!this.isStreaming) {
@@ -209,6 +245,8 @@ export const useAgentStore = defineStore('agent', {
 
             const text = data.text || '';
             if (!text) return;
+            // 若后端误将整段内容再发一次（与当前已累积内容完全相同），则不再追加，避免最后一轮显示两遍
+            if (this.currentMessage.length > 0 && text === this.currentMessage) return;
             this.currentMessage += text;
 
             const parts = this.currentStreamParts;
@@ -288,47 +326,50 @@ export const useAgentStore = defineStore('agent', {
         /** agent_end：整轮对话真正结束，落库消息并允许再次输入。同步后端 session（含 agentId），便于对话内 switch_agent 后前端展示最新智能体。 */
         handleConversationEnd(data) {
             if (data?.sessionId !== this.currentSession?.id) return;
-            const content = this.currentMessage || data.content || '';
-            if (content || this.toolExecutions.length > 0) {
-                const assistantMessage = {
-                    id: Date.now().toString(),
-                    role: 'assistant',
-                    content,
-                    timestamp: Date.now(),
-                    toolCalls: [...this.toolExecutions],
-                    contentParts: [...this.currentStreamParts],
-                };
-                this.messages.push(assistantMessage);
-                agentAPI.appendMessage(this.currentSession.id, 'assistant', content, {
-                    toolCalls: assistantMessage.toolCalls,
-                    contentParts: assistantMessage.contentParts,
-                }).catch(() => {});
-            }
-            this.currentMessage = '';
-            this.currentStreamParts = [];
-            this.isStreaming = false;
-            this.toolExecutions = [];
+            // 延迟到 nextTick 再快照，避免 conversation_end 先于同 tick 的 agent_chunk 到达导致提交不完整内容、界面“闪一下消失”
+            nextTick(() => {
+                const content = this.currentMessage || data.content || '';
+                if (content || this.toolExecutions.length > 0) {
+                    const assistantMessage = {
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                        role: 'assistant',
+                        content,
+                        timestamp: Date.now(),
+                        toolCalls: [...this.toolExecutions],
+                        contentParts: this.currentStreamParts.map((p) => (p.type === 'text' ? { type: 'text', content: String(p.content ?? '') } : { type: 'tool', toolId: p.toolId })),
+                    };
+                    this.messages.push(assistantMessage);
+                    agentAPI.appendMessage(this.currentSession.id, 'assistant', content, {
+                        toolCalls: assistantMessage.toolCalls,
+                        contentParts: assistantMessage.contentParts,
+                    }).catch(() => {});
+                }
+                this.currentMessage = '';
+                this.currentStreamParts = [];
+                this.isStreaming = false;
+                this.toolExecutions = [];
 
-            // 同步当前 session（含 agentId），对话内 switch_agent 后前端展示最新智能体
-            const sessionId = this.currentSession?.id;
-            if (sessionId) {
-                agentAPI.getSession(sessionId)
-                    .then((res) => {
-                        const session = res?.data?.data ?? res?.data;
-                        if (session && this.currentSession?.id === sessionId) {
-                            this.currentSession = session;
-                            const idx = this.sessions.findIndex((s) => s.id === sessionId);
-                            if (idx >= 0) {
-                                this.sessions = this.sessions.map((s, i) => (i === idx ? { ...s, ...session } : s));
+                // 同步当前 session（含 agentId），对话内 switch_agent 后前端展示最新智能体
+                const sessionId = this.currentSession?.id;
+                if (sessionId) {
+                    agentAPI.getSession(sessionId)
+                        .then((res) => {
+                            const session = res?.data?.data ?? res?.data;
+                            if (session && this.currentSession?.id === sessionId) {
+                                this.currentSession = session;
+                                const idx = this.sessions.findIndex((s) => s.id === sessionId);
+                                if (idx >= 0) {
+                                    this.sessions = this.sessions.map((s, i) => (i === idx ? { ...s, ...session } : s));
+                                }
+                                if (socketService.currentSessionId === sessionId && session.agentId !== undefined) {
+                                    socketService.connectToSession(sessionId, session.agentId, session.type ?? 'chat').catch(() => {});
+                                }
                             }
-                            if (socketService.currentSessionId === sessionId && session.agentId !== undefined) {
-                                socketService.connectToSession(sessionId, session.agentId, session.type ?? 'chat').catch(() => {});
-                            }
-                        }
-                    })
-                    .catch(() => {});
-            }
-            this.agentListRefreshTrigger += 1;
+                        })
+                        .catch(() => {});
+                }
+                this.agentListRefreshTrigger += 1;
+            });
         },
     },
 });

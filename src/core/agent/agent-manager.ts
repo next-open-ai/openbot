@@ -16,8 +16,12 @@ import type { AgentSession } from "@mariozechner/pi-coding-agent";
 import { join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { createCompactionMemoryExtensionFactory } from "../memory/compaction-extension.js";
-import { getCompactionContextForSystemPrompt } from "../memory/index.js";
-import { createBrowserTool, createSaveExperienceTool, createInstallSkillTool, createSwitchAgentTool, createListAgentsTool, createCreateAgentTool, createGetBookmarkTagsTool, createSaveBookmarkTool } from "../tools/index.js";
+import { addMemory } from "../memory/index.js";
+import {
+    persistStoredCompactionForSession,
+    persistStoredCompactionForBusinessSession,
+} from "../memory/persist-compaction-on-close.js";
+import { createBrowserTool, createSaveExperienceTool, createMemoryRecallTool, createInstallSkillTool, createSwitchAgentTool, createListAgentsTool, createCreateAgentTool, createGetBookmarkTagsTool, createSaveBookmarkTool, createAddBookmarkTagTool } from "../tools/index.js";
 
 /** Agent Session 缓存 key：sessionId + "::" + agentId，同一业务 session 下不同 agent 各自一个 Core Session */
 const COMPOSITE_KEY_SEP = "::";
@@ -25,7 +29,7 @@ function toCompositeKey(sessionId: string, agentId: string): string {
     return sessionId + COMPOSITE_KEY_SEP + agentId;
 }
 import { createMcpToolsForSession } from "../mcp/index.js";
-import type { McpServerConfig } from "../mcp/index.js";
+import type { McpServerConfig, McpServersStandardFormat } from "../mcp/index.js";
 import { registerBuiltInApiProviders } from "@mariozechner/pi-ai/dist/providers/register-builtins.js";
 import { getOpenbotAgentDir, getOpenbotWorkspaceDir, ensureDefaultAgentDir } from "./agent-dir.js";
 import { formatSkillsForPrompt } from "./skills.js";
@@ -51,6 +55,8 @@ export class AgentManager {
     private sessions = new Map<string, AgentSession>();
     /** 每个 session 最后被使用的时间戳，用于 LRU 淘汰 */
     private sessionLastActiveAt = new Map<string, number>();
+    /** 每个 SessionAgent 当前最新的 compaction summary，关闭会话时写入向量库（infotype: compaction） */
+    private sessionLatestCompactionSummary = new Map<string, string>();
     private agentDir: string;
     private workspaceDir: string;
     private skillPaths: string[] = [];
@@ -122,10 +128,20 @@ You have access to a \`browser\` tool for web automation:
 Use refs from snapshots (e.g., @e1) for reliable element selection.
 For downloads, provide either a direct URL or a selector to click.`;
 
+        const experienceMemoryDesc = `
+## Long-term memory
+
+- **save_experience**: Store summaries in long-term memory. **Call at most once per conversation**, and **only after all tasks are fully completed** (as the last step before ending your reply). **Do not call it for very simple dialogue tasks** (e.g. single-turn Q&A, greetings, trivial questions). When you do call it, briefly summarize the main outcomes, conclusions, or reusable points in one \`save_experience\` call.
+- **memory_recall**: Retrieve relevant memories by semantic search. **When the user asks about past work, decisions, dates, people, preferences, todos, complex tasks, scheduled tasks, or anything that may need past experience**, call \`memory_recall\` first with a suitable query, then answer using the recalled content. Do not inject any history or memory into your replies unless you have just retrieved it via \`memory_recall\` for that question.`;
+
+        const terminologyNote =
+            "【术语】本系统中「智能体」「助手」「专家」均指同一概念（Agent），可互换使用。用户说切换助手/专家或提到某个助手/专家时，即指切换或使用对应智能体。";
         const parts = [
+            terminologyNote,
             "You are a helpful assistant. When users ask about skills, explain what skills are available.",
             browserToolDesc,
             skillsBlock,
+            experienceMemoryDesc,
         ].filter(Boolean);
         return parts.join("\n\n");
     }
@@ -144,32 +160,30 @@ For downloads, provide either a direct URL or a selector to click.`;
     private createResourceLoader(
         workspaceDir: string,
         sessionId?: string,
-        compactionBlock?: string,
         customAgentPrompt?: string,
         identity?: { agentId: string; workspace: string },
+        onUpdateLatestCompaction?: (summary: string) => void,
     ): DefaultResourceLoader {
         const loader = new DefaultResourceLoader({
             cwd: workspaceDir,
             agentDir: this.agentDir,
             noSkills: true, // Disable SDK's built-in skills logic to take full control
             additionalSkillPaths: this.resolveSkillPaths(workspaceDir),
-            extensionFactories: sessionId ? [createCompactionMemoryExtensionFactory(sessionId)] : [],
+            extensionFactories:
+                sessionId && onUpdateLatestCompaction
+                    ? [createCompactionMemoryExtensionFactory(sessionId, onUpdateLatestCompaction)]
+                    : [],
             systemPromptOverride: (base) => {
                 const loadedSkills = loader.getSkills().skills;
-                let basePrompt = this.buildSystemPrompt(loadedSkills);
+                const basePrompt = this.buildSystemPrompt(loadedSkills);
                 const withCustom =
                     customAgentPrompt && customAgentPrompt.trim()
                         ? customAgentPrompt.trim() + "\n\n" + basePrompt
                         : basePrompt;
-                const withIdentity =
-                    identity && identity.agentId
-                        ? `[Session identity] You are the agent with ID: ${identity.agentId}, workspace: ${identity.workspace || identity.agentId}. When asked which agent you are, answer according to this identity.\n\n` +
+                return identity && identity.agentId
+                    ? `[Session identity] You are the agent with ID: ${identity.agentId}, workspace: ${identity.workspace || identity.agentId}. When asked which agent you are, answer according to this identity.\n\n` +
                           withCustom
-                        : withCustom;
-                if (compactionBlock?.trim()) {
-                    return withIdentity + "\n\n" + compactionBlock.trim();
-                }
-                return withIdentity;
+                    : withCustom;
             },
         });
         return loader;
@@ -218,9 +232,11 @@ For downloads, provide either a direct URL or a selector to click.`;
         apiKey?: string;
         maxSessions?: number;
         targetAgentId?: string;
-        mcpServers?: McpServerConfig[];
+        mcpServers?: McpServerConfig[] | McpServersStandardFormat;
         /** 自定义系统提示词（来自 agent 配置），会与技能等一起组成最终 systemPrompt */
         systemPrompt?: string;
+        /** 是否使用长记忆（memory_recall/save_experience）；默认 true */
+        useLongMemory?: boolean;
     } = {}): Promise<AgentSession> {
         const agentId = options.agentId ?? "default";
         const compositeKey = toCompositeKey(sessionId, agentId);
@@ -241,7 +257,7 @@ For downloads, provide either a direct URL or a selector to click.`;
                 }
             }
             if (oldestId != null) {
-                this.deleteSession(oldestId);
+                await this.deleteSession(oldestId);
             }
         }
 
@@ -295,13 +311,12 @@ For downloads, provide either a direct URL or a selector to click.`;
             return process.env.OPENAI_API_KEY;
         });
 
-        const compactionBlock = await getCompactionContextForSystemPrompt(sessionId);
         const loader = this.createResourceLoader(
             sessionWorkspaceDir,
             sessionId,
-            compactionBlock,
             options.systemPrompt,
             { agentId, workspace: workspaceName },
+            (summary) => this.sessionLatestCompactionSummary.set(compositeKey, summary),
         );
         await loader.reload();
 
@@ -315,16 +330,22 @@ For downloads, provide either a direct URL or a selector to click.`;
             ls: createLsTool(sessionWorkspaceDir),
         };
 
-        const mcpTools = await createMcpToolsForSession({ mcpServers: options.mcpServers });
+        const useLongMemory = options.useLongMemory !== false;
+        const mcpTools = await createMcpToolsForSession({
+            mcpServers: options.mcpServers,
+            sessionId,
+        });
         const customTools = [
             createBrowserTool(sessionWorkspaceDir),
             createSaveExperienceTool(sessionId),
+            createMemoryRecallTool(useLongMemory),
             createInstallSkillTool(options.targetAgentId ?? agentId),
             createSwitchAgentTool(sessionId),
             createListAgentsTool(),
             createCreateAgentTool(),
             createGetBookmarkTagsTool(),
             createSaveBookmarkTool(),
+            createAddBookmarkTagTool(),
             ...mcpTools,
         ];
 
@@ -355,26 +376,62 @@ For downloads, provide either a direct URL or a selector to click.`;
         return this.sessions.get(compositeKey);
     }
 
-    /** 删除一个 Agent Session（传入复合 key） */
-    public deleteSession(compositeKey: string): boolean {
+    /** 按业务 sessionId 查找一个 Session（取最近活跃的），用于 agent.cancel 等 */
+    public getSessionBySessionId(sessionId: string): AgentSession | undefined {
+        const prefix = sessionId + COMPOSITE_KEY_SEP;
+        let bestKey: string | undefined;
+        let bestAt = 0;
+        for (const key of this.sessions.keys()) {
+            if (!key.startsWith(prefix)) continue;
+            const at = this.sessionLastActiveAt.get(key) ?? 0;
+            if (at >= bestAt) {
+                bestAt = at;
+                bestKey = key;
+            }
+        }
+        return bestKey != null ? this.sessions.get(bestKey) : undefined;
+    }
+
+    /** 删除一个 Agent Session（传入复合 key）；关闭前将本 session 最新 compaction summary 写入向量库 */
+    public async deleteSession(compositeKey: string): Promise<boolean> {
+        await persistStoredCompactionForSession(
+            this.sessionLatestCompactionSummary,
+            compositeKey,
+            addMemory,
+        );
         this.sessionLastActiveAt.delete(compositeKey);
         return this.sessions.delete(compositeKey);
     }
 
-    /** 按业务 sessionId 删除该会话下所有 agent 的 Core Session（如删除会话时） */
-    public deleteSessionsByBusinessId(sessionId: string): void {
+    /** 按业务 sessionId 删除该会话下所有 agent 的 Core Session（如删除会话时）；关闭前将各 session 最新 compaction 写入向量库 */
+    public async deleteSessionsByBusinessId(sessionId: string): Promise<void> {
         const prefix = sessionId + COMPOSITE_KEY_SEP;
-        for (const key of Array.from(this.sessions.keys())) {
-            if (key.startsWith(prefix)) {
-                this.sessionLastActiveAt.delete(key);
-                this.sessions.delete(key);
-            }
+        const keysToProcess = Array.from(this.sessions.keys()).filter((k) => k.startsWith(prefix));
+        await persistStoredCompactionForBusinessSession(
+            this.sessionLatestCompactionSummary,
+            keysToProcess,
+            sessionId,
+            addMemory,
+        );
+        for (const key of keysToProcess) {
+            this.sessionLastActiveAt.delete(key);
+            this.sessions.delete(key);
+        }
+    }
+
+    /** 按 agentId 删除该智能体下所有 Session（配置更新后使旧会话失效，下次请求会用新配置建新会话） */
+    public async deleteSessionsByAgentId(agentId: string): Promise<void> {
+        const suffix = COMPOSITE_KEY_SEP + agentId;
+        const keysToProcess = Array.from(this.sessions.keys()).filter((k) => k.endsWith(suffix));
+        for (const key of keysToProcess) {
+            await this.deleteSession(key);
         }
     }
 
     public clearAll(): void {
         this.sessions.clear();
         this.sessionLastActiveAt.clear();
+        this.sessionLatestCompactionSummary.clear();
     }
 }
 

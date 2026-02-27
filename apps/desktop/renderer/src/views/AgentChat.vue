@@ -41,8 +41,28 @@
             :content-parts="message.contentParts"
           />
 
-          <!-- Streaming Message: Only show if there is actual content or active tools to show -->
-          <div v-if="(isStreaming || toolExecutions.length > 0) && (currentMessage || toolExecutions.length > 0)" class="streaming-message">
+          <!-- Executing placeholder: show as soon as streaming starts, before any content -->
+          <div v-if="isStreaming && !currentMessage && toolExecutions.length === 0" class="streaming-placeholder">
+            <div class="message-avatar">
+              <span class="avatar-icon">
+                <IconAssistantAvatar />
+              </span>
+            </div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-role">{{ t('chat.assistant') }}</span>
+                <span class="typing-label">{{ t('chat.thinking') }}</span>
+              </div>
+              <div class="typing-indicator">
+                <span class="dot" aria-hidden="true"></span>
+                <span class="dot" aria-hidden="true"></span>
+                <span class="dot" aria-hidden="true"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Streaming Message: when there is actual content or active tools -->
+          <div v-else-if="(isStreaming || toolExecutions.length > 0) && (currentMessage || toolExecutions.length > 0)" class="streaming-message">
             <ChatMessage
               :role="'assistant'"
               :content="currentMessage || (toolExecutions.length > 0 ? t('chat.thinking') : '')"
@@ -59,7 +79,9 @@
         <!-- 智能体选择区：常驻展示，点击切换；排满一行时左右显示滑动触发点 -->
         <div class="agent-bar-wrap">
           <div class="agent-bar-label">
-            <span class="agent-bar-label-icon">◇</span>
+            <span class="agent-bar-label-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            </span>
             <span>{{ t('chat.selectAgent') }}</span>
           </div>
           <div class="agent-list-scroll-wrap">
@@ -70,7 +92,7 @@
               aria-label="向左滑动"
               @click="scrollAgentList(-1)"
             >
-              <span class="agent-scroll-chevron">‹</span>
+              <svg class="agent-scroll-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div
               ref="agentListBarRef"
@@ -84,22 +106,24 @@
                 :class="{ active: effectiveSelectedAgentId === String(a.id), 'is-default': a.id === 'default' }"
                 @click="onAgentChipClick(a.id)"
               >
-              <span class="agent-chip-icon" :class="{ default: a.id === 'default' }">
-                <svg v-if="a.id === 'default'" class="agent-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <defs><linearGradient :id="`agent-star-grad-${a.id}`" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="currentColor" stop-opacity="1"/><stop offset="100%" stop-color="currentColor" stop-opacity="0.6"/></linearGradient></defs>
-                  <path :fill="`url(#agent-star-grad-${a.id})`" d="M12 2l1.8 5.5H20l-4.5 3.3 1.7 5.5L12 13.2l-5.2 3.8 1.7-5.5L4 7.5h6.2L12 2z"/>
-                  <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
-                </svg>
-                <svg v-else class="agent-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <defs><linearGradient :id="`agent-node-grad-${a.id}`" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="currentColor"/><stop offset="100%" stop-color="currentColor" stop-opacity="0.7"/></linearGradient></defs>
-                  <circle cx="12" cy="8" r="3" :fill="`url(#agent-node-grad-${a.id})`" opacity="0.95"/>
-                  <path fill="currentColor" opacity="0.85" d="M6 18.5c0-3.3 2.7-6 6-6s6 2.7 6 6v1H6v-1z"/>
-                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1" opacity="0.25"/>
-                </svg>
-              </span>
-              <span class="agent-chip-name">{{ a.name || a.workspace || a.id }}</span>
-              <span v-if="a.id === 'default'" class="agent-chip-badge">{{ t('agents.defaultBadge') }}</span>
-              <span v-if="effectiveSelectedAgentId === String(a.id)" class="agent-chip-check" aria-hidden="true">✓</span>
+                <span class="agent-chip-icon" :class="{ default: a.id === 'default' }">
+                  <svg v-if="a.id === 'default'" class="agent-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <defs><linearGradient :id="`agent-star-grad-${a.id}`" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="currentColor" stop-opacity="1"/><stop offset="100%" stop-color="currentColor" stop-opacity="0.6"/></linearGradient></defs>
+                    <path :fill="`url(#agent-star-grad-${a.id})`" d="M12 2l1.8 5.5H20l-4.5 3.3 1.7 5.5L12 13.2l-5.2 3.8 1.7-5.5L4 7.5h6.2L12 2z"/>
+                    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.35"/>
+                  </svg>
+                  <svg v-else class="agent-icon-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <defs><linearGradient :id="`agent-node-grad-${a.id}`" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="currentColor"/><stop offset="100%" stop-color="currentColor" stop-opacity="0.7"/></linearGradient></defs>
+                    <circle cx="12" cy="8" r="3" :fill="`url(#agent-node-grad-${a.id})`" opacity="0.95"/>
+                    <path fill="currentColor" opacity="0.85" d="M6 18.5c0-3.3 2.7-6 6-6s6 2.7 6 6v1H6v-1z"/>
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1" opacity="0.25"/>
+                  </svg>
+                </span>
+                <span class="agent-chip-name">{{ a.name || a.workspace || a.id }}</span>
+                <span v-if="a.id === 'default'" class="agent-chip-badge">{{ t('agents.defaultBadge') }}</span>
+                <span v-if="effectiveSelectedAgentId === String(a.id)" class="agent-chip-check" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                </span>
               </div>
               <p v-if="agents.length === 0" class="agent-list-empty">{{ t('chat.selectAgent') }}</p>
             </div>
@@ -110,7 +134,7 @@
               aria-label="向右滑动"
               @click="scrollAgentList(1)"
             >
-              <span class="agent-scroll-chevron">›</span>
+              <svg class="agent-scroll-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
             </button>
           </div>
         </div>
@@ -119,7 +143,7 @@
             v-model="inputMessage"
             @keydown.enter.exact.prevent="sendMessage"
             @keydown.enter.shift.exact="inputMessage += '\n'"
-            :placeholder="t('chat.placeholder')"
+            :placeholder="messagePlaceholder"
             class="message-input"
             rows="5"
             :disabled="isStreaming"
@@ -159,6 +183,7 @@ import { agentConfigAPI } from '@/api';
 import ChatMessage from '@/components/ChatMessage.vue';
 import ChatSessionsPanel from '@/components/ChatSessionsPanel.vue';
 import ToolExecutionCard from '@/components/ToolExecutionCard.vue';
+import IconAssistantAvatar from '@/components/icons/IconAssistantAvatar.vue';
 
 const STORAGE_KEY_LAST_AGENT = 'openbot.lastSelectedAgentId';
 
@@ -168,6 +193,7 @@ export default {
     ChatMessage,
     ChatSessionsPanel,
     ToolExecutionCard,
+    IconAssistantAvatar,
   },
   setup() {
     const route = useRoute();
@@ -194,6 +220,14 @@ export default {
       }
       const raw = session.agentId;
       return raw != null ? String(raw) : 'default';
+    });
+
+    /** 当前选中的智能体为 OpenCode 代理时，显示指令占位提示 */
+    const messagePlaceholder = computed(() => {
+      const id = effectiveSelectedAgentId.value;
+      const agent = (agents.value || []).find((a) => String(a.id) === id);
+      if (agent?.runnerType === 'opencode') return t('chat.placeholderOpenCode');
+      return t('chat.placeholder');
     });
 
     function loadAgents() {
@@ -266,14 +300,29 @@ export default {
 
     const routeSessionId = computed(() => route.params.sessionId || null);
     const currentSession = computed(() => agentStore.currentSession);
-    /** 左侧列表：仅展示非 system 会话；若当前会话非 system 且不在列表中则补上 */
+    /** 是否为桌面/Web 会话（非通道会话）。约定：id 以 channel: 开头为通道会话，否则为桌面会话 */
+    const isDesktopSessionId = (id) => id != null && !String(id).startsWith('channel:');
+    /** 左侧列表：仅展示桌面会话且非 system；若当前会话为桌面且不在列表中则补上（不展示通道会话） */
     const sessions = computed(() => {
-      const list = (agentStore.sessions || []).filter(s => s.type !== 'system');
+      const list = (agentStore.sessions || []).filter(
+        (s) => s.type !== 'system' && isDesktopSessionId(s.id)
+      );
       const cur = agentStore.currentSession;
-      if (cur && cur.type !== 'system' && !list.some(s => s.id === cur.id)) {
+      if (cur && cur.type !== 'system' && isDesktopSessionId(cur.id) && !list.some((s) => s.id === cur.id)) {
         return [cur, ...list];
       }
       return list;
+    });
+    /** 用于「最近会话」重定向：取最近活跃的桌面会话（非 system） */
+    const recentDesktopSession = computed(() => {
+      const desktop = (agentStore.sessions || []).filter(
+        (s) => s.type !== 'system' && isDesktopSessionId(s.id)
+      );
+      if (desktop.length === 0) return null;
+      const sorted = [...desktop].sort(
+        (a, b) => (b.lastActiveAt || b.createdAt || 0) - (a.lastActiveAt || a.createdAt || 0)
+      );
+      return sorted[0];
     });
     /** 当前会话为 system 时不展示对话历史（仅左侧不展示、对话区也不展示） */
     const isSystemSession = computed(() => currentSession.value?.type === 'system');
@@ -323,7 +372,7 @@ export default {
       }
     };
 
-    /** 发送消息：无当前 session 时由 store 在首条发送时懒创建 session（使用当前选中的 selectedAgentId），再走后续对话逻辑 */
+    /** 发送消息：始终传入选中的智能体（与底部栏勾选一致），无 session 时懒创建使用 selectedAgentId */
     const sendMessage = async () => {
       if (!inputMessage.value.trim() || isStreaming.value) return;
 
@@ -331,7 +380,8 @@ export default {
       inputMessage.value = '';
 
       try {
-        const options = currentSession.value ? {} : { agentId: selectedAgentId.value };
+        const selectedId = currentSession.value ? effectiveSelectedAgentId.value : selectedAgentId.value;
+        const options = { agentId: selectedId || 'default' };
         const session = await agentStore.sendMessage(message, options);
         if (session && !routeSessionId.value) {
           agentStore.skipRedirectToRecentOnce = false;
@@ -352,6 +402,9 @@ export default {
 
     watch(() => messages.value.length, scrollToBottom);
     watch(() => currentMessage.value, scrollToBottom);
+    watch(isStreaming, (streaming) => {
+      if (streaming) nextTick(scrollToBottom);
+    });
 
     // 智能安装：从智能体配置跳转过来时预填输入框
     watch(
@@ -370,11 +423,16 @@ export default {
       { immediate: true },
     );
 
-    // Sync Route -> Session
+    // Sync Route -> Session（禁止用通道会话做桌面对话：channel:* 时重定向到首页）
     watch(
       () => route.params.sessionId,
       async (sessionId) => {
         if (sessionId) {
+          if (!isDesktopSessionId(sessionId)) {
+            if (agentStore.currentSession?.id === sessionId) agentStore.clearCurrentSession();
+            router.replace({ path: '/', query: STAY_ON_ROOT_QUERY });
+            return;
+          }
           if (agentStore.currentSession?.id !== sessionId) {
             try {
               await agentStore.selectSession(sessionId);
@@ -405,7 +463,7 @@ export default {
         if (agentStore.skipRedirectToRecentOnce) {
           return;
         }
-        const recent = agentStore.sessions[0];
+        const recent = recentDesktopSession.value;
         if (recent) {
           router.replace(`/chat/${recent.id}`);
         }
@@ -437,11 +495,14 @@ export default {
 
         const sessionId = route.params.sessionId;
         if (sessionId) {
-          if (agentStore.currentSession?.id !== sessionId) {
+          if (!isDesktopSessionId(sessionId)) {
+            if (agentStore.currentSession?.id === sessionId) agentStore.clearCurrentSession();
+            router.replace({ path: '/', query: STAY_ON_ROOT_QUERY });
+          } else if (agentStore.currentSession?.id !== sessionId) {
             await agentStore.selectSession(sessionId);
           }
         } else if (route.path === '/' && !route.query?.stay && !agentStore.skipRedirectToRecentOnce) {
-          const recent = agentStore.sessions[0];
+          const recent = recentDesktopSession.value;
           if (recent) {
             router.replace(`/chat/${recent.id}`);
           }
@@ -472,6 +533,7 @@ export default {
       toolExecutions,
       streamContentParts,
       inputMessage,
+      messagePlaceholder,
       messagesContainer,
       agentListBarRef,
       canScrollAgentLeft,
@@ -549,6 +611,100 @@ export default {
   opacity: 0.9;
 }
 
+/* 发送后、首包前：助手位「正在执行」占位 + 动画 */
+.streaming-placeholder {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  align-items: flex-start;
+  animation: slideInUp 0.35s ease-out;
+}
+
+.streaming-placeholder .message-avatar {
+  flex-shrink: 0;
+}
+
+.streaming-placeholder .avatar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: #fff;
+}
+
+.streaming-placeholder .message-content {
+  flex: 1;
+  max-width: 80%;
+  min-width: 0;
+  padding-left: var(--spacing-sm);
+}
+
+.streaming-placeholder .message-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.streaming-placeholder .message-role {
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.streaming-placeholder .typing-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.streaming-placeholder .typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-lg);
+  min-height: 48px;
+  width: fit-content;
+}
+
+.streaming-placeholder .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-accent-primary);
+  opacity: 0.85;
+  animation: typingBounce 1.4s ease-in-out infinite both;
+}
+
+.streaming-placeholder .dot:nth-child(1) { animation-delay: 0s; }
+.streaming-placeholder .dot:nth-child(2) { animation-delay: 0.16s; }
+.streaming-placeholder .dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.85;
+  }
+  30% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
 .input-area {
   flex-shrink: 0;
   padding: var(--spacing-lg);
@@ -557,41 +713,64 @@ export default {
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
-/* 智能体选择区：更紧凑高度 + 左右滑动触发点 */
+/* 智能体选择区：主题化容器 + 炫酷芯片 + 箭头 */
 .agent-bar-wrap {
   margin-bottom: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: linear-gradient(145deg, rgba(102, 126, 234, 0.06) 0%, var(--color-bg-tertiary) 50%, rgba(118, 75, 162, 0.04) 100%);
+  border: 1px solid rgba(102, 126, 234, 0.12);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+.agent-bar-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 40%, transparent 60%, rgba(102, 126, 234, 0.15) 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
 }
 .agent-bar-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 10px;
   font-size: var(--font-size-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
+  letter-spacing: 0.08em;
+  color: var(--color-text-secondary);
 }
 .agent-bar-label-icon {
-  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   color: var(--color-accent-primary);
-  font-size: 10px;
+  opacity: 0.95;
+}
+.agent-bar-label-icon svg {
+  width: 16px;
+  height: 16px;
 }
 .agent-list-scroll-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 44px;
+  min-height: 52px;
+  gap: 4px;
 }
 .agent-scroll-trigger {
   flex-shrink: 0;
-  width: 28px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -600,71 +779,81 @@ export default {
   z-index: 2;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease, background 0.2s ease;
-  background: linear-gradient(90deg, var(--color-bg-tertiary) 0%, transparent 100%);
-  border-radius: var(--radius-md);
-  color: var(--color-text-secondary);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--glass-border);
+  transition: opacity 0.25s ease, color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.agent-scroll-trigger .agent-scroll-icon {
+  width: 20px;
+  height: 20px;
 }
 .agent-scroll-trigger.agent-scroll-right {
-  background: linear-gradient(270deg, var(--color-bg-tertiary) 0%, transparent 100%);
+  margin-left: 0;
 }
 .agent-scroll-trigger.visible {
   opacity: 1;
   pointer-events: auto;
 }
 .agent-scroll-trigger.visible:hover {
-  background: linear-gradient(90deg, var(--color-bg-elevated) 0%, rgba(255,255,255,0.02) 100%);
   color: var(--color-accent-primary);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.18) 0%, rgba(118, 75, 162, 0.12) 100%);
+  border-color: rgba(102, 126, 234, 0.35);
+  box-shadow: 0 4px 14px rgba(102, 126, 234, 0.25);
+  transform: scale(1.06);
 }
-.agent-scroll-trigger.agent-scroll-right.visible:hover {
-  background: linear-gradient(270deg, var(--color-bg-elevated) 0%, rgba(255,255,255,0.02) 100%);
-}
-.agent-scroll-chevron {
-  font-size: 22px;
-  font-weight: 300;
-  line-height: 1;
+.agent-scroll-trigger.visible:active {
+  transform: scale(0.98);
 }
 .agent-list-bar {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
+  gap: 12px;
+  min-height: 52px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 4px;
+  padding: 6px 6px;
   scrollbar-width: thin;
   scroll-behavior: smooth;
 }
 .agent-list-bar::-webkit-scrollbar {
-  height: 5px;
+  height: 6px;
 }
 .agent-list-bar::-webkit-scrollbar-thumb {
-  background: var(--glass-border);
-  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.25);
+  border-radius: 6px;
 }
+.agent-list-bar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+}
+/* 智能体芯片：玻璃态 + 主题高亮 */
 .agent-chip {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 14px;
-  border: 1.5px solid transparent;
-  background: linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(102, 126, 234, 0.12);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.25s ease, transform 0.2s ease;
+  transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease, transform 0.2s ease;
   position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06), 0 1px 0 rgba(255, 255, 255, 0.5) inset;
 }
 .agent-chip::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: 14px;
-  padding: 1.5px;
-  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%, rgba(0,0,0,0.05) 100%);
+  border-radius: 16px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.5) 0%, transparent 50%, rgba(102, 126, 234, 0.08) 100%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -672,62 +861,64 @@ export default {
   pointer-events: none;
 }
 .agent-chip:hover {
-  background: linear-gradient(145deg, var(--color-bg-elevated) 0%, var(--color-bg-secondary) 100%);
-  border-color: rgba(102, 126, 234, 0.3);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.85) 0%, rgba(102, 126, 234, 0.08) 100%);
+  border-color: rgba(102, 126, 234, 0.28);
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15), 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   transform: translateY(-2px);
 }
 .agent-chip.active {
-  border-color: var(--color-accent-primary);
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.22) 0%, rgba(118, 75, 162, 0.14) 100%);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.28), 0 0 0 1px rgba(102, 126, 234, 0.2), 0 0 24px rgba(102, 126, 234, 0.15);
+  border-color: rgba(102, 126, 234, 0.5);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.18) 0%, rgba(118, 75, 162, 0.12) 100%);
+  box-shadow: 0 8px 28px rgba(102, 126, 234, 0.28), 0 0 0 1px rgba(102, 126, 234, 0.2), 0 1px 0 rgba(255, 255, 255, 0.4) inset;
   transform: translateY(-2px);
 }
 .agent-chip.active.is-default {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.24) 0%, rgba(245, 158, 11, 0.16) 100%);
   border-color: rgba(251, 191, 36, 0.55);
-  box-shadow: 0 6px 20px rgba(251, 191, 36, 0.25), 0 0 0 1px rgba(251, 191, 36, 0.25), 0 0 20px rgba(251, 191, 36, 0.12);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(245, 158, 11, 0.12) 100%);
+  box-shadow: 0 8px 28px rgba(251, 191, 36, 0.22), 0 0 0 1px rgba(251, 191, 36, 0.25), 0 1px 0 rgba(255, 255, 255, 0.35) inset;
 }
 .agent-chip.active .agent-chip-name {
   color: var(--color-accent-primary);
-  font-weight: 600;
+  font-weight: 700;
 }
 .agent-chip.active.is-default .agent-chip-name {
   color: #b45309;
 }
 .agent-chip-icon {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.28) 0%, rgba(118, 75, 162, 0.2) 100%);
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.18) 100%);
   color: var(--color-accent-primary);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition: box-shadow 0.25s ease, transform 0.2s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .agent-chip:hover .agent-chip-icon {
-  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.25), 0 2px 8px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 0 0 1px rgba(102, 126, 234, 0.3), 0 4px 12px rgba(102, 126, 234, 0.25);
 }
 .agent-chip-icon.default {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.32) 0%, rgba(245, 158, 11, 0.24) 100%);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.35) 0%, rgba(245, 158, 11, 0.25) 100%);
   color: #d97706;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .agent-chip.active .agent-chip-icon {
-  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.4), 0 0 12px rgba(102, 126, 234, 0.25);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.4), 0 4px 16px rgba(102, 126, 234, 0.3);
 }
 .agent-chip.active .agent-chip-icon.default {
   color: #b45309;
-  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5), 0 0 12px rgba(251, 191, 36, 0.2);
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.5), 0 4px 16px rgba(251, 191, 36, 0.28);
 }
 .agent-icon-svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
 }
 .agent-chip-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -737,46 +928,77 @@ export default {
 }
 .agent-chip-badge {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--color-text-secondary);
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--color-bg-tertiary);
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
 }
 .agent-chip.active .agent-chip-badge {
-  background: rgba(102, 126, 234, 0.25);
+  background: rgba(102, 126, 234, 0.2);
   color: var(--color-accent-primary);
 }
 .agent-chip.active.is-default .agent-chip-badge {
-  background: rgba(251, 191, 36, 0.3);
+  background: rgba(251, 191, 36, 0.25);
   color: #b45309;
 }
 .agent-chip-check {
   flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--color-accent-primary);
+  background: linear-gradient(135deg, var(--color-accent-primary) 0%, var(--color-accent-secondary) 100%);
   color: #fff;
-  font-size: 11px;
-  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  line-height: 1;
-  margin-left: 2px;
+  margin-left: 4px;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+.agent-chip-check svg {
+  width: 12px;
+  height: 12px;
 }
 .agent-chip.active.is-default .agent-chip-check {
-  background: #b45309;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.45);
 }
 .agent-list-empty {
   margin: 0;
   padding: 8px 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
+}
+
+/* 暗色主题下 agent 栏与芯片适配 */
+html[data-theme="dark"] .agent-bar-wrap,
+html:not([data-theme]) .agent-bar-wrap {
+  background: linear-gradient(145deg, rgba(102, 126, 234, 0.12) 0%, var(--color-bg-tertiary) 50%, rgba(118, 75, 162, 0.08) 100%);
+  border-color: rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+html[data-theme="dark"] .agent-chip,
+html:not([data-theme]) .agent-chip {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+  border-color: rgba(102, 126, 234, 0.2);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2), 0 1px 0 rgba(255, 255, 255, 0.06) inset;
+}
+html[data-theme="dark"] .agent-chip:hover,
+html:not([data-theme]) .agent-chip:hover {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.1) 0%, rgba(102, 126, 234, 0.1) 100%);
+}
+html[data-theme="dark"] .agent-scroll-trigger.visible,
+html:not([data-theme]) .agent-scroll-trigger.visible {
+  background: var(--color-bg-secondary);
+  border-color: rgba(102, 126, 234, 0.25);
+}
+html[data-theme="dark"] .agent-scroll-trigger.visible:hover,
+html:not([data-theme]) .agent-scroll-trigger.visible:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.25) 0%, rgba(118, 75, 162, 0.18) 100%);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.35);
 }
 
 .input-container {

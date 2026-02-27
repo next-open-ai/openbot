@@ -3,13 +3,64 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
-import type { McpServerConfig } from '../../core/mcp/index.js';
+import type { McpServerConfig, McpServersStandardFormat } from '../../core/mcp/index.js';
+import { addPendingAgentReload } from '../../core/config/agent-reload-pending.js';
+import { DatabaseService } from '../database/database.service.js';
+import { WorkspaceService } from '../workspace/workspace.service.js';
 
 /** 工作空间名仅允许英文、数字、下划线、连字符 */
 const WORKSPACE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
 /** 缺省智能体 ID / 工作空间名，不可删除；对应目录 ~/.openbot/workspace/default */
 export const DEFAULT_AGENT_ID = 'default';
+
+/** 执行器类型：local=本机，coze/openclawx/opencode=远程代理 */
+export type AgentRunnerType = 'local' | 'coze' | 'openclawx' | 'opencode';
+
+/** Coze 站点：cn=国内 api.coze.cn，com=国际 api.coze.com，凭证不通用 */
+export type CozeRegion = 'cn' | 'com';
+
+/** 某站点的 Bot 凭证 */
+export interface CozeRegionCredentials {
+    botId: string;
+    apiKey: string;
+}
+
+/** Coze 代理配置（存储）：按站点分别存凭证，请求时用 region 对应的一套 */
+export interface AgentCozeConfig {
+    region?: CozeRegion;
+    cn?: CozeRegionCredentials;
+    com?: CozeRegionCredentials;
+    endpoint?: string;
+}
+
+export interface AgentOpenBotConfig {
+    baseUrl: string;
+    apiKey?: string;
+}
+
+/** OpenCode 启动模式：local=本应用启动本机服务；remote=连接已运行的服务 */
+export type OpenCodeServerMode = "local" | "remote";
+
+/** OpenCode 代理配置：按官方 Server API 或 OpenAI 兼容端点 */
+export interface AgentOpenCodeConfig {
+    /** 启动模式：local=本应用按需启动；remote=连接已有服务 */
+    mode?: OpenCodeServerMode;
+    /** 地址（仅 remote 必填；local 时由适配器使用 127.0.0.1） */
+    address?: string;
+    port: number;
+    password?: string;
+    /** Basic 认证用户名（默认 opencode） */
+    username?: string;
+    /** @deprecated 仅保留向后兼容，产品仅支持官方 Server API */
+    apiStyle?: "server" | "openai";
+    path?: string;
+    streamPath?: string;
+    /** 默认模型（local 时写入启动配置；remote 时作为请求 model） */
+    model?: string;
+    /** 工作目录（仅 local 模式）：启动 opencode serve 时的 cwd，留空则使用进程当前目录 */
+    workingDirectory?: string;
+}
 
 /**
  * 智能体列表与配置使用文件存储（~/.openbot/desktop/agents.json），不使用 SQLite。
@@ -25,12 +76,22 @@ export interface AgentConfigItem {
     modelItemCode?: string;
     /** 是否为系统缺省智能体（主智能体），不可删除 */
     isDefault?: boolean;
-    /** MCP 服务器配置列表，创建 Session 时传入（与 Skill 类似） */
-    mcpServers?: McpServerConfig[];
+    /** MCP 配置：数组（含 transport）或标准 JSON 对象（key 为服务器名称），创建 Session 时归一化使用 */
+    mcpServers?: McpServerConfig[] | McpServersStandardFormat;
     /** 自定义系统提示词，会与技能等一起组成最终 systemPrompt */
     systemPrompt?: string;
     /** 智能体图标标识（前端预设图标 id，如 default、star、code 等） */
     icon?: string;
+    /** 执行器类型：local=本机，coze/openclawx/opencode=远程代理 */
+    runnerType?: AgentRunnerType;
+    /** Coze 代理配置（runnerType 为 coze 时使用） */
+    coze?: AgentCozeConfig;
+    /** OpenBot 代理配置（runnerType 为 openclawx 时使用） */
+    openclawx?: AgentOpenBotConfig;
+    /** OpenCode 代理配置（runnerType 为 opencode 时使用） */
+    opencode?: AgentOpenCodeConfig;
+    /** 是否使用经验（长记忆）：memory_recall / save_experience；默认 true */
+    useLongMemory?: boolean;
 }
 
 interface AgentsFile {
@@ -40,12 +101,20 @@ interface AgentsFile {
 /** 主智能体（default）的默认展示名 */
 const DEFAULT_AGENT_NAME = '主智能体';
 
+export interface DeleteAgentOptions {
+    /** 是否同时删除该工作区在磁盘上的目录及文件；默认 false（仅删数据库中的工作区相关数据，保留目录） */
+    deleteWorkspaceDir?: boolean;
+}
+
 @Injectable()
 export class AgentConfigService {
     private configDir: string;
     private agentsPath: string;
 
-    constructor() {
+    constructor(
+        private readonly db: DatabaseService,
+        private readonly workspaceService: WorkspaceService,
+    ) {
         const homeDir = process.env.HOME || process.env.USERPROFILE || homedir();
         this.configDir = join(homeDir, '.openbot', 'desktop');
         this.agentsPath = join(this.configDir, 'agents.json');
@@ -169,7 +238,26 @@ export class AgentConfigService {
         return agent;
     }
 
-    async updateAgent(id: string, updates: Partial<Pick<AgentConfigItem, 'name' | 'provider' | 'model' | 'modelItemCode' | 'mcpServers' | 'systemPrompt' | 'icon'>>): Promise<AgentConfigItem> {
+    async updateAgent(
+        id: string,
+        updates: Partial<
+            Pick<
+                AgentConfigItem,
+                | 'name'
+                | 'provider'
+                | 'model'
+                | 'modelItemCode'
+                | 'mcpServers'
+                | 'systemPrompt'
+                | 'icon'
+                | 'runnerType'
+                | 'coze'
+                | 'openclawx'
+                | 'opencode'
+                | 'useLongMemory'
+            >
+        >,
+    ): Promise<AgentConfigItem> {
         if (id === DEFAULT_AGENT_ID) {
             await this.ensureDefaultWorkspace();
         }
@@ -193,11 +281,66 @@ export class AgentConfigService {
         if (updates.mcpServers !== undefined) agent.mcpServers = updates.mcpServers;
         if (updates.systemPrompt !== undefined) agent.systemPrompt = updates.systemPrompt?.trim() || undefined;
         if (updates.icon !== undefined) agent.icon = updates.icon?.trim() || undefined;
+        if (updates.runnerType !== undefined) agent.runnerType = updates.runnerType;
+        if (updates.coze !== undefined) {
+            const incoming = updates.coze as Partial<AgentCozeConfig> & {
+                botId?: string;
+                apiKey?: string;
+            };
+            const endpointVal = incoming.endpoint != null ? String(incoming.endpoint).trim() : '';
+            const region: CozeRegion =
+                incoming.region === 'cn' || incoming.region === 'com' ? incoming.region : agent.coze?.region || 'com';
+            const mergeOne = (
+                inCreds: CozeRegionCredentials | undefined,
+                existing: CozeRegionCredentials | undefined,
+            ): CozeRegionCredentials | undefined => {
+                const botId = String((inCreds?.botId ?? existing?.botId) ?? '').trim();
+                if (!botId) return existing;
+                const apiKey =
+                    (inCreds?.apiKey != null && String(inCreds.apiKey).trim()) ||
+                    (existing?.apiKey != null ? String(existing.apiKey).trim() : '') ||
+                    '';
+                return { botId, apiKey };
+            };
+            const cn =
+                incoming.cn !== undefined ? mergeOne(incoming.cn, agent.coze?.cn) : agent.coze?.cn;
+            const com =
+                incoming.com !== undefined ? mergeOne(incoming.com, agent.coze?.com) : agent.coze?.com;
+            if (
+                (incoming.botId != null || incoming.apiKey != null) &&
+                (agent.coze?.cn == null || agent.coze?.com == null)
+            ) {
+                const flatBotId = String(incoming.botId ?? agent.coze?.cn?.botId ?? agent.coze?.com?.botId ?? '').trim();
+                const flatKey =
+                    (incoming.apiKey != null && String(incoming.apiKey).trim()) ||
+                    (agent.coze?.cn?.apiKey && String(agent.coze.cn.apiKey).trim()) ||
+                    (agent.coze?.com?.apiKey && String(agent.coze.com.apiKey).trim()) ||
+                    '';
+                const flat = flatBotId ? { botId: flatBotId, apiKey: flatKey } : undefined;
+                agent.coze = {
+                    region,
+                    cn: cn ?? flat ?? undefined,
+                    com: com ?? flat ?? undefined,
+                    endpoint: endpointVal || undefined,
+                };
+            } else {
+                agent.coze = {
+                    region,
+                    cn: cn ?? undefined,
+                    com: com ?? undefined,
+                    endpoint: endpointVal || undefined,
+                };
+            }
+        }
+        if (updates.openclawx !== undefined) agent.openclawx = updates.openclawx;
+        if (updates.opencode !== undefined) agent.opencode = updates.opencode;
+        if (updates.useLongMemory !== undefined) agent.useLongMemory = updates.useLongMemory;
         await this.writeAgentsFile(file);
+        await addPendingAgentReload(id).catch(() => {});
         return { ...agent, isDefault: agent.id === DEFAULT_AGENT_ID };
     }
 
-    async deleteAgent(id: string): Promise<void> {
+    async deleteAgent(id: string, options?: DeleteAgentOptions): Promise<void> {
         if (id === DEFAULT_AGENT_ID) {
             throw new BadRequestException('主智能体（default）不可删除');
         }
@@ -206,8 +349,26 @@ export class AgentConfigService {
         if (idx < 0) {
             throw new NotFoundException('智能体不存在');
         }
+        const agent = file.agents[idx];
+        const workspace = (agent.workspace || agent.id || '').trim();
         file.agents.splice(idx, 1);
         await this.writeAgentsFile(file);
+
+        if (workspace && workspace !== DEFAULT_AGENT_ID) {
+            this.deleteWorkspaceDataFromDb(workspace);
+        }
+        if (options?.deleteWorkspaceDir && workspace && workspace !== DEFAULT_AGENT_ID) {
+            await this.workspaceService.deleteWorkspaceDirectory(workspace);
+        }
+    }
+
+    /** 仅删除数据库中与该工作区相关的数据（会话、定时任务、收藏等），不删磁盘目录 */
+    private deleteWorkspaceDataFromDb(workspace: string): void {
+        this.db.run('DELETE FROM token_usage WHERE session_id IN (SELECT id FROM sessions WHERE workspace = ?)', [workspace]);
+        this.db.run('DELETE FROM sessions WHERE workspace = ?', [workspace]);
+        this.db.run('DELETE FROM scheduled_tasks WHERE workspace = ?', [workspace]);
+        this.db.run('DELETE FROM saved_items WHERE workspace = ?', [workspace]);
+        this.db.persist();
     }
 
     /**

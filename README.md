@@ -1,9 +1,67 @@
 # OpenBot
+
+基于自已的OpenBot重构而来，你们的关注或***star***是我坚持的动力 ：）
+
 [![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**一个桌面级OpenClaw实现** 是基于 Agent Skills的**一体化 AI 助手平台**，核心部分支持 CLI、WebSocket 网关与桌面端。除提供可自我升级扩展的 AI Agent 引擎及多通道、多终端接入外，后续将支持 MCP 以降低 Token 消耗与大模型幻觉，并接入现有AI Agent 生态，成为一个互联互通的Agent平台。
+---
+
+## 📚 文档导航 (Documentation)
+
+**文档 (Documentation):** [中文 (Chinese)](docs/zh/README.md) · [English](docs/en/README.md)
+
+完整使用说明请进入上述链接。中文文档结构如下：
+
+| 分类 | 文档 | 说明 |
+|------|------|------|
+| **入门** | [快速开始](docs/zh/guides/getting-started.md) | 5 分钟跑通：安装、首次对话、桌面/通道入口 |
+| | [安装与部署](docs/zh/guides/installation.md) | npm、Docker、Desktop 安装包及环境要求 |
+| **使用指南** | [CLI 使用](docs/zh/guides/cli-usage.md) | 命令行对话、登录、模型与技能、开机自启 |
+| | [桌面端使用](docs/zh/guides/desktop-usage.md) | Desktop 安装与启动、智能体/会话/技能/设置；对话内 `//` 指令查询与切换智能体 |
+| | [Web 与 Gateway](docs/zh/guides/gateway-web.md) | 启动网关、端口与路径、Web 端连接 |
+| | [使用场景](docs/zh/guides/usage-scenarios.md) | 整理下载目录、创建/切换智能体、B站下载助手、安装技能、MCP、定时任务等 |
+| **配置** | [配置概览](docs/zh/configuration/config-overview.md) | 配置目录、config.json 与 agents.json |
+| | [智能体配置](docs/zh/configuration/agents.md) | 本机/Coze/OpenBot 执行方式与模型 |
+| | [通道配置](docs/zh/configuration/channels.md) | 飞书、钉钉、Telegram 启用与配置项 |
+| **功能说明** | [代理模式与多节点](docs/zh/features/proxy-mode.md) | Coze 接入、OpenBot 多节点协作 |
+| | [技能系统](docs/zh/features/skills.md) | Agent Skills 规范与扩展 |
+| **参考** | [常见问题](docs/zh/reference/faq.md) | 安装失败、端口占用、通道不回复等 FAQ |
+| | [发布说明](docs/zh/release-notes.md) | 各版本功能更新与问题修复记录 |
+
+<details>
+<summary><strong>📂 文档树结构 (Doc structure)</strong></summary>
+
+```
+docs/
+├── README.md                   → 语言切换入口 (Language switcher)
+├── zh/                         → 中文文档 (Chinese)
+│   ├── README.md               文档入口与导航
+│   ├── release-notes.md        发布说明
+│   ├── guides/                 使用指南
+│   ├── configuration/          配置说明
+│   ├── features/               功能说明
+│   ├── reference/              参考
+│   └── channel-streaming-design.md
+└── en/                         → 英文文档 (English)
+    ├── README.md               Index and navigation
+    ├── release-notes.md        Release notes
+    ├── guides/                 Guides
+    ├── configuration/          Configuration
+    ├── features/                Features
+    ├── reference/              Reference
+    └── channel-streaming-design.md
+```
+
+</details>
+
+### 常见问题（简要）
+
+- **Windows 安装失败 / 无法运行？**  
+  - **Desktop 安装包**：若安装或启动报错（如缺少运行库、闪退），请安装 [Visual C++ Redistributable](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)（选 x64）；若为杀毒/安全软件拦截，可尝试加入排除项或暂时关闭后重试。  
+  - **npm 全局安装**：Windows 上若因 `node-llama-cpp` 等原生依赖安装失败，可使用 `npm install -g @next-open-ai/openclawx --ignore-scripts` 跳过可选原生模块，对 CLI/Gateway/Desktop 常规使用无影响；长记忆需单独配置在线 RAG 或本地环境。  
+- 更多问题（macOS 安装包「已损坏」、端口占用、通道不回复等）见 **[常见问题](docs/zh/reference/faq.md)**；版本变更见 **[发布说明](docs/zh/release-notes.md)**。
 
 ---
 
@@ -17,8 +75,12 @@
 | **长期记忆** | 向量存储（Vectra）+ 本地嵌入，支持经验总结与会话压缩（compaction） |
 | **多端接入** | CLI、WebSocket 网关、Electron 桌面端，同一套 Agent 核心；各端技术栈见下方「各端技术栈」 |
 | **多通道接入** | 飞书、钉钉、Telegram 等 IM 通道，Gateway 根据配置注册；入站经统一格式进 Agent，回复经通道回传 |
-| **MCP（规划中）** | 为降低 Token 消耗与大模型幻觉，后续将支持 MCP（Model Context Protocol） |
-| **生态接入（规划中）** | 接入现有 AI Agent 生态，下一步计划接入 Coze 生态 |
+| **代理模式** | 智能体执行方式可选 **本机** / **Coze** / **OpenBot** / **OpenCode**；本机使用当前模型与 Skills，**代理模式下本机 0 Token 消耗**，推理与消息处理在对方平台完成 |
+| **Coze 接入** | 支持 Coze 国内站（api.coze.cn）与国际站（api.coze.com）；按站点分别配置 Bot ID 与 Access Token（PAT/OAuth/JWT），桌面端与通道均可选用 Coze 智能体；**0 Token 消耗**，适合 Coze 侧大量消息与长对话场景 |
+| **OpenBot 多节点协作** | 可将智能体代理到另一台 OpenBot 实例（baseUrl + 可选 API Key），实现多节点分工、负载与协作；本机 0 Token 消耗 |
+| **OpenCode 代理** | 可将智能体代理至 [OpenCode](https://opencode.ai/) 官方 Server（本地 `opencode serve` 或远程）；支持流式回复、斜杠指令 `/init`、`/undo`、`/redo`、`/share`、`/help`，与 TUI 使用方式一致；**0 Token 消耗**，适合 OpenCode 侧大量代码与长上下文能力 |
+| **MCP** | 已支持 [MCP](https://modelcontextprotocol.io/)（Model Context Protocol）：智能体可配置 stdio/SSE 两种连接方式，按智能体绑定 MCP 服务器，会话内自动加载对应工具，降低 Token 消耗与大模型幻觉 |
+| **RPA（影刀）** | 通过 MCP 可接入影刀 RPA：在智能体 MCP 配置中添加 [yingdao-mcp-server](https://www.npmjs.com/package/yingdao-mcp-server)（命令 `npx -y yingdao-mcp-server`，可选 env 如 `RPA_MODEL`、`SHADOWBOT_PATH`、`USER_FOLDER`），即可在对话中调用影刀自动化能力 |
 
 ---
 
@@ -44,14 +106,18 @@
 ┌─────────────────┐    ┌─────────────────────────────┐    ┌─────────────────────┐
 │  Agent 核心      │    │  Desktop Backend (NestJS)   │    │  Memory / 向量存储   │
 │  AgentManager   │    │  server-api/*               │    │  Vectra + 嵌入       │
-│  pi-coding-agent│    │  Agents · Skills · Tasks    │    │  compaction 扩展     │
-│  pi-ai 多模型   │    │  Auth · Users · Workspace   │    │  sql.js              │
+│  执行方式:      │    │  Agents · Skills · Tasks    │    │  compaction 扩展     │
+│  local/coze/    │    │  Auth · Users · Workspace   │    │  sql.js              │
+│  openclawx/     │    │                             │    │                     │
+│  opencode(代理) │    │                             │    │                     │
+│  pi-coding-agent│    │                             │    │                     │
+│  pi-ai 多模型   │    │                             │    │                     │
 └────────┬────────┘    └─────────────────────────────┘    └─────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Tools: read/write/edit · bash · find/grep/ls · browser · install-skill ·   │
-│         save-experience (写入记忆)                                            │
+│         save-experience (写入记忆) · Proxy(local/coze/openclawx)             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,121 +125,18 @@
 - **WebSocket Gateway**（`src/gateway/`）：单进程内嵌 Nest，对外提供 WebSocket（JSON-RPC）与 HTTP；按 path 分流：`/server-api` 走 Nest、`/ws` 为 Agent 对话、`/ws/voice`/`/sse`/`/channel` 为扩展占位，其余为静态资源。根据配置注册**飞书、钉钉、Telegram** 等通道，入站消息经统一格式进入 Agent，回复经该通道发回对应平台。供 Web/移动端连接；支持以开机/登录自启方式常驻（Linux cron、macOS LaunchAgent、Windows 计划任务）。
 - **Desktop 后端**（`src/server/`）：NestJS HTTP API，即 **server-api**；可被 Gateway 内嵌或独立监听（默认端口 38081）。会话、智能体配置、技能、任务、工作区、鉴权等由本模块提供。
 - **Desktop**：Electron 包一层 Vue 前端 + 上述后端；通过 Gateway 或直连 Desktop 后端与 Agent 通信。
-- **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；记忆与 compaction 作为扩展参与 system prompt 与经验写入。
-
-### 项目目录结构
-
-```
-openbot/
-├── src/                    # 源码（构建输出 dist/）
-│   ├── core/               # 公共核心，CLI 与 Gateway 共用
-│   │   ├── agent/          # AgentManager、run、技能与配置
-│   │   ├── config/         # 桌面配置（~/.openbot/desktop）
-│   │   ├── memory/         # 向量存储、嵌入、compaction
-│   │   ├── installer/      # 技能安装
-│   │   └── tools/          # 内置工具（browser、install-skill、save-experience 等）
-│   ├── cli/                # CLI 入口与 service 子命令
-│   │   ├── cli.ts          # 主入口，构建为 dist/cli/cli.js
-│   │   └── service.ts      # 开机自启 install/uninstall/stop
-│   ├── gateway/            # WebSocket 网关（内嵌 Nest、path 分流）
-│   ├── server/             # Desktop 后端（NestJS）
-│   ├── cli.ts              # 兼容入口，仅转发到 cli/cli.js
-│   └── index.ts            # 包导出
-├── apps/
-│   ├── desktop/            # Electron + Vue 桌面端
-│   ├── web/                # 预留
-│   ├── mobile/             # 预留
-│   ├── miniprogram/        # 预留
-│   └── browser-extension/  # 预留
-├── deploy/                 # Docker、K8s 等部署
-├── test/                   # 单元与 e2e 测试
-├── examples/               # 示例（含 workspace、gateway-client）
-└── skills/                 # 内置技能（find-skills、agent-browser）
-```
-
-### 目录与模块对应
-
-| 目录 | 说明 |
-|------|------|
-| `src/core/` | **公共核心**：`agent/`（AgentManager、pi-coding-agent）、`config/`（桌面配置）、`memory/`、`installer/`、`tools/`；CLI 与 Gateway 共用。 |
-| `src/cli/` | **CLI**：`cli.ts` 主入口（构建为 `dist/cli/cli.js`），`service.ts` 提供开机自启（install/uninstall/stop）。 |
-| `src/gateway/` | **WebSocket 网关**：单进程内嵌 Nest，按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源（`apps/desktop/renderer/dist`）；通道适配（feishu、dingtalk、telegram）在 `channel/adapters/`。 |
-| `src/server/` | **Desktop 后端**（NestJS），HTTP API 前缀 `server-api`；可内嵌到 Gateway 或独立监听。 |
-| `apps/desktop/` | **桌面端**（Electron + Vue），前端构建产物由 Gateway 提供。 |
-| `deploy/` | Dockerfile、K8s 等部署配置。 |
-| `test/` | 单元与 e2e 测试（config、gateway、server、installer）。 |
-| `examples/` | 示例工作区、gateway 客户端等。真实工作区根目录为 `~/.openbot/workspace/`。 |
-| `skills/` | 内置技能（SKILL.md 规范）。 |
-
----
+- **Agent 核心**：统一由 `AgentManager` 管理会话、技能注入与工具注册；**执行方式**可为 **local**（本机 pi-coding-agent + Skills）、**coze**（代理至 Coze 国内/国际站）、**openclawx**（代理至其他 OpenBot 节点，多节点协作）、**opencode**（代理至 OpenCode 官方 Server，支持流式与 `/init`、`/undo`、`/redo`、`/share`、`/help` 等指令）。记忆与 compaction 作为扩展参与 system prompt 与经验写入。
 
 ## 各端技术栈
 
-### CLI
-
-| 类别 | 技术 |
+| 端 | 技术 |
 |------|------|
-| 运行时 | Node.js 20+ |
-| 语言 | TypeScript 5.7 |
-| 入口 | `openbot`（bin → `dist/cli/cli.js`） |
-| 框架 | Commander（子命令：`gateway`、`login`、`config`、`service`） |
-| 配置 | `~/.openbot/agent`（API Key、模型、技能等）；`~/.openbot/desktop`（与桌面共用） |
-| 开机自启 | `openbot service install` / `uninstall`（Linux cron、macOS LaunchAgent、Windows 计划任务）；`openbot service stop` 停止当前 gateway |
-
-### WebSocket Gateway
-
-| 类别 | 技术 |
-|------|------|
-| 协议 | JSON-RPC over WebSocket（`ws`） |
-| 端口 | 默认 38080，可 `-p` 指定 |
-| 架构 | 单进程内嵌 Nest；按 path 分流：`/server-api`、`/ws`、`/ws/voice`、`/sse`、`/channel`、`/health`、静态资源 |
-| 职责 | 连接管理、消息路由、鉴权钩子、静态资源（Desktop 前端） |
-| 方法 | `connect`、`agent.chat`、`agent.cancel`、`subscribe_session`、`unsubscribe_session` 等 |
-
-### Agent 核心
-
-| 类别 | 技术 |
-|------|------|
-| 智能体 | @mariozechner/pi-coding-agent |
-| 模型/Provider | @mariozechner/pi-ai（DeepSeek、DashScope、OpenAI 等） |
-| 工具 | read/write/edit、bash、find/grep/ls、browser、install-skill、save-experience |
-| 技能 | SKILL.md 规范，多路径加载，formatSkillsForPrompt 注入 system prompt |
-
-### Desktop 后端（NestJS）
-
-| 类别 | 技术 |
-|------|------|
-| 框架 | NestJS 10、Express、Socket.io |
-| 前缀 | `server-api` |
-| 模块 | Database · Agents · AgentConfig · Skills · Config · Auth · Users · Workspace · Tasks · Usage |
-| 数据 | sql.js（SQLite WASM，无需预编译） |
-
-### Desktop 前端（Electron + Vue）
-
-| 类别 | 技术 |
-|------|------|
-| 壳子 | Electron 28 |
-| 前端 | Vue 3、Vue Router、Pinia |
-| 构建 | Vite 5 |
-| 通信 | axios、socket.io-client |
-| 视图 | Dashboard、Agents、AgentChat/AgentDetail、Sessions、Skills、Settings、Tasks、WorkResults、Workspace、Login |
-| 国际化 | 自研 useI18n + locales (zh/en) |
-
-### 记忆与向量
-
-| 类别 | 技术 |
-|------|------|
-| 向量索引 | Vectra（LocalIndex） |
-| 嵌入 | 远端 API（config.json 中 RAG 知识库配置的 embedding 模型；未配置时长记忆空转） |
-| 扩展 | compaction-extension（会话压缩、摘要入 prompt） |
-| 持久化 | 与 agent 目录一致的 memory 目录、sql.js（若用于元数据） |
-
-### 内置技能
-
-| 技能 | 说明 |
-|------|------|
-| find-skills | 发现与安装 Cursor/Agent 技能 |
-| agent-browser | 浏览器自动化（Playwright/agent-browser CLI） |
+| **CLI** | Node.js 20+、TypeScript 5.7、Commander（gateway/login/config/service）；`openbot` 入口，配置 `~/.openbot/desktop`，支持开机自启 |
+| **WebSocket Gateway** | JSON-RPC over WebSocket，默认 38080；单进程内嵌 Nest，path 分流（/server-api、/ws、/channel 等）；连接管理、通道（飞书/钉钉/Telegram） |
+| **Agent 核心** | pi-coding-agent、pi-ai 多模型；执行方式 local/coze/openclawx；工具 read/write/bash/browser 等，SKILL.md 技能注入 |
+| **Desktop 后端** | NestJS 10、Express、Socket.io，前缀 `server-api`；sql.js；Agents·Skills·Config·Auth·Workspace·Tasks |
+| **Desktop 前端** | Electron 28、Vue 3、Pinia、Vite 5；Dashboard、Agents、Sessions、Skills、Settings、Tasks、Workspace |
+| **记忆与向量** | Vectra 向量索引、远端嵌入、compaction 会话压缩、memory 目录持久化 |
 
 ---
 
@@ -215,7 +178,14 @@ npm -v    # 能正常输出版本号
 
 ```bash
 # 全局安装（测试过 node 版本：20/22；24 太新，部分库需本地编译环境）
-npm install -g @next-open-ai/openbot
+npm install -g @next-open-ai/openclawx
+```
+#### ***如果是在windows上安装最新版本（v0.8.0以上版本），可能会因为node-llama-cpp无法安装，可以采用如下安装命令跳过它的安装，对当前系统使用无影响***
+```bash
+# 跳过预下载脚本
+npm install -g @next-open-ai/openclawx --ignore-scripts
+# 尝试手工安装跳过的预下载(这一步失败了也不影响正常使用)
+npm run postinstall --if-present
 ```
 
 安装后可直接使用 `openbot` 命令（见下方「使用方式」）。若需从源码构建再安装：
@@ -232,17 +202,48 @@ npm link   # 或 npm install -g . 本地全局安装
 
 ## 1.2 Docker 部署
 
-适用于：在服务器或容器环境中运行 **Gateway**，供 Web/其他客户端连接。
+适用于：在服务器或容器环境中运行 **Gateway**，供 Web/其他客户端连接。编排文件位于仓库 `deploy/` 目录。
 
-> **说明**：Docker 镜像与编排正在规划中，当前推荐使用 npm 全局安装后执行 `openbot gateway` 部署网关。
+### 方式一：使用 CI 构建的镜像（推荐生产）
 
-规划中的使用方式示例：
+镜像由 Drone CI（`.drone.yml`）构建并推送到镜像仓库。使用预构建镜像启动服务，暴露端口 **38080**：
 
 ```bash
-# 示例（以实际仓库/镜像名为准）
-# docker pull next-open-ai/openbot
-# docker run -p 38080:38080 -e OPENAI_API_KEY=xxx next-open-ai/openbot gateway
+# 在 deploy 目录下执行
+cd deploy
+docker compose up -d
+
+# 或从仓库根目录指定 compose 文件
+docker compose -f deploy/docker-compose.yaml up -d
 ```
+
+默认使用镜像 `ccr.ccs.tencentyun.com/windwithlife/openbot:latest`。若需指定版本，可修改 `deploy/docker-compose.yaml` 中 `image` 的 tag（如 `0.6.8` 或 CI 生成的 `build-ci-openbot-<BUILD_NUMBER>`）。
+
+### 方式二：本地构建并运行（开发/无 CI 时）
+
+不依赖镜像仓库，在本地从源码构建镜像并启动：
+
+```bash
+# 在仓库根目录执行（构建上下文为仓库根）
+docker compose -f deploy/docker-compose-dev.yaml up --build -d
+
+# 或在 deploy 目录下
+cd deploy
+docker compose -f docker-compose-dev.yaml up --build -d
+```
+
+构建完成后服务同样监听 **38080** 端口，镜像名为 `openbot:dev`，容器名为 `openbot-dev`。
+
+### 配置与数据持久化
+
+- Gateway 默认从容器内 `~/.openbot/desktop/` 读取配置（智能体、模型、通道等）。若需持久化或预置配置，可在 compose 中挂载宿主机目录，例如在 `deploy/docker-compose.yaml` 或 `deploy/docker-compose-dev.yaml` 的 `openbot` 服务下增加：
+
+  ```yaml
+  volumes:
+    - ./openbot-desktop:/root/.openbot/desktop
+  ```
+
+- API Key 等敏感信息也可通过环境变量传入（若 CLI/桌面端支持从环境变量读取），在 compose 的 `environment` 中配置即可。
 
 ---
 
@@ -297,7 +298,7 @@ openbot --model deepseek-chat --provider deepseek "写一段 TypeScript 示例"
 CLI 与桌面端共用**桌面配置**（`~/.openbot/desktop/`）。主要文件：
 
 - **config.json**：全局缺省 provider/model、**defaultModelItemCode**（缺省模型在 configuredModels 中的唯一标识）、缺省智能体 id（`defaultAgentId`）、各 provider 的 API Key/baseUrl、已配置模型列表（configuredModels）等。
-- **agents.json**：智能体列表；每个智能体可配置 provider、model、**modelItemCode**（匹配 configuredModels）、工作区。
+- **agents.json**：智能体列表；每个智能体可配置 provider、model、**modelItemCode**（匹配 configuredModels）、工作区。**执行方式**可为 **local** / **coze** / **openclawx**。Coze 代理：`execution: "coze"`，并配置 **region**（`cn` 国内 / `com` 国际）、**coze.cn** / **coze.com**（各含 botId、apiKey），不暴露 endpoint。OpenBot 代理：`execution: "openclawx"`，配置 **openclawx.baseUrl**、**openclawx.apiKey**（可选）。
 - **provider-support.json**：Provider 与模型目录，供设置页下拉选择。
 
 | 操作 | 命令 | 说明 |
@@ -371,23 +372,41 @@ openbot gateway --port 38080
 **说明**：飞书通道通过飞书开放平台与机器人对接。入站使用飞书官方 **WebSocket 事件订阅**（`im.message.receive_v1`）接收用户消息；出站使用 **开放 API** 发送回复。支持**流式输出**：先发一条「思考中」的互动卡片，再随 Agent 生成内容逐次更新同一条卡片，直至整轮对话结束（`agent_end`）。
 
 - **会话与 Agent**：同一飞书会话（单聊或群聊对应一个 `chat_id`）对应一个 Agent Session（`channel:feishu:<chat_id>`），由通道配置中的 `defaultAgentId` 指定使用哪个智能体。
-- **配置项**：enabled、appId、appSecret、defaultAgentId。桌面端：**设置 → 通道** 勾选「启用飞书」并填写 App ID、App Secret；或编辑 `~/.openbot/desktop/config.json` 中 `channels.feishu`。保存后需**重启 Gateway**。
+- **能力**：单聊、群聊均可；支持文本消息与流式卡片展示；`turn_end` / `agent_end` 事件会向各端广播，便于前端或其它通道按需处理。
+
+**配置**：enabled、appId、appSecret、defaultAgentId。**用法**：飞书开放平台创建自建应用、开通「机器人」与「接收消息」、事件订阅选 WebSocket；OpenBot **设置 → 通道** 勾选「启用飞书」并填写 App ID、App Secret → 保存后**重启 Gateway**；在飞书内私聊或群聊 @ 机器人即可，回复以流式卡片更新。也可直接编辑 `~/.openbot/desktop/config.json` 中 `channels.feishu`。
 
 ### 钉钉
 
 **说明**：钉钉通道使用 **dingtalk-stream** SDK 的 **Stream 模式**接收机器人消息，通过消息中的 `sessionWebhook` 回传回复；回复发送完成后需 ack 避免钉钉重试。支持单聊、群聊及流式回复。
 
 - **会话与 Agent**：同一钉钉会话（conversationId）对应一个 Agent Session（`channel:dingtalk:<conversationId>`），由通道配置中的 `defaultAgentId` 指定智能体。
-- **配置项**：enabled、clientId、clientSecret、defaultAgentId。需在钉钉开发者后台创建企业内部应用、添加机器人能力并选择 **Stream 模式**。桌面端：**设置 → 通道** 启用钉钉并填写 Client ID、Client Secret；或编辑 `config.json` 中 `channels.dingtalk`。保存后需**重启 Gateway**。
+
+**配置**：enabled、clientId、clientSecret、defaultAgentId。**用法**：钉钉开发者后台创建企业内部应用、添加机器人能力并选择 **Stream 模式**；OpenBot **设置 → 通道** 启用钉钉并填写 Client ID、Client Secret → 保存后**重启 Gateway**。在钉钉内与机器人对话即可。也可编辑 `config.json` 中 `channels.dingtalk`。
 
 ### Telegram
 
 **说明**：Telegram 通道使用官方推荐的 **长轮询**（getUpdates）接收消息，无需公网 URL。出站使用 `sendMessage` 发送、`editMessageText` 流式更新同一条消息，直至整轮结束。
 
 - **会话与 Agent**：同一 Telegram 会话（chat_id）对应一个 Agent Session（`channel:telegram:<chat_id>`），由通道配置中的 `defaultAgentId` 指定智能体。
-- **配置项**：enabled、botToken、defaultAgentId。Bot Token 通过 [@BotFather](https://t.me/BotFather) 获取。桌面端：**设置 → 通道** 启用 Telegram 并填写 Bot Token；或编辑 `config.json` 中 `channels.telegram`。保存后需**重启 Gateway**。
+
+**配置**：enabled、botToken、defaultAgentId。**用法**：通过 [@BotFather](https://t.me/BotFather) 获取 Bot Token；OpenBot **设置 → 通道** 启用 Telegram 并填写 Bot Token → 保存后**重启 Gateway**。在 Telegram 内与机器人对话即可。也可编辑 `config.json` 中 `channels.telegram`。
 
 未配置或未启用某通道时，Gateway 会跳过该通道启动；若已启用但必填项为空，控制台会提示到「设置 → 通道」检查。
+
+### 2.4.1 代理模式与多节点协作
+
+智能体除在本机运行（**local**）外，可配置为**代理模式**，将对话转发至 Coze、OpenCode 或另一台 OpenBot，实现生态接入与多节点协作。**代理智能体为本机 0 Token 消耗模式**：推理与消息处理均在对方平台完成，本机仅做转发与展示，不占用本机模型 API 的 Token。特别适合 **Coze**、**OpenCode** 等具备大量消息、长上下文或代码协作能力的平台，在桌面端与通道中直接使用其能力而无需消耗本机配额。
+
+| 模式 | 说明 | 配置要点 |
+|------|------|----------|
+| **local** | 本机执行，使用当前模型的 pi-coding-agent 与 Skills | 默认；无需额外配置 |
+| **coze** | 代理至 Coze 平台 | 在桌面端「智能体 → 编辑 → 执行方式」选 Coze；**站点**选国内(cn)或国际(com)；分别填写该站点的 **Bot ID**、**Access Token**（PAT / OAuth 2.0 / JWT 等）。`agents.json` 中对应智能体为 `"execution": "coze"`，并含 `coze.region`、`coze.cn` / `coze.com`（botId、apiKey） |
+| **openclawx** | 代理至其他 OpenBot 实例（多节点） | 执行方式选 OpenBot；填写目标实例 **baseUrl**（如 `http://另一台机器:38080`）、可选 **API Key**。`agents.json` 中为 `"execution": "openclawx"`，含 `openclawx.baseUrl`、`openclawx.apiKey`（可选） |
+| **opencode** | 代理至 OpenCode 官方 Server | 执行方式选 OpenCode；本地模式需先在本机运行 `opencode serve`（默认 4096 端口），填写端口；远程模式填写地址与端口。可选密码、工作目录、默认模型。支持 `/init`、`/undo`、`/redo`、`/share`、`/help` 等斜杠指令，分享链接会回显到对话中 |
+
+- **入口**：桌面端「设置」→「智能体」中新建/编辑智能体时可选择执行方式；通道使用的默认智能体也可设为 Coze 或 OpenBot 代理。
+- **多节点**：多台机器各跑一个 OpenBot Gateway，将部分智能体指向对方 baseUrl，即可实现分工、专机专用或负载均衡。
 
 ---
 
@@ -409,8 +428,11 @@ openbot gateway --port 38080
 
 | 方向 | 说明 |
 |------|------|
-| **MCP** | 支持 MCP 协议，降低 Token 消耗与大模型幻觉，与 Skill 自我发现/迭代形成互补 |
-| **Coze 生态** | 接入现有 AI Agent 生态，下一步计划接入 Coze |
+| **MCP** | **已支持**：智能体可配置 MCP 服务器（stdio 本地进程 / SSE 远程），会话内自动加载 MCP 工具；支持标准 JSON 配置格式（含服务器名称、command/args/env 或 url/headers），与 Skill 形成互补 |
+| **RPA（影刀）** | **已支持**：通过 MCP 接入影刀 RPA（如 yingdao-mcp-server），在智能体配置中添加对应 MCP 即可在对话中调用影刀自动化 |
+| **Coze 生态** | **已支持**：智能体执行方式可选 coze，按站点（国内 cn / 国际 com）配置 Bot ID 与 Access Token，桌面端与通道均可使用 |
+| **OpenBot 多节点** | **已支持**：执行方式可选 openclawx，通过 baseUrl（及可选 apiKey）将对话代理到另一 OpenBot 实例，实现多节点协作与负载分工 |
+| **OpenCode 代理** | **已支持**：执行方式可选 opencode，对接 OpenCode 官方 Server（本地 `opencode serve` 或远程）；流式回复、`/init`/`/undo`/`/redo`/`/share`/`/help` 等指令，分享链接回显；失败时展示「执行失败」提示 |
 
 文档与发布节奏后续更新。
 
@@ -542,18 +564,15 @@ npm run test:memory
 
 ---
 
-## 各端技术栈
 
-详见上文「各端技术栈」章节（CLI、WebSocket Gateway、Agent 核心、Desktop 后端/前端、记忆与向量、内置技能）。
 
 ---
 
-## 内置技能
+### 社区与交流
 
-| 技能 | 说明 |
-|------|------|
-| find-skills | 发现与安装 Cursor/Agent 技能 |
-| agent-browser | 浏览器自动化（Playwright/agent-browser CLI） |
+扫码加入交流群：
+
+![OpenBot QQ交流群:362347735](docs/group-1.png)
 
 ---
 

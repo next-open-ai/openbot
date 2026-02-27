@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "http";
 import { agentManager } from "../../core/agent/agent-manager.js";
-import { getExperienceContextForUserMessage } from "../../core/memory/index.js";
 import { loadDesktopAgentConfig } from "../../core/config/desktop-config.js";
+import { consumePendingAgentReload } from "../../core/config/agent-reload-pending.js";
 
 export interface RunScheduledTaskBody {
     sessionId: string;
@@ -65,6 +65,9 @@ export async function handleRunScheduledTask(
     }
 
     const COMPOSITE_KEY_SEP = "::";
+    if (await consumePendingAgentReload(sessionAgentId)) {
+        await agentManager.deleteSessionsByAgentId(sessionAgentId);
+    }
     try {
         const session = await agentManager.getOrCreateSession(sessionId, {
             agentId: sessionAgentId,
@@ -74,6 +77,7 @@ export async function handleRunScheduledTask(
             apiKey,
             mcpServers: agentConfig?.mcpServers,
             systemPrompt: agentConfig?.systemPrompt,
+            useLongMemory: agentConfig?.useLongMemory,
         });
         let assistantContent = "";
         let turnPromptTokens = 0;
@@ -94,12 +98,6 @@ export async function handleRunScheduledTask(
             }
         });
 
-        const experienceBlock = await getExperienceContextForUserMessage();
-        const userMessageToSend =
-            experienceBlock.trim().length > 0
-                ? `${experienceBlock}\n\n用户问题：\n${message}`
-                : message;
-
         // 定时任务复用同一 session：若上次执行未结束会报 "Agent is already processing"。先等待空闲再发，避免并发。
         const idleTimeoutMs = 10 * 60 * 1000;
         const pollMs = 2000;
@@ -111,7 +109,7 @@ export async function handleRunScheduledTask(
         if ((session as any).isStreaming) {
             throw new Error("Session still busy after waiting; try again later.");
         }
-        await session.sendUserMessage(userMessageToSend);
+        await session.sendUserMessage(message);
         unsubscribe();
 
         if (backendBaseUrl && assistantContent !== undefined) {
@@ -146,6 +144,6 @@ export async function handleRunScheduledTask(
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ success: false, error: friendlyError }));
     } finally {
-        agentManager.deleteSession(sessionId + COMPOSITE_KEY_SEP + sessionAgentId);
+        await agentManager.deleteSession(sessionId + COMPOSITE_KEY_SEP + sessionAgentId);
     }
 }

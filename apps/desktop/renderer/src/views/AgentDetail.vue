@@ -10,7 +10,17 @@
     </div>
     <template v-else>
       <div class="detail-header card-glass">
-        <router-link to="/agents" class="back-link">← {{ t('agents.backToList') }}</router-link>
+        <div class="detail-header-top">
+          <router-link to="/agents" class="back-link">← {{ t('agents.backToList') }}</router-link>
+          <button
+            v-if="!agent.isDefault"
+            type="button"
+            class="btn-delete-agent"
+            @click="openDeleteConfirm"
+          >
+            {{ t('agents.deleteAgent') }}
+          </button>
+        </div>
         <h1 class="view-title">{{ agent.name }}</h1>
         <p class="text-secondary">
           {{ t('agents.workspace') }}: <code>{{ agent.workspace }}</code>
@@ -85,42 +95,221 @@
               />
               <p class="form-hint">{{ t('agents.agentDescriptionHint') }}</p>
             </div>
-            <!-- 模型配置：从已配置的模型列表中选择，选项为 供应商 / 模型名，选中后显示供应商及模型 ID -->
-            <div class="config-section model-section">
-              <h3 class="config-section-title">{{ t('agents.modelConfig') }}</h3>
-              <p class="form-hint">{{ t('agents.modelConfigHint') }}</p>
-              <div v-if="modelConfigLoading" class="loading-state small">
-                <div class="spinner"></div>
-                <p>{{ t('common.loading') }}</p>
-              </div>
-              <template v-else>
-                <p v-if="configuredModelsList.length === 0" class="form-hint form-hint-warn">
-                  {{ t('agents.noConfiguredModels') }}
+            <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
+              {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
+            </button>
+          </div>
+
+          <!-- 代理配置：本机 / Coze / OpenBot（独立 Tab 便于查找） -->
+          <div v-show="activeTab === 'proxy'" class="tab-panel proxy-panel">
+            <h2 class="panel-title">{{ t('agents.proxyConfig') }}</h2>
+            <p class="form-hint">{{ t('agents.proxyConfigHint') }}</p>
+            <div class="form-group">
+              <label>{{ t('agents.runnerType') }}</label>
+              <template v-if="agent?.runnerType === 'coze' || agent?.runnerType === 'openclawx' || agent?.runnerType === 'opencode'">
+                <p class="form-runner-type-fixed">
+                  {{
+                    agent?.runnerType === 'coze'
+                      ? t('agents.runnerTypeCoze')
+                      : agent?.runnerType === 'openclawx'
+                        ? t('agents.runnerTypeOpenclawx')
+                        : t('agents.runnerTypeOpencode')
+                  }}
                 </p>
-                <template v-else>
-                  <div class="form-group">
-                    <label>{{ t('agents.selectConfiguredModel') }}</label>
-                    <select v-model="selectedConfiguredModelKey" class="form-input" @change="onConfiguredModelSelect">
-                      <option value="">—</option>
-                      <option
-                        v-for="item in configuredModelsList"
-                        :key="optionValueFor(item)"
-                        :value="optionValueFor(item)"
-                      >
-                        {{ getConfiguredModelOptionLabel(item) }}
-                      </option>
-                    </select>
-                  </div>
-                  <div v-if="selectedModelItem" class="form-group model-current-display">
-                    <span class="label">{{ t('agents.currentProvider') }}：</span>
-                    <span class="value">{{ getProviderDisplayName(selectedModelItem.provider) }}</span>
-                    <span class="sep">，</span>
-                    <span class="label">{{ t('agents.currentModelId') }}：</span>
-                    <span class="value"><code>{{ selectedModelItem.modelId }}</code></span>
-                  </div>
-                </template>
               </template>
+              <select v-else v-model="proxyForm.runnerType" class="form-input">
+                <option value="local">{{ t('agents.runnerTypeLocal') }}</option>
+                <option value="coze">{{ t('agents.runnerTypeCoze') }}</option>
+                <option value="openclawx">{{ t('agents.runnerTypeOpenclawx') }}</option>
+                <option value="opencode">{{ t('agents.runnerTypeOpencode') }}</option>
+              </select>
             </div>
+            <template v-if="proxyForm.runnerType === 'coze'">
+              <div class="form-group">
+                <label>{{ t('agents.cozeRegion') }}</label>
+                <select v-model="proxyForm.coze.region" class="form-input">
+                  <option value="com">{{ t('agents.cozeRegionCom') }}</option>
+                  <option value="cn">{{ t('agents.cozeRegionCn') }}</option>
+                </select>
+                <p class="form-hint">{{ t('agents.cozeRegionHint') }}</p>
+                <p class="form-hint">{{ t('agents.cozeTokenTypesHint') }}</p>
+              </div>
+              <template v-if="proxyForm.coze.region === 'cn'">
+                <div class="form-group">
+                  <label>{{ t('agents.cozeBotId') }}（{{ t('agents.cozeRegionCn') }}）</label>
+                  <input
+                    v-model="proxyForm.coze.cn.botId"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.cozeBotIdPlaceholder')"
+                  />
+                  <p class="form-hint">{{ t('agents.cozeBotIdHint') }}</p>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.cozeApiKey') }}（{{ t('agents.cozeRegionCn') }}）</label>
+                  <input
+                    v-model="proxyForm.coze.cn.apiKey"
+                    type="password"
+                    class="form-input"
+                    :placeholder="t('agents.cozeApiKeyPlaceholder')"
+                    autocomplete="off"
+                  />
+                  <p class="form-hint">{{ t('agents.cozeAccessTokenHint') }}</p>
+                </div>
+              </template>
+              <template v-if="proxyForm.coze.region === 'com'">
+                <div class="form-group">
+                  <label>{{ t('agents.cozeBotId') }}（{{ t('agents.cozeRegionCom') }}）</label>
+                  <input
+                    v-model="proxyForm.coze.com.botId"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.cozeBotIdPlaceholder')"
+                  />
+                  <p class="form-hint">{{ t('agents.cozeBotIdHint') }}</p>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.cozeApiKey') }}（{{ t('agents.cozeRegionCom') }}）</label>
+                  <input
+                    v-model="proxyForm.coze.com.apiKey"
+                    type="password"
+                    class="form-input"
+                    :placeholder="t('agents.cozeApiKeyPlaceholder')"
+                    autocomplete="off"
+                  />
+                  <p class="form-hint">{{ t('agents.cozeAccessTokenHint') }}</p>
+                </div>
+              </template>
+            </template>
+            <template v-if="proxyForm.runnerType === 'openclawx'">
+              <div class="form-group">
+                <label>{{ t('agents.openclawxBaseUrl') }}</label>
+                <input
+                  v-model="proxyForm.openclawx.baseUrl"
+                  type="text"
+                  class="form-input"
+                  :placeholder="t('agents.openclawxBaseUrlPlaceholder')"
+                />
+              </div>
+              <div class="form-group">
+                <label>{{ t('agents.openclawxApiKey') }}</label>
+                <input
+                  v-model="proxyForm.openclawx.apiKey"
+                  type="password"
+                  class="form-input"
+                  :placeholder="t('agents.openclawxApiKeyPlaceholder')"
+                  autocomplete="off"
+                />
+              </div>
+            </template>
+            <template v-if="proxyForm.runnerType === 'opencode'">
+              <p class="form-hint">{{ t('agents.opencodeHint') }}</p>
+              <div class="form-group">
+                <label>{{ t('agents.opencodeMode') }}</label>
+                <div class="form-radio-group">
+                  <label class="form-radio">
+                    <input v-model="proxyForm.opencode.mode" type="radio" value="local" />
+                    <span>{{ t('agents.opencodeModeLocal') }}</span>
+                  </label>
+                  <label class="form-radio">
+                    <input v-model="proxyForm.opencode.mode" type="radio" value="remote" />
+                    <span>{{ t('agents.opencodeModeRemote') }}</span>
+                  </label>
+                </div>
+              </div>
+              <template v-if="proxyForm.opencode.mode === 'local'">
+                <p class="form-hint">{{ t('agents.opencodeLocalHint') }}</p>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodePortLocalLabel') }}</label>
+                  <input
+                    v-model.number="proxyForm.opencode.port"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    class="form-input"
+                    :placeholder="t('agents.opencodePortPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodeModel') }}</label>
+                  <select v-model="proxyForm.opencode.model" class="form-input">
+                    <option value="">{{ t('agents.opencodeUseLocalDefault') }}</option>
+                    <option
+                      v-for="m in opencodeFreeModels"
+                      :key="m.id"
+                      :value="m.id"
+                    >
+                      {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+                    </option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodeWorkingDirectory') }}</label>
+                  <div class="form-input-with-btn">
+                    <input
+                      v-model="proxyForm.opencode.workingDirectory"
+                      type="text"
+                      class="form-input"
+                      :placeholder="t('agents.opencodeWorkingDirectoryPlaceholder')"
+                    />
+                    <button
+                      v-if="hasElectronFolderPicker"
+                      type="button"
+                      class="btn-secondary btn-pick-folder"
+                      @click="pickOpencodeWorkingDirectory"
+                    >
+                      {{ t('agents.opencodeSelectFolder') }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <p class="form-hint">{{ t('agents.opencodeRemoteHint') }}</p>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodeAddress') }}</label>
+                  <input
+                    v-model="proxyForm.opencode.address"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.opencodeAddressPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodePort') }}</label>
+                  <input
+                    v-model.number="proxyForm.opencode.port"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    class="form-input"
+                    :placeholder="t('agents.opencodePortPlaceholder')"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodePassword') }}</label>
+                  <input
+                    v-model="proxyForm.opencode.password"
+                    type="password"
+                    class="form-input"
+                    :placeholder="t('agents.opencodePasswordPlaceholder')"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.opencodeModel') }}</label>
+                  <select v-model="proxyForm.opencode.model" class="form-input">
+                    <option value="">{{ t('agents.opencodeUseServerDefault') }}</option>
+                    <option
+                      v-for="m in opencodeFreeModels"
+                      :key="m.id"
+                      :value="m.id"
+                    >
+                      {{ m.label }}{{ m.free ? ' (Free)' : '' }}
+                    </option>
+                  </select>
+                </div>
+              </template>
+            </template>
             <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
               {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
             </button>
@@ -184,28 +373,39 @@
 
             <div class="mcp-list">
               <div
-                v-for="(item, index) in mcpServers"
-                :key="index"
+                v-for="(entry, name) in mcpServers"
+                :key="name"
                 class="mcp-item card-glass"
               >
-                <span class="mcp-item-badge" :class="item.transport === 'sse' ? 'badge-remote' : 'badge-local'">
-                  {{ item.transport === 'sse' ? t('agents.mcpTransportSse') : t('agents.mcpTransportStdio') }}
+                <span class="mcp-item-badge" :class="entry.url ? 'badge-remote' : 'badge-local'">
+                  {{ entry.url ? t('agents.mcpTransportSse') : t('agents.mcpTransportStdio') }}
                 </span>
-                <span class="mcp-item-text">{{ mcpServerDisplayText(item) }}</span>
+                <span class="mcp-item-name">{{ name }}</span>
+                <span class="mcp-item-text">{{ mcpServerDisplayText(entry) }}</span>
                 <div class="mcp-item-actions">
-                  <button type="button" class="link-btn" @click="startEditMcp(index)">
+                  <button type="button" class="link-btn" @click="startEditMcp(name)">
                     {{ t('common.edit') }}
                   </button>
-                  <button type="button" class="link-btn danger" @click="removeMcpServer(index)">
+                  <button type="button" class="link-btn danger" @click="removeMcpServer(name)">
                     {{ t('common.delete') }}
                   </button>
                 </div>
               </div>
             </div>
 
-            <div v-if="mcpFormVisible || mcpEditingIndex >= 0" class="mcp-form card-glass">
-              <h3 class="config-section-title">{{ mcpEditingIndex >= 0 ? t('agents.editMcpServer') : t('agents.addMcpServer') }}</h3>
+            <div v-if="mcpFormVisible || mcpEditingKey !== null" class="mcp-form card-glass">
+              <h3 class="config-section-title">{{ mcpEditingKey !== null ? t('agents.editMcpServer') : t('agents.addMcpServer') }}</h3>
 
+              <div class="form-group">
+                <label class="form-label">{{ t('agents.mcpServerName') }}</label>
+                <input
+                  v-model="mcpForm.name"
+                  type="text"
+                  class="form-input"
+                  :placeholder="t('agents.mcpServerNamePlaceholder')"
+                  :readonly="mcpEditingKey !== null"
+                />
+              </div>
               <div class="form-group">
                 <label class="form-label">{{ t('agents.mcpTransportType') }}</label>
                 <div class="mcp-transport-tabs">
@@ -251,6 +451,15 @@
                     :placeholder="t('agents.mcpArgsPlaceholder')"
                   />
                 </div>
+                <div class="form-group">
+                  <label class="form-label">{{ t('agents.mcpEnv') }}</label>
+                  <textarea
+                    v-model="mcpForm.envStr"
+                    class="form-input form-textarea"
+                    rows="3"
+                    :placeholder="t('agents.mcpEnvPlaceholder')"
+                  />
+                </div>
               </template>
               <template v-else>
                 <div class="form-group">
@@ -279,13 +488,31 @@
                   {{ t('common.cancel') }}
                 </button>
                 <button type="button" class="btn-primary" @click="saveMcpServer">
-                  {{ mcpEditingIndex >= 0 ? t('agents.saveMcpServer') : t('agents.addMcpServer') }}
+                  {{ mcpEditingKey !== null ? t('agents.saveMcpServer') : t('agents.addMcpServer') }}
                 </button>
               </div>
             </div>
             <button v-else type="button" class="btn-secondary btn-add-mcp" @click="openAddMcp">
               {{ t('agents.addMcpServer') }}
             </button>
+
+            <div class="mcp-json-section card-glass">
+              <h3 class="config-section-title">{{ t('agents.mcpStandardJson') }}</h3>
+              <p class="form-hint">{{ t('agents.mcpStandardJsonHint') }}</p>
+              <textarea
+                v-model="mcpStandardJsonString"
+                class="form-input form-textarea mcp-json-textarea"
+                rows="12"
+                spellcheck="false"
+              />
+              <p v-if="mcpJsonError" class="form-hint form-hint-warn">{{ mcpJsonError }}</p>
+              <div class="mcp-form-actions">
+                <button type="button" class="btn-primary" @click="applyMcpJson">
+                  {{ t('agents.mcpApplyJson') }}
+                </button>
+              </div>
+            </div>
+
             <p class="form-hint mcp-save-hint">{{ t('agents.mcpSaveHint') }}</p>
             <div class="mcp-save-row">
               <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
@@ -403,6 +630,28 @@
           </div>
         </div>
       </transition>
+
+      <!-- 删除智能体确认弹窗 -->
+      <transition name="fade">
+        <div v-if="showDeleteConfirm" class="modal-backdrop" @click.self="showDeleteConfirm = false">
+          <div class="modal-content card-glass modal-confirm">
+            <p class="modal-confirm-text">{{ t('agents.deleteAgentConfirm') }}</p>
+            <p v-if="agent" class="modal-confirm-name">{{ agent.name }}</p>
+            <label class="modal-confirm-checkbox">
+              <input type="checkbox" v-model="deleteWorkspaceDir" />
+              <span>{{ t('agents.deleteAgentAlsoDeleteDir') }}</span>
+            </label>
+            <div class="modal-footer-actions">
+              <button type="button" class="btn-secondary" @click="showDeleteConfirm = false">
+                {{ t('common.cancel') }}
+              </button>
+              <button type="button" class="btn-primary danger" :disabled="deleteAgentSaving" @click="doDeleteAgent">
+                {{ deleteAgentSaving ? t('common.loading') : t('agents.deleteAgent') }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </transition>
     </template>
   </div>
 </template>
@@ -435,17 +684,41 @@ export default {
     const agent = ref(null);
     const loading = ref(true);
     const activeTab = ref('config');
-    const tabs = computed(() => [
-      { id: 'config', label: t('agents.basicConfig'), icon: '⚙️' },
-      { id: 'skills', label: t('agents.skillsConfig'), icon: '🎯' },
-      { id: 'mcp', label: t('agents.mcpConfig'), icon: '🔌' },
-    ]);
+    const isProxyAgent = computed(() => {
+      const a = agent.value;
+      return a && (a.runnerType === 'coze' || a.runnerType === 'openclawx' || a.runnerType === 'opencode');
+    });
+    const tabs = computed(() => {
+      const list = [{ id: 'config', label: t('agents.basicConfig'), icon: '⚙️' }];
+      if (isProxyAgent.value) {
+        list.push({ id: 'proxy', label: t('agents.proxyConfig'), icon: '🔗' });
+      } else {
+        list.push({ id: 'skills', label: t('agents.skillsConfig'), icon: '🎯' });
+        list.push({ id: 'mcp', label: t('agents.mcpConfig'), icon: '🔌' });
+      }
+      return list;
+    });
 
     const agentIconOptions = AGENT_ICONS;
     const configForm = ref({ name: '', systemPrompt: '', icon: AGENT_ICON_DEFAULT });
     const configSaving = ref(false);
 
     const modelForm = ref({ provider: '', model: '' });
+    const proxyForm = ref({
+      runnerType: 'local',
+      coze: {
+        region: 'com',
+        cn: { botId: '', apiKey: '' },
+        com: { botId: '', apiKey: '' },
+        endpoint: '',
+      },
+      openclawx: { baseUrl: '', apiKey: '' },
+      opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+    });
+    const opencodeFreeModels = ref([]);
+    const showDeleteConfirm = ref(false);
+    const deleteAgentSaving = ref(false);
+    const deleteWorkspaceDir = ref(false);
     const configRef = ref({});
     const configuredModelsList = ref([]);
     const selectedConfiguredModelKey = ref('');
@@ -467,92 +740,106 @@ export default {
     const canDeleteWorkspaceSkill = computed(() => agent.value && !agent.value.isDefault && agent.value.workspace !== 'default');
     const renderedSkillContent = computed(() => (skillDetailContent.value ? marked(skillDetailContent.value) : ''));
 
-    /** MCP 服务器列表（与 Skill 类似，配到智能体；创建 Session 时传入） */
-    const mcpServers = ref([]);
+    /** MCP 配置：标准 JSON 对象，key 为服务器名称 */
+    const mcpServers = ref({});
     const mcpForm = ref({
+      name: '',
       transport: 'stdio',
       command: '',
       argsStr: '',
+      envStr: '',
       url: '',
       headersStr: '',
     });
-    const mcpEditingIndex = ref(-1);
+    const mcpEditingKey = ref(null);
     const mcpFormError = ref('');
-    /** 是否正在显示「添加」表单（点击添加按钮后为 true，保存/取消后为 false） */
     const mcpFormVisible = ref(false);
+    const mcpJsonError = ref('');
 
-    function normalizeMcpItem(item) {
-      if (!item || typeof item !== 'object') return null;
-      if (item.transport === 'sse') {
-        const url = (item.url || '').trim();
-        if (!url) return null;
-        let headers = item.headers;
-        if (typeof item.headers === 'string') {
-          try {
-            headers = item.headers.trim() ? JSON.parse(item.headers) : undefined;
-          } catch {
-            headers = undefined;
-          }
+    /** 将后端返回的 array 转为标准对象（无名称时用 MCP Server 1, 2...） */
+    function arrayToMcpStandardFormat(arr) {
+      if (!Array.isArray(arr) || arr.length === 0) return {};
+      const out = {};
+      arr.forEach((s, i) => {
+        const name = `MCP Server ${i + 1}`;
+        if (s.transport === 'sse') {
+          out[name] = { url: s.url, headers: s.headers };
+        } else {
+          out[name] = { command: s.command, args: s.args, env: s.env };
         }
-        return { transport: 'sse', url, headers };
-      }
-      const cmd = (item.command || '').trim();
-      const args = Array.isArray(item.args) ? item.args : (typeof item.args === 'string' ? item.args.split(/[\s,]+/).filter(Boolean) : []);
-      return { transport: 'stdio', command: cmd, args };
+      });
+      return out;
     }
-    function mcpServerDisplayText(item) {
-      if (!item) return '';
-      if (item.transport === 'sse') return item.url || '';
-      const cmd = item.command || '';
-      const a = (item.args || []).join(' ');
+
+    function mcpServerDisplayText(entry) {
+      if (!entry || typeof entry !== 'object') return '';
+      if (typeof entry.url === 'string' && entry.url.trim()) return entry.url.trim();
+      const cmd = (entry.command || '').trim();
+      const a = Array.isArray(entry.args) ? entry.args.join(' ') : '';
       return a ? `${cmd} ${a}`.trim() : cmd;
     }
+
     function getDefaultMcpForm() {
       return {
+        name: '',
         transport: 'stdio',
         command: '',
         argsStr: '',
+        envStr: '',
         url: '',
         headersStr: '',
       };
     }
+
     function openAddMcp() {
-      mcpEditingIndex.value = -1;
+      mcpEditingKey.value = null;
       mcpForm.value = getDefaultMcpForm();
       mcpFormError.value = '';
       mcpFormVisible.value = true;
     }
-    function startEditMcp(index) {
-      const item = mcpServers.value[index];
-      if (!item) return;
-      mcpEditingIndex.value = index;
-      if (item.transport === 'sse') {
+
+    function startEditMcp(name) {
+      const entry = mcpServers.value[name];
+      if (!entry) return;
+      mcpEditingKey.value = name;
+      if (typeof entry.url === 'string' && entry.url.trim()) {
         mcpForm.value = {
+          name,
           transport: 'sse',
           command: '',
           argsStr: '',
-          url: item.url || '',
-          headersStr: item.headers && typeof item.headers === 'object' ? JSON.stringify(item.headers, null, 0) : '',
+          envStr: '',
+          url: entry.url || '',
+          headersStr: entry.headers && typeof entry.headers === 'object' ? JSON.stringify(entry.headers, null, 2) : '',
         };
       } else {
         mcpForm.value = {
+          name,
           transport: 'stdio',
-          command: item.command || '',
-          argsStr: (item.args || []).join(' '),
+          command: (entry.command || '').trim(),
+          argsStr: Array.isArray(entry.args) ? entry.args.join(' ') : '',
+          envStr: entry.env && typeof entry.env === 'object' ? JSON.stringify(entry.env, null, 2) : '',
           url: '',
           headersStr: '',
         };
       }
       mcpFormError.value = '';
     }
+
     function cancelMcpForm() {
-      mcpEditingIndex.value = -1;
+      mcpEditingKey.value = null;
       mcpForm.value = getDefaultMcpForm();
       mcpFormError.value = '';
       mcpFormVisible.value = false;
     }
+
     function saveMcpServer() {
       mcpFormError.value = '';
+      const name = (mcpForm.value.name || '').trim();
+      if (!name) {
+        mcpFormError.value = t('agents.mcpServerNameRequired');
+        return;
+      }
       if (mcpForm.value.transport === 'sse') {
         const url = (mcpForm.value.url || '').trim();
         if (!url) {
@@ -570,11 +857,14 @@ export default {
             return;
           }
         }
-        const newItem = { transport: 'sse', url, headers };
-        if (mcpEditingIndex.value >= 0) {
-          mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+        const newEntry = { url, headers };
+        if (mcpEditingKey.value !== null && mcpEditingKey.value !== name) {
+          const next = { ...mcpServers.value };
+          delete next[mcpEditingKey.value];
+          next[name] = newEntry;
+          mcpServers.value = next;
         } else {
-          mcpServers.value = [...mcpServers.value, newItem];
+          mcpServers.value = { ...mcpServers.value, [name]: newEntry };
         }
       } else {
         const cmd = (mcpForm.value.command || '').trim();
@@ -584,19 +874,71 @@ export default {
         }
         const argsStr = (mcpForm.value.argsStr || '').trim();
         const args = argsStr ? argsStr.split(/[\s,]+/).filter(Boolean) : [];
-        const newItem = { transport: 'stdio', command: cmd, args };
-        if (mcpEditingIndex.value >= 0) {
-          mcpServers.value = mcpServers.value.map((s, i) => (i === mcpEditingIndex.value ? newItem : s));
+        let env;
+        const envStr = (mcpForm.value.envStr || '').trim();
+        if (envStr) {
+          try {
+            env = JSON.parse(envStr);
+            if (typeof env !== 'object' || env === null) env = undefined;
+          } catch {
+            mcpFormError.value = t('agents.mcpEnvInvalidJson');
+            return;
+          }
+        }
+        const newEntry = { command: cmd, args: args.length ? args : undefined, env };
+        if (mcpEditingKey.value !== null && mcpEditingKey.value !== name) {
+          const next = { ...mcpServers.value };
+          delete next[mcpEditingKey.value];
+          next[name] = newEntry;
+          mcpServers.value = next;
         } else {
-          mcpServers.value = [...mcpServers.value, newItem];
+          mcpServers.value = { ...mcpServers.value, [name]: newEntry };
         }
       }
       cancelMcpForm();
     }
-    function removeMcpServer(index) {
-      mcpServers.value = mcpServers.value.filter((_, i) => i !== index);
-      if (mcpEditingIndex.value === index) cancelMcpForm();
-      else if (mcpEditingIndex.value > index) mcpEditingIndex.value -= 1;
+
+    function removeMcpServer(name) {
+      const next = { ...mcpServers.value };
+      delete next[name];
+      mcpServers.value = next;
+      if (mcpEditingKey.value === name)       cancelMcpForm();
+      syncMcpJsonString();
+    }
+
+    const mcpStandardJsonString = ref('');
+
+    function syncMcpJsonString() {
+      try {
+        mcpStandardJsonString.value = JSON.stringify({ mcpServers: mcpServers.value }, null, 2);
+      } catch {
+        mcpStandardJsonString.value = '{}';
+      }
+    }
+
+    /** 移除 JSON 中的尾随逗号（标准 JSON 不支持，但用户常写）以便解析 */
+    function parseJsonAllowTrailingComma(str) {
+      let s = (str || '{}').trim();
+      // 去掉 ,} 和 ,] 形式的尾随逗号（可多次）
+      while (s.replace(/,(\s*[}\]])/g, '$1') !== s) {
+        s = s.replace(/,(\s*[}\]])/g, '$1');
+      }
+      return JSON.parse(s);
+    }
+
+    function applyMcpJson() {
+      mcpJsonError.value = '';
+      try {
+        const parsed = parseJsonAllowTrailingComma(mcpStandardJsonString.value);
+        if (!parsed || typeof parsed !== 'object' || parsed.mcpServers == null || typeof parsed.mcpServers !== 'object' || Array.isArray(parsed.mcpServers)) {
+          mcpJsonError.value = t('agents.mcpJsonApplyError');
+          return;
+        }
+        mcpServers.value = parsed.mcpServers;
+        syncMcpJsonString();
+      } catch {
+        mcpJsonError.value = t('agents.mcpJsonApplyError');
+      }
     }
 
     function getProviderDisplayName(providerId) {
@@ -626,27 +968,92 @@ export default {
         const res = await agentConfigAPI.getAgent(agentId.value);
         agent.value = res.data?.data ?? null;
         if (agent.value) {
-          configForm.value = { name: agent.value.name, systemPrompt: agent.value.systemPrompt ?? '', icon: agent.value.icon || AGENT_ICON_DEFAULT };
+          configForm.value = {
+            name: agent.value.name,
+            systemPrompt: agent.value.systemPrompt ?? '',
+            icon: agent.value.icon || AGENT_ICON_DEFAULT,
+          };
           modelForm.value = {
             provider: agent.value.provider ?? '',
             model: agent.value.model ?? '',
           };
+          const coze = agent.value.coze;
+          const cozeRegion = coze?.region === 'cn' ? 'cn' : 'com';
+          const legacyBotId = (coze?.botId != null && typeof coze.botId === 'string') ? coze.botId.trim() : '';
+          const legacyApiKey = (coze?.apiKey != null && typeof coze.apiKey === 'string') ? coze.apiKey.trim() : '';
+          const legacyCreds = legacyBotId || legacyApiKey ? { botId: legacyBotId, apiKey: legacyApiKey } : null;
+          const emptyCreds = () => ({ botId: '', apiKey: '' });
+          const norm = (c) => (c && (c.botId || c.apiKey) ? { botId: String(c.botId || '').trim(), apiKey: String(c.apiKey || '').trim() } : emptyCreds());
+          const cnCreds = coze?.cn ? norm(coze.cn) : (legacyCreds || emptyCreds());
+          const comCreds = coze?.com ? norm(coze.com) : (legacyCreds || emptyCreds());
+          const defaultCn = 'https://api.coze.cn';
+          const defaultCom = 'https://api.coze.com';
+          const ep = (coze?.endpoint ?? '').trim();
+          const endpoint = (ep === defaultCn || ep === defaultCom) ? '' : ep;
+          proxyForm.value = {
+            runnerType:
+              agent.value.runnerType === 'coze' || agent.value.runnerType === 'openclawx' || agent.value.runnerType === 'opencode'
+                ? agent.value.runnerType
+                : 'local',
+            coze: {
+              region: cozeRegion,
+              cn: cnCreds,
+              com: comCreds,
+              endpoint,
+            },
+            openclawx: {
+              baseUrl: agent.value.openclawx?.baseUrl ?? '',
+              apiKey: agent.value.openclawx?.apiKey ?? '',
+            },
+            opencode: {
+              mode: agent.value.opencode?.mode === 'local' || agent.value.opencode?.mode === 'remote'
+                ? agent.value.opencode.mode
+                : (agent.value.opencode?.address && String(agent.value.opencode.address).trim()) ? 'remote' : 'local',
+              address: agent.value.opencode?.address ?? '',
+              port: agent.value.opencode?.port ?? 4096,
+              username: agent.value.opencode?.username ?? '',
+              password: agent.value.opencode?.password ?? '',
+              model: agent.value.opencode?.model ?? '',
+              workingDirectory: agent.value.opencode?.workingDirectory ?? '',
+            },
+          };
           const raw = agent.value.mcpServers;
-          mcpServers.value = Array.isArray(raw)
-            ? raw.map(normalizeMcpItem).filter((m) => m && (m.transport === 'sse' ? (m.url || '').trim() : (m.command || '').trim()))
-            : [];
+          if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+            mcpServers.value = { ...raw };
+          } else if (Array.isArray(raw)) {
+            mcpServers.value = arrayToMcpStandardFormat(
+              raw.filter((m) => m && (m.transport === 'sse' ? (m.url || '').trim() : (m.command || '').trim()))
+            );
+          } else {
+            mcpServers.value = {};
+          }
+          syncMcpJsonString();
         } else if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name, systemPrompt: '', icon: AGENT_ICON_DEFAULT };
           modelForm.value = { provider: '', model: '' };
-          mcpServers.value = [];
+          proxyForm.value = {
+            runnerType: 'local',
+            coze: { region: 'com', cn: { botId: '', apiKey: '' }, com: { botId: '', apiKey: '' }, endpoint: '' },
+            openclawx: { baseUrl: '', apiKey: '' },
+            opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+          };
+          mcpServers.value = {};
+          syncMcpJsonString();
         }
       } catch (e) {
         if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name, systemPrompt: '', icon: AGENT_ICON_DEFAULT };
           modelForm.value = { provider: '', model: '' };
-          mcpServers.value = [];
+          proxyForm.value = {
+            runnerType: 'local',
+            coze: { region: 'com', cn: { botId: '', apiKey: '' }, com: { botId: '', apiKey: '' }, endpoint: '' },
+            openclawx: { baseUrl: '', apiKey: '' },
+            opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+          };
+          mcpServers.value = {};
+          syncMcpJsonString();
         } else {
           agent.value = null;
         }
@@ -662,18 +1069,59 @@ export default {
         if (!agent.value.isDefault) {
           payload.name = configForm.value.name || agent.value.workspace;
         }
-        payload.provider = modelForm.value.provider || undefined;
-        payload.model = modelForm.value.model || undefined;
-        const item = selectedModelItem.value;
-        if (item && item.modelItemCode) payload.modelItemCode = item.modelItemCode;
         payload.mcpServers = mcpServers.value;
         payload.systemPrompt = configForm.value.systemPrompt?.trim() || undefined;
         payload.icon = configForm.value.icon || undefined;
+        payload.runnerType = proxyForm.value.runnerType;
+        if (proxyForm.value.runnerType === 'coze') {
+          const c = proxyForm.value.coze;
+          payload.coze = {
+            region: c.region === 'cn' ? 'cn' : 'com',
+            cn: {
+              botId: (c.cn?.botId ?? '').trim(),
+              apiKey: (c.cn?.apiKey ?? '').trim(),
+            },
+            com: {
+              botId: (c.com?.botId ?? '').trim(),
+              apiKey: (c.com?.apiKey ?? '').trim(),
+            },
+            endpoint: undefined,
+          };
+        } else if (proxyForm.value.runnerType === 'openclawx') {
+          payload.openclawx = {
+            baseUrl: (proxyForm.value.openclawx.baseUrl || '').trim(),
+            apiKey: (proxyForm.value.openclawx.apiKey || '').trim() || undefined,
+          };
+        } else if (proxyForm.value.runnerType === 'opencode') {
+          const oc = proxyForm.value.opencode;
+          const portNum = typeof oc.port === 'number' ? oc.port : parseInt(String(oc.port || ''), 10);
+          const mode = oc.mode === 'local' ? 'local' : 'remote';
+          payload.opencode = {
+            mode,
+            address: mode === 'remote' ? (oc.address || '').trim() : undefined,
+            port: Number.isFinite(portNum) && portNum > 0 ? portNum : 4096,
+            password: (oc.password || '').trim() || undefined,
+            model: (oc.model || '').trim() || undefined,
+            workingDirectory: (oc.workingDirectory || '').trim() || undefined,
+          };
+        } else {
+          payload.coze = undefined;
+          payload.openclawx = undefined;
+          payload.opencode = undefined;
+        }
         await agentConfigAPI.updateAgent(agent.value.id, payload);
         if (!agent.value.isDefault) {
           agent.value.name = configForm.value.name || agent.value.workspace;
         }
-        agent.value = { ...agent.value, provider: modelForm.value.provider, model: modelForm.value.model, modelItemCode: item?.modelItemCode ?? agent.value.modelItemCode, systemPrompt: payload.systemPrompt, icon: payload.icon };
+        agent.value = {
+          ...agent.value,
+          systemPrompt: payload.systemPrompt,
+          icon: payload.icon,
+          runnerType: payload.runnerType,
+          coze: payload.coze,
+          openclawx: payload.openclawx,
+          opencode: payload.opencode,
+        };
       } catch (e) {
         console.error('Save config failed', e);
       } finally {
@@ -819,11 +1267,28 @@ export default {
       }
     }
 
+    watch(
+      () => proxyForm.value.runnerType === 'coze' && proxyForm.value.coze?.region,
+      (region) => {
+        if (region !== 'cn' && region !== 'com') return;
+        const ep = (proxyForm.value.coze?.endpoint ?? '').trim();
+        const otherDefault = region === 'cn' ? 'https://api.coze.com' : 'https://api.coze.cn';
+        if (ep === otherDefault || ep.includes(region === 'cn' ? 'api.coze.com' : 'api.coze.cn')) {
+          proxyForm.value.coze.endpoint = '';
+        }
+      }
+    );
     watch(agentId, loadAgent);
     watch([agent, activeTab], () => {
       if (agent.value && activeTab.value === 'skills') loadSkills();
       if (agent.value && activeTab.value === 'config') loadModelConfig();
     });
+    watch(tabs, (newTabs) => {
+      const ids = newTabs.map((tab) => tab.id);
+      if (ids.length && !ids.includes(activeTab.value)) {
+        activeTab.value = ids[0];
+      }
+    }, { immediate: true });
     watch(
       () => route.query.smartInstallSession,
       async (sessionId) => {
@@ -850,6 +1315,58 @@ export default {
         document.body.style.overflow = '';
       }
     });
+    watch(
+      () => route.query.tab,
+      (tab) => {
+        if (tab === 'proxy') activeTab.value = 'proxy';
+      },
+      { immediate: true }
+    );
+
+    async function fetchOpencodeFreeModels() {
+      if (opencodeFreeModels.value.length > 0) return;
+      try {
+        const res = await configAPI.getOpencodeFreeModels();
+        if (res?.data?.success && Array.isArray(res.data.data)) opencodeFreeModels.value = res.data.data;
+      } catch (_) {}
+    }
+
+    const hasElectronFolderPicker = computed(() => typeof window !== 'undefined' && !!window.electronAPI?.showOpenDirectoryDialog);
+    async function pickOpencodeWorkingDirectory() {
+      if (!window.electronAPI?.showOpenDirectoryDialog) return;
+      const path = await window.electronAPI.showOpenDirectoryDialog({ title: '选择 OpenCode 工作目录' });
+      if (path) proxyForm.value.opencode.workingDirectory = path;
+    }
+
+    function openDeleteConfirm() {
+      deleteWorkspaceDir.value = false;
+      if (agent.value?.isDefault) return;
+      showDeleteConfirm.value = true;
+    }
+    async function doDeleteAgent() {
+      if (!agent.value?.id || agent.value.isDefault) {
+        showDeleteConfirm.value = false;
+        return;
+      }
+      deleteAgentSaving.value = true;
+      try {
+        const params = deleteWorkspaceDir.value ? { deleteWorkspaceDir: 'true' } : {};
+        await agentConfigAPI.deleteAgent(agent.value.id, params);
+        showDeleteConfirm.value = false;
+        router.push('/agents');
+      } catch (e) {
+        console.error('Delete agent failed', e);
+      } finally {
+        deleteAgentSaving.value = false;
+      }
+    }
+
+    watch(
+      () => proxyForm.value.runnerType === 'opencode',
+      (isOpencode) => { if (isOpencode) fetchOpencodeFreeModels(); },
+      { immediate: true }
+    );
+
     onMounted(() => {
       loadAgent();
     });
@@ -865,6 +1382,15 @@ export default {
       configSaving,
       saveConfig,
       modelForm,
+      proxyForm,
+      opencodeFreeModels,
+      hasElectronFolderPicker,
+      pickOpencodeWorkingDirectory,
+      showDeleteConfirm,
+      deleteAgentSaving,
+      deleteWorkspaceDir,
+      openDeleteConfirm,
+      doDeleteAgent,
       configuredModelsList,
       selectedConfiguredModelKey,
       selectedModelItem,
@@ -898,7 +1424,7 @@ export default {
       mcpServers,
       mcpForm,
       mcpFormVisible,
-      mcpEditingIndex,
+      mcpEditingKey,
       mcpFormError,
       mcpServerDisplayText,
       openAddMcp,
@@ -906,6 +1432,9 @@ export default {
       cancelMcpForm,
       saveMcpServer,
       removeMcpServer,
+      mcpStandardJsonString,
+      applyMcpJson,
+      mcpJsonError,
     };
   },
 };
@@ -938,6 +1467,27 @@ export default {
   margin-bottom: var(--spacing-lg);
   border-radius: var(--radius-lg);
   border: 1px solid var(--glass-border);
+}
+
+.detail-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+  gap: var(--spacing-md);
+}
+.btn-delete-agent {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-danger, #dc3545);
+  background: transparent;
+  border: 1px solid var(--color-danger, #dc3545);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-delete-agent:hover {
+  background: var(--color-danger-bg, rgba(220, 53, 69, 0.1));
 }
 
 .back-link {
@@ -1008,7 +1558,7 @@ export default {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -1016,6 +1566,7 @@ export default {
   text-align: left;
   cursor: pointer;
   transition: var(--transition-fast);
+  font-size: var(--font-size-base);
 }
 
 .tab-btn:hover {
@@ -1029,7 +1580,12 @@ export default {
 }
 
 .tab-icon {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
+}
+
+.tab-label {
+  font-size: var(--font-size-base);
+  font-weight: 500;
 }
 
 .detail-content {
@@ -1375,6 +1931,34 @@ export default {
   color: var(--color-text-primary);
 }
 
+.form-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+}
+.form-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  font-weight: 400;
+}
+.form-radio input { margin: 0; }
+
+.form-input-with-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  max-width: 500px;
+}
+.form-input-with-btn .form-input {
+  flex: 1;
+  min-width: 0;
+}
+.form-input-with-btn .btn-pick-folder {
+  flex-shrink: 0;
+}
+
 .form-input {
   width: 100%;
   max-width: 400px;
@@ -1391,6 +1975,17 @@ export default {
   cursor: not-allowed;
 }
 
+.form-runner-type-fixed {
+  max-width: 400px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary, rgba(255, 255, 255, 0.06));
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-base);
+  margin: 0;
+}
+
 .form-input.form-textarea {
   min-height: 88px;
   resize: vertical;
@@ -1404,6 +1999,17 @@ export default {
 .form-hint-warn {
   color: var(--color-warning, #b8860b);
   margin: var(--spacing-xs) 0 0 0;
+}
+
+.form-group-switch .switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+}
+.form-group-switch .form-checkbox {
+  width: 1.1em;
+  height: 1.1em;
 }
 .icon-picker {
   display: flex;
@@ -1524,6 +2130,15 @@ export default {
   text-transform: uppercase;
   letter-spacing: 0.02em;
 }
+.mcp-item-name {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mcp-item-badge.badge-local {
   background: rgba(59, 130, 246, 0.2);
   color: var(--color-accent-primary);
@@ -1614,6 +2229,20 @@ export default {
 }
 .btn-add-mcp {
   margin-bottom: var(--spacing-md);
+}
+.mcp-json-section {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-lg);
+}
+.mcp-json-section .config-section-title {
+  margin-bottom: var(--spacing-sm);
+}
+.mcp-json-textarea {
+  width: 100%;
+  min-height: 200px;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-sm);
+  margin: var(--spacing-sm) 0;
 }
 .mcp-save-hint {
   margin-top: var(--spacing-md);
@@ -1762,6 +2391,42 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.modal-content.modal-confirm {
+  max-width: 360px;
+}
+.modal-confirm .modal-confirm-text {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-text-primary);
+  padding: var(--spacing-lg) var(--spacing-lg) 0;
+}
+.modal-confirm .modal-confirm-name {
+  margin: 0 0 var(--spacing-lg) 0;
+  padding: 0 var(--spacing-lg);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.modal-confirm .modal-confirm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-md) 0;
+  padding: 0 var(--spacing-lg);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+.modal-confirm .modal-footer-actions {
+  padding: var(--spacing-lg);
+  border-top: 1px solid var(--glass-border);
+}
+.btn-primary.danger {
+  background: var(--color-danger, #dc3545);
+  color: white;
+}
+.btn-primary.danger:hover:not(:disabled) {
+  filter: brightness(1.1);
 }
 
 .modal-content.skill-detail-modal {

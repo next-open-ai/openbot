@@ -8,7 +8,7 @@ const os = require('os');
 if (typeof globalThis.File === 'undefined') {
     try {
         globalThis.File = require('node:buffer').File;
-    } catch (_) {}
+    } catch (_) { }
 }
 
 let mainWindow = null;
@@ -19,6 +19,11 @@ const GATEWAY_PORT = 38080;
 
 /** 主进程内启动 Gateway（dev 与打包均可用），不 spawn 子进程 */
 async function startGatewayInProcess() {
+    // 开发环境：将 cwd 设为仓库根，使 gateway 及其原生依赖（如 onnxruntime-node）从根 node_modules 正确解析
+    if (!app.isPackaged) {
+        const repoRoot = path.resolve(__dirname, '..', '..');
+        process.chdir(repoRoot);
+    }
     // 与 AgentConfigService 使用相同的 home 解析，确保工作区/技能目录一致（~/.openbot/workspace、~/.openbot/agent）
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     process.env.OPENBOT_WORKSPACE_DIR = process.env.OPENBOT_WORKSPACE_DIR || path.join(homeDir, '.openbot', 'workspace');
@@ -27,10 +32,12 @@ async function startGatewayInProcess() {
         process.env.OPENBOT_STATIC_DIR = path.join(__dirname, 'renderer', 'dist');
         // 打包后系统技能目录在 Resources/skills（由 electron-builder extraResources 复制）
         process.env.OPENBOT_SYSTEM_SKILLS_DIR = path.resolve(process.resourcesPath, 'skills');
+        process.env.OPENBOT_PRESETS_DIR = path.resolve(process.resourcesPath, 'presets');
     } else {
         // 开发环境：main.js 在 apps/desktop，仓库根目录 skills 为 openbot/skills（使用绝对路径）
         const devSkillsDir = path.resolve(__dirname, '..', '..', 'skills');
         process.env.OPENBOT_SYSTEM_SKILLS_DIR = devSkillsDir;
+        process.env.OPENBOT_PRESETS_DIR = path.resolve(__dirname, '..', '..', 'presets');
     }
     // 打包后 dist 通过 extraResources 放在 Contents/Resources/dist，可直接 import
     const serverPath = app.isPackaged
@@ -110,6 +117,7 @@ async function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true,
+            plugins: true,
         },
         backgroundColor: '#0f0f1e',
         show: false,
@@ -180,9 +188,10 @@ function registerIpcHandlers() {
         if (mainWindow) mainWindow.close();
     });
     ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
-    ipcMain.handle('show-open-directory-dialog', async () => {
+    ipcMain.handle('show-open-directory-dialog', async (_, options) => {
+        const title = (options && options.title) || '选择目录';
         const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow || null, {
-            title: '选择技能目录',
+            title,
             properties: ['openDirectory'],
         });
         if (canceled || !filePaths || filePaths.length === 0) return null;
