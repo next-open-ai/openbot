@@ -10,7 +10,7 @@ import type {
 
 const REQUEST_TIMEOUT_MS = 120_000;
 
-function getOpenBotConfig(config: DesktopAgentConfig): { baseUrl: string; apiKey?: string } | null {
+function getOpenClawXConfig(config: DesktopAgentConfig): { baseUrl: string; apiKey?: string } | null {
     const ox = config.openclawx;
     if (!ox?.baseUrl?.trim()) return null;
     return {
@@ -29,7 +29,7 @@ export const openclawxAdapter: IAgentProxyAdapter = {
     type: "openclawx",
 
     async runStream(options, config, callbacks): Promise<void> {
-        const oxConfig = getOpenBotConfig(config);
+        const oxConfig = getOpenClawXConfig(config);
         if (!oxConfig) {
             throw new Error("OpenBot adapter: missing openclawx.baseUrl in agent config");
         }
@@ -92,7 +92,7 @@ export const openclawxAdapter: IAgentProxyAdapter = {
     },
 
     async runCollect(options, config): Promise<string> {
-        const oxConfig = getOpenBotConfig(config);
+        const oxConfig = getOpenClawXConfig(config);
         if (!oxConfig) {
             throw new Error("OpenBot adapter: missing openclawx.baseUrl in agent config");
         }

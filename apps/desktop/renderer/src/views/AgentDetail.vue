@@ -95,6 +95,100 @@
               />
               <p class="form-hint">{{ t('agents.agentDescriptionHint') }}</p>
             </div>
+            <div class="form-group">
+              <h3 class="form-subtitle">{{ t('agents.modelConfig') }}</h3>
+              <p class="form-hint">{{ t('agents.modelConfigHint') }}</p>
+              <template v-if="configuredModelsList.length === 0">
+                <p class="form-hint warning">{{ t('agents.noConfiguredModels') }}</p>
+              </template>
+              <template v-else>
+                <div class="form-group">
+                  <label>{{ t('agents.selectConfiguredModel') }}</label>
+                  <select
+                    v-model="selectedConfiguredModelKey"
+                    class="form-input"
+                    @change="onConfiguredModelSelect"
+                  >
+                    <option value="">{{ t('agents.useDefaultModel') }}</option>
+                    <option
+                      v-for="item in configuredModelsList"
+                      :key="optionValueFor(item)"
+                      :value="optionValueFor(item)"
+                    >
+                      {{ optionLabelFor(item) }}
+                    </option>
+                  </select>
+                </div>
+                <div v-if="selectedConfiguredModelKey" class="form-group">
+                  <label>{{ t('agents.currentProvider') }}</label>
+                  <input
+                    :value="modelForm.provider"
+                    type="text"
+                    class="form-input readonly"
+                    readonly
+                    disabled
+                  />
+                </div>
+                <div v-if="selectedConfiguredModelKey" class="form-group">
+                  <label>{{ t('agents.currentModelId') }}</label>
+                  <input
+                    :value="modelForm.model"
+                    type="text"
+                    class="form-input readonly"
+                    readonly
+                    disabled
+                  />
+                </div>
+              </template>
+              <div v-if="proxyForm.runnerType === 'local'" class="form-group">
+                <label>{{ t('agents.contextSize') }}</label>
+                <input
+                  v-model.number="contextSizeForm"
+                  type="number"
+                  min="2048"
+                  max="131072"
+                  step="1024"
+                  class="form-input"
+                  :placeholder="'32768'"
+                />
+                <p class="form-hint">{{ t('agents.contextSizeHint') }}</p>
+              </div>
+            </div>
+            <div class="form-group">
+              <h3 class="form-subtitle">{{ t('agents.webSearchTitle') }}</h3>
+              <div class="form-row checkbox-row">
+                <input
+                  id="web-search-enabled"
+                  v-model="webSearchForm.enabled"
+                  type="checkbox"
+                  class="form-checkbox"
+                />
+                <label for="web-search-enabled">{{ t('agents.webSearchEnabled') }}</label>
+              </div>
+              <p class="form-hint">{{ t('agents.webSearchEnabledHint') }}</p>
+              <template v-if="webSearchForm.enabled">
+                <div class="form-group">
+                  <label>{{ t('agents.webSearchProvider') }}</label>
+                  <select v-model="webSearchForm.provider" class="form-input">
+                    <option value="duck-duck-scrape">{{ t('agents.webSearchProviderDuckDuckScrape') }}</option>
+                    <option value="brave">{{ t('agents.webSearchProviderBrave') }}</option>
+                  </select>
+                  <p class="form-hint">{{ t('agents.webSearchProviderHint') }}</p>
+                </div>
+                <div class="form-group">
+                  <label>{{ t('agents.webSearchMaxResultTokens') }}</label>
+                  <input
+                    v-model.number="webSearchForm.maxResultTokens"
+                    type="number"
+                    min="0"
+                    step="1000"
+                    class="form-input"
+                    :placeholder="'64000'"
+                  />
+                  <p class="form-hint">{{ t('agents.webSearchMaxResultTokensHint') }}</p>
+                </div>
+              </template>
+            </div>
             <button class="btn-primary" :disabled="configSaving" @click="saveConfig">
               {{ configSaving ? t('common.loading') : t('agents.saveConfig') }}
             </button>
@@ -106,14 +200,16 @@
             <p class="form-hint">{{ t('agents.proxyConfigHint') }}</p>
             <div class="form-group">
               <label>{{ t('agents.runnerType') }}</label>
-              <template v-if="agent?.runnerType === 'coze' || agent?.runnerType === 'openclawx' || agent?.runnerType === 'opencode'">
+              <template v-if="agent?.runnerType === 'coze' || agent?.runnerType === 'openclawx' || agent?.runnerType === 'opencode' || agent?.runnerType === 'claude_code'">
                 <p class="form-runner-type-fixed">
                   {{
                     agent?.runnerType === 'coze'
                       ? t('agents.runnerTypeCoze')
                       : agent?.runnerType === 'openclawx'
                         ? t('agents.runnerTypeOpenclawx')
-                        : t('agents.runnerTypeOpencode')
+                        : agent?.runnerType === 'opencode'
+                          ? t('agents.runnerTypeOpencode')
+                          : t('agents.runnerTypeClaudeCode')
                   }}
                 </p>
               </template>
@@ -122,6 +218,7 @@
                 <option value="coze">{{ t('agents.runnerTypeCoze') }}</option>
                 <option value="openclawx">{{ t('agents.runnerTypeOpenclawx') }}</option>
                 <option value="opencode">{{ t('agents.runnerTypeOpencode') }}</option>
+                <option value="claude_code">{{ t('agents.runnerTypeClaudeCode') }}</option>
               </select>
             </div>
             <template v-if="proxyForm.runnerType === 'coze'">
@@ -180,6 +277,28 @@
                   <p class="form-hint">{{ t('agents.cozeAccessTokenHint') }}</p>
                 </div>
               </template>
+            </template>
+            <template v-if="proxyForm.runnerType === 'claude_code'">
+              <p class="form-hint">{{ t('agents.runnerTypeClaudeCodeHint') }}</p>
+              <div class="form-group">
+                <label>{{ t('agents.claudeCodeWorkingDirectory') }}</label>
+                <div class="form-input-with-btn">
+                  <input
+                    v-model="proxyForm.claudeCode.workingDirectory"
+                    type="text"
+                    class="form-input"
+                    :placeholder="t('agents.claudeCodeWorkingDirectoryPlaceholder')"
+                  />
+                  <button
+                    v-if="hasElectronFolderPicker"
+                    type="button"
+                    class="btn-secondary btn-pick-folder"
+                    @click="pickClaudeCodeWorkingDirectory"
+                  >
+                    {{ t('agents.claudeCodeSelectFolder') }}
+                  </button>
+                </div>
+              </div>
             </template>
             <template v-if="proxyForm.runnerType === 'openclawx'">
               <div class="form-group">
@@ -370,6 +489,7 @@
           <div v-show="activeTab === 'mcp'" class="tab-panel mcp-panel">
             <h2 class="panel-title">{{ t('agents.mcpConfig') }}</h2>
             <p class="form-hint">{{ t('agents.mcpConfigHint') }}</p>
+            <p class="form-hint mcp-test-hint">{{ t('agents.mcpTestHint') }}</p>
 
             <div class="mcp-list">
               <div
@@ -383,6 +503,21 @@
                 <span class="mcp-item-name">{{ name }}</span>
                 <span class="mcp-item-text">{{ mcpServerDisplayText(entry) }}</span>
                 <div class="mcp-item-actions">
+                  <button
+                    type="button"
+                    class="link-btn"
+                    :disabled="mcpTestState[name] === 'loading'"
+                    @click="testMcpServer(name, entry)"
+                  >
+                    {{ mcpTestState[name] === 'loading' ? t('agents.mcpTestTesting') : t('agents.mcpTest') }}
+                  </button>
+                  <span v-if="mcpTestState[name] && mcpTestState[name] !== 'loading'" class="mcp-test-result" :class="mcpTestState[name].success ? 'success' : 'error'">
+                    <template v-if="mcpTestState[name].success">
+                      <span class="mcp-test-success-badge">{{ t('agents.mcpTestSuccessStatus') }}</span>
+                      {{ t('agents.mcpTestSuccess', { count: mcpTestState[name].toolsCount }) }}
+                    </template>
+                    <template v-else>{{ mcpTestState[name].error }}</template>
+                  </span>
                   <button type="button" class="link-btn" @click="startEditMcp(name)">
                     {{ t('common.edit') }}
                   </button>
@@ -391,6 +526,19 @@
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div class="form-group mcp-max-result-tokens-row">
+              <label class="form-label">{{ t('agents.mcpMaxResultTokens') }}</label>
+              <select v-model="mcpMaxResultTokensForm" class="form-input">
+                <option value="">{{ t('agents.mcpMaxResultTokensNoLimit') }}</option>
+                <option value="8000">8K</option>
+                <option value="16000">16K</option>
+                <option value="32000">32K</option>
+                <option value="48000">48K</option>
+                <option value="64000">64K</option>
+              </select>
+              <p class="form-hint">{{ t('agents.mcpMaxResultTokensHint') }}</p>
             </div>
 
             <div v-if="mcpFormVisible || mcpEditingKey !== null" class="mcp-form card-glass">
@@ -483,7 +631,22 @@
               </template>
 
               <p v-if="mcpFormError" class="form-hint form-hint-warn">{{ mcpFormError }}</p>
+              <div v-if="mcpFormTestResult" class="form-hint mcp-form-test-result" :class="mcpFormTestResult.success ? 'success' : 'error'">
+                <template v-if="mcpFormTestResult.success">
+                  <span class="mcp-test-success-badge">{{ t('agents.mcpTestSuccessStatus') }}</span>
+                  {{ t('agents.mcpTestSuccess', { count: mcpFormTestResult.toolsCount }) }}
+                </template>
+                <template v-else>{{ mcpFormTestResult.error }}</template>
+              </div>
               <div class="mcp-form-actions">
+                <button
+                  type="button"
+                  class="btn-secondary"
+                  :disabled="mcpFormTestLoading"
+                  @click="testMcpForm"
+                >
+                  {{ mcpFormTestLoading ? t('agents.mcpTestTesting') : t('agents.mcpTest') }}
+                </button>
                 <button type="button" class="btn-secondary" @click="cancelMcpForm">
                   {{ t('common.cancel') }}
                 </button>
@@ -686,7 +849,7 @@ export default {
     const activeTab = ref('config');
     const isProxyAgent = computed(() => {
       const a = agent.value;
-      return a && (a.runnerType === 'coze' || a.runnerType === 'openclawx' || a.runnerType === 'opencode');
+      return a && (a.runnerType === 'coze' || a.runnerType === 'openclawx' || a.runnerType === 'opencode' || a.runnerType === 'claude_code');
     });
     const tabs = computed(() => {
       const list = [{ id: 'config', label: t('agents.basicConfig'), icon: '⚙️' }];
@@ -701,9 +864,12 @@ export default {
 
     const agentIconOptions = AGENT_ICONS;
     const configForm = ref({ name: '', systemPrompt: '', icon: AGENT_ICON_DEFAULT });
+    const webSearchForm = ref({ enabled: false, provider: 'duck-duck-scrape', maxResultTokens: 64000 });
     const configSaving = ref(false);
 
     const modelForm = ref({ provider: '', model: '' });
+    /** 本地模型上下文长度（token 数），仅 runnerType 为 local 时生效 */
+    const contextSizeForm = ref(32768);
     const proxyForm = ref({
       runnerType: 'local',
       coze: {
@@ -714,6 +880,7 @@ export default {
       },
       openclawx: { baseUrl: '', apiKey: '' },
       opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+      claudeCode: { workingDirectory: '' },
     });
     const opencodeFreeModels = ref([]);
     const showDeleteConfirm = ref(false);
@@ -755,6 +922,12 @@ export default {
     const mcpFormError = ref('');
     const mcpFormVisible = ref(false);
     const mcpJsonError = ref('');
+    /** MCP 单次返回最大 token，可选，不填则不限制 */
+    const mcpMaxResultTokensForm = ref('');
+    /** 列表项测试状态：name -> 'loading' | { success, toolsCount } | { error } */
+    const mcpTestState = ref({});
+    const mcpFormTestLoading = ref(false);
+    const mcpFormTestResult = ref(null);
 
     /** 将后端返回的 array 转为标准对象（无名称时用 MCP Server 1, 2...） */
     function arrayToMcpStandardFormat(arr) {
@@ -831,6 +1004,84 @@ export default {
       mcpForm.value = getDefaultMcpForm();
       mcpFormError.value = '';
       mcpFormVisible.value = false;
+      mcpFormTestResult.value = null;
+    }
+
+    /** 从当前表单构建一条标准 MCP 配置（用于测试未保存的配置） */
+    function buildMcpEntryFromForm() {
+      const f = mcpForm.value;
+      if (f.transport === 'stdio') {
+        const cmd = (f.command || '').trim();
+        if (!cmd) return null;
+        const argsStr = (f.argsStr || '').trim();
+        const args = argsStr ? argsStr.split(/[\s,]+/).filter(Boolean) : undefined;
+        let env;
+        const envStr = (f.envStr || '').trim();
+        if (envStr) {
+          try {
+            env = JSON.parse(envStr);
+            if (typeof env !== 'object' || env === null) env = undefined;
+          } catch {
+            return null;
+          }
+        }
+        return { command: cmd, args, env };
+      }
+      const url = (f.url || '').trim();
+      if (!url) return null;
+      let headers;
+      const headersStr = (f.headersStr || '').trim();
+      if (headersStr) {
+        try {
+          headers = JSON.parse(headersStr);
+          if (typeof headers !== 'object' || headers === null) headers = undefined;
+        } catch {
+          return null;
+        }
+      }
+      return { url, headers };
+    }
+
+    async function testMcpServer(name, entry) {
+      mcpTestState.value = { ...mcpTestState.value, [name]: 'loading' };
+      try {
+        const res = await agentConfigAPI.testMcp(entry);
+        const data = res?.data ?? res;
+        const success = data?.success === true;
+        mcpTestState.value = {
+          ...mcpTestState.value,
+          [name]: success
+            ? { success: true, toolsCount: data?.toolsCount ?? 0 }
+            : { success: false, error: data?.error || t('agents.mcpTestFailed') },
+        };
+      } catch (err) {
+        const msg = err?.response?.data?.error || err?.message || String(err);
+        mcpTestState.value = { ...mcpTestState.value, [name]: { success: false, error: msg } };
+      }
+    }
+
+    async function testMcpForm() {
+      const entry = buildMcpEntryFromForm();
+      if (!entry) {
+        mcpFormError.value = t('agents.mcpTestInvalidConfig');
+        return;
+      }
+      mcpFormError.value = '';
+      mcpFormTestResult.value = null;
+      mcpFormTestLoading.value = true;
+      try {
+        const res = await agentConfigAPI.testMcp(entry);
+        const data = res?.data ?? res;
+        const success = data?.success === true;
+        mcpFormTestResult.value = success
+          ? { success: true, toolsCount: data?.toolsCount ?? 0 }
+          : { success: false, error: data?.error || t('agents.mcpTestFailed') };
+      } catch (err) {
+        const msg = err?.response?.data?.error || err?.message || String(err);
+        mcpFormTestResult.value = { success: false, error: msg };
+      } finally {
+        mcpFormTestLoading.value = false;
+      }
     }
 
     function saveMcpServer() {
@@ -951,6 +1202,11 @@ export default {
     function optionValueFor(item) {
       return (item.modelItemCode && item.modelItemCode.trim()) ? item.modelItemCode : `${item.provider}|${item.modelId}`;
     }
+    function optionLabelFor(item) {
+      const alias = item.alias || item.modelId || '';
+      const provider = item.provider || '';
+      return alias ? `${alias} (${provider})` : `${provider} - ${item.modelId}`;
+    }
     const selectedModelItem = computed(() => {
       const key = selectedConfiguredModelKey.value;
       if (!key) return null;
@@ -973,6 +1229,13 @@ export default {
             systemPrompt: agent.value.systemPrompt ?? '',
             icon: agent.value.icon || AGENT_ICON_DEFAULT,
           };
+          webSearchForm.value = {
+            enabled: !!agent.value.webSearch?.enabled,
+            provider: agent.value.webSearch?.provider === 'brave' ? 'brave' : 'duck-duck-scrape',
+            maxResultTokens: agent.value.webSearch?.maxResultTokens ?? 64000,
+          };
+          mcpMaxResultTokensForm.value = agent.value.mcpMaxResultTokens != null && agent.value.mcpMaxResultTokens > 0 ? String(agent.value.mcpMaxResultTokens) : '';
+          contextSizeForm.value = agent.value.contextSize != null && agent.value.contextSize > 0 ? agent.value.contextSize : 32768;
           modelForm.value = {
             provider: agent.value.provider ?? '',
             model: agent.value.model ?? '',
@@ -992,7 +1255,7 @@ export default {
           const endpoint = (ep === defaultCn || ep === defaultCom) ? '' : ep;
           proxyForm.value = {
             runnerType:
-              agent.value.runnerType === 'coze' || agent.value.runnerType === 'openclawx' || agent.value.runnerType === 'opencode'
+              agent.value.runnerType === 'coze' || agent.value.runnerType === 'openclawx' || agent.value.runnerType === 'opencode' || agent.value.runnerType === 'claude_code'
                 ? agent.value.runnerType
                 : 'local',
             coze: {
@@ -1016,6 +1279,7 @@ export default {
               model: agent.value.opencode?.model ?? '',
               workingDirectory: agent.value.opencode?.workingDirectory ?? '',
             },
+            claudeCode: { workingDirectory: agent.value.claudeCode?.workingDirectory ?? '' },
           };
           const raw = agent.value.mcpServers;
           if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
@@ -1031,12 +1295,16 @@ export default {
         } else if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name, systemPrompt: '', icon: AGENT_ICON_DEFAULT };
+          webSearchForm.value = { enabled: false, provider: 'duck-duck-scrape', maxResultTokens: 64000 };
+          mcpMaxResultTokensForm.value = '';
+          contextSizeForm.value = 32768;
           modelForm.value = { provider: '', model: '' };
           proxyForm.value = {
             runnerType: 'local',
             coze: { region: 'com', cn: { botId: '', apiKey: '' }, com: { botId: '', apiKey: '' }, endpoint: '' },
             openclawx: { baseUrl: '', apiKey: '' },
             opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+            claudeCode: { workingDirectory: '' },
           };
           mcpServers.value = {};
           syncMcpJsonString();
@@ -1045,14 +1313,20 @@ export default {
         if (agentId.value === 'default') {
           agent.value = { ...MAIN_AGENT_FALLBACK };
           configForm.value = { name: agent.value.name, systemPrompt: '', icon: AGENT_ICON_DEFAULT };
+          webSearchForm.value = { enabled: false, provider: 'duck-duck-scrape', maxResultTokens: 64000 };
+          mcpMaxResultTokensForm.value = '';
+          contextSizeForm.value = 32768;
           modelForm.value = { provider: '', model: '' };
           proxyForm.value = {
             runnerType: 'local',
             coze: { region: 'com', cn: { botId: '', apiKey: '' }, com: { botId: '', apiKey: '' }, endpoint: '' },
             openclawx: { baseUrl: '', apiKey: '' },
             opencode: { mode: 'local', address: '', port: 4096, username: '', password: '', model: '', workingDirectory: '' },
+            claudeCode: { workingDirectory: '' },
           };
           mcpServers.value = {};
+          webSearchForm.value = { enabled: false, provider: 'duck-duck-scrape', maxResultTokens: 64000 };
+          mcpMaxResultTokensForm.value = '';
           syncMcpJsonString();
         } else {
           agent.value = null;
@@ -1070,9 +1344,38 @@ export default {
           payload.name = configForm.value.name || agent.value.workspace;
         }
         payload.mcpServers = mcpServers.value;
+        payload.mcpMaxResultTokens =
+          (mcpMaxResultTokensForm.value !== '' && mcpMaxResultTokensForm.value != null)
+            ? (parseInt(mcpMaxResultTokensForm.value, 10) || undefined)
+            : undefined;
         payload.systemPrompt = configForm.value.systemPrompt?.trim() || undefined;
         payload.icon = configForm.value.icon || undefined;
+        // Model configuration
+        if (selectedConfiguredModelKey.value) {
+          const item = selectedModelItem.value;
+          if (item) {
+            payload.provider = item.provider;
+            payload.model = item.modelId;
+            payload.modelItemCode = item.modelItemCode || undefined;
+          }
+        } else {
+          // Empty selection means use global default
+          payload.provider = undefined;
+          payload.model = undefined;
+          payload.modelItemCode = undefined;
+        }
+        const wsMax = webSearchForm.value.maxResultTokens;
+        const wsMaxNum = wsMax == null || wsMax === '' || wsMax === 0 ? undefined : (Number(wsMax) || 64000);
+        payload.webSearch = webSearchForm.value.enabled
+          ? { enabled: true, provider: webSearchForm.value.provider, maxResultTokens: wsMaxNum }
+          : undefined;
         payload.runnerType = proxyForm.value.runnerType;
+        if (proxyForm.value.runnerType === 'local') {
+          const ctx = contextSizeForm.value;
+          payload.contextSize = (typeof ctx === 'number' && Number.isInteger(ctx) && ctx >= 2048) ? ctx : undefined;
+        } else {
+          payload.contextSize = null;
+        }
         if (proxyForm.value.runnerType === 'coze') {
           const c = proxyForm.value.coze;
           payload.coze = {
@@ -1104,10 +1407,14 @@ export default {
             model: (oc.model || '').trim() || undefined,
             workingDirectory: (oc.workingDirectory || '').trim() || undefined,
           };
+        } else if (proxyForm.value.runnerType === 'claude_code') {
+          const wd = (proxyForm.value.claudeCode?.workingDirectory ?? '').trim();
+          payload.claudeCode = wd ? { workingDirectory: wd } : undefined;
         } else {
           payload.coze = undefined;
           payload.openclawx = undefined;
           payload.opencode = undefined;
+          payload.claudeCode = undefined;
         }
         await agentConfigAPI.updateAgent(agent.value.id, payload);
         if (!agent.value.isDefault) {
@@ -1117,11 +1424,19 @@ export default {
           ...agent.value,
           systemPrompt: payload.systemPrompt,
           icon: payload.icon,
+          provider: payload.provider,
+          model: payload.model,
+          modelItemCode: payload.modelItemCode,
+          mcpMaxResultTokens: payload.mcpMaxResultTokens,
+          webSearch: payload.webSearch,
           runnerType: payload.runnerType,
+          contextSize: payload.contextSize,
           coze: payload.coze,
           openclawx: payload.openclawx,
           opencode: payload.opencode,
+          claudeCode: payload.claudeCode,
         };
+        alert(t('agents.configSavedSessionRefresh'));
       } catch (e) {
         console.error('Save config failed', e);
       } finally {
@@ -1337,6 +1652,11 @@ export default {
       const path = await window.electronAPI.showOpenDirectoryDialog({ title: '选择 OpenCode 工作目录' });
       if (path) proxyForm.value.opencode.workingDirectory = path;
     }
+    async function pickClaudeCodeWorkingDirectory() {
+      if (!window.electronAPI?.showOpenDirectoryDialog) return;
+      const path = await window.electronAPI.showOpenDirectoryDialog({ title: t('agents.claudeCodeSelectFolderTitle') });
+      if (path) proxyForm.value.claudeCode.workingDirectory = path;
+    }
 
     function openDeleteConfirm() {
       deleteWorkspaceDir.value = false;
@@ -1378,6 +1698,7 @@ export default {
       activeTab,
       tabs,
       configForm,
+      webSearchForm,
       agentIconOptions,
       configSaving,
       saveConfig,
@@ -1386,6 +1707,7 @@ export default {
       opencodeFreeModels,
       hasElectronFolderPicker,
       pickOpencodeWorkingDirectory,
+      pickClaudeCodeWorkingDirectory,
       showDeleteConfirm,
       deleteAgentSaving,
       deleteWorkspaceDir,
@@ -1396,6 +1718,7 @@ export default {
       selectedModelItem,
       getConfiguredModelOptionLabel,
       optionValueFor,
+      optionLabelFor,
       getProviderDisplayName,
       onConfiguredModelSelect,
       modelConfigLoading,
@@ -1435,6 +1758,12 @@ export default {
       mcpStandardJsonString,
       applyMcpJson,
       mcpJsonError,
+      mcpMaxResultTokensForm,
+      mcpTestState,
+      mcpFormTestLoading,
+      mcpFormTestResult,
+      testMcpServer,
+      testMcpForm,
     };
   },
 };
@@ -1996,9 +2325,25 @@ export default {
   font-size: var(--font-size-sm);
   color: var(--color-text-tertiary);
 }
+.form-hint.warning {
+  color: var(--color-warning, #b8860b);
+}
 .form-hint-warn {
   color: var(--color-warning, #b8860b);
   margin: var(--spacing-xs) 0 0 0;
+}
+
+.form-subtitle {
+  margin: var(--spacing-lg) 0 var(--spacing-sm) 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.form-row.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
 }
 
 .form-group-switch .switch-label {
@@ -2157,8 +2502,49 @@ export default {
 }
 .mcp-item-actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--spacing-md);
   flex-shrink: 0;
+}
+.mcp-test-result {
+  font-size: var(--font-size-sm, 0.875rem);
+}
+.mcp-test-result.success {
+  color: var(--color-success, #28a745);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+}
+.mcp-test-success-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1em 0.4em;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--color-success, #28a745);
+  background: rgba(40, 167, 69, 0.12);
+  border-radius: var(--radius-sm, 4px);
+}
+.mcp-test-result.error {
+  color: var(--color-danger, #dc3545);
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-form-test-result {
+  margin-top: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 0.25rem);
+}
+.mcp-form-test-result.success {
+  color: var(--color-success, #28a745);
+}
+.mcp-form-test-result.error {
+  color: var(--color-danger, #dc3545);
 }
 .mcp-form {
   padding: var(--spacing-lg);

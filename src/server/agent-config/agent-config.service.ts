@@ -4,7 +4,11 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
 import type { McpServerConfig, McpServersStandardFormat } from '../../core/mcp/index.js';
-import { addPendingAgentReload } from '../../core/config/agent-reload-pending.js';
+import type { McpServerConfigStandardEntry } from '../../core/mcp/types.js';
+import { testMcpConnection } from '../../core/mcp/operator.js';
+import { standardFormatToArray } from '../../core/mcp/config.js';
+import { addPendingAgentReload, consumePendingAgentReload } from '../../core/config/agent-reload-pending.js';
+import { agentManager } from '../../core/agent/agent-manager.js';
 import { DatabaseService } from '../database/database.service.js';
 import { WorkspaceService } from '../workspace/workspace.service.js';
 
@@ -14,8 +18,8 @@ const WORKSPACE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 /** 缺省智能体 ID / 工作空间名，不可删除；对应目录 ~/.openbot/workspace/default */
 export const DEFAULT_AGENT_ID = 'default';
 
-/** 执行器类型：local=本机，coze/openclawx/opencode=远程代理 */
-export type AgentRunnerType = 'local' | 'coze' | 'openclawx' | 'opencode';
+/** 执行器类型：local=本机，coze/openclawx/opencode=远程代理，claude_code=本机 Claude Code CLI */
+export type AgentRunnerType = 'local' | 'coze' | 'openclawx' | 'opencode' | 'claude_code';
 
 /** Coze 站点：cn=国内 api.coze.cn，com=国际 api.coze.com，凭证不通用 */
 export type CozeRegion = 'cn' | 'com';
@@ -34,7 +38,7 @@ export interface AgentCozeConfig {
     endpoint?: string;
 }
 
-export interface AgentOpenBotConfig {
+export interface AgentOpenClawXConfig {
     baseUrl: string;
     apiKey?: string;
 }
@@ -78,6 +82,8 @@ export interface AgentConfigItem {
     isDefault?: boolean;
     /** MCP 配置：数组（含 transport）或标准 JSON 对象（key 为服务器名称），创建 Session 时归一化使用 */
     mcpServers?: McpServerConfig[] | McpServersStandardFormat;
+    /** MCP 单次返回最大 token；不配置则不限制 */
+    mcpMaxResultTokens?: number;
     /** 自定义系统提示词，会与技能等一起组成最终 systemPrompt */
     systemPrompt?: string;
     /** 智能体图标标识（前端预设图标 id，如 default、star、code 等） */
@@ -87,11 +93,21 @@ export interface AgentConfigItem {
     /** Coze 代理配置（runnerType 为 coze 时使用） */
     coze?: AgentCozeConfig;
     /** OpenBot 代理配置（runnerType 为 openclawx 时使用） */
-    openclawx?: AgentOpenBotConfig;
+    openclawx?: AgentOpenClawXConfig;
     /** OpenCode 代理配置（runnerType 为 opencode 时使用） */
     opencode?: AgentOpenCodeConfig;
+    /** Claude Code 代理配置（runnerType 为 claude_code 时使用）：工作目录等 */
+    claudeCode?: { workingDirectory?: string };
     /** 是否使用经验（长记忆）：memory_recall / save_experience；默认 true */
     useLongMemory?: boolean;
+    /** 在线搜索：启用后该智能体拥有 web_search 工具；可选默认 provider、maxResultTokens（前端默认 64K） */
+    webSearch?: {
+        enabled?: boolean;
+        provider?: 'brave' | 'duck-duck-scrape';
+        maxResultTokens?: number;
+    };
+    /** 本地模型上下文长度（token 数），仅 runnerType 为 local 时生效；默认 32768（32K） */
+    contextSize?: number;
 }
 
 interface AgentsFile {
@@ -248,13 +264,16 @@ export class AgentConfigService {
                 | 'model'
                 | 'modelItemCode'
                 | 'mcpServers'
+                | 'mcpMaxResultTokens'
                 | 'systemPrompt'
                 | 'icon'
                 | 'runnerType'
                 | 'coze'
                 | 'openclawx'
                 | 'opencode'
+                | 'claudeCode'
                 | 'useLongMemory'
+                | 'webSearch'
             >
         >,
     ): Promise<AgentConfigItem> {
@@ -279,6 +298,7 @@ export class AgentConfigService {
         if (updates.model !== undefined) agent.model = updates.model;
         if (updates.modelItemCode !== undefined) agent.modelItemCode = updates.modelItemCode;
         if (updates.mcpServers !== undefined) agent.mcpServers = updates.mcpServers;
+        if (updates.mcpMaxResultTokens !== undefined) agent.mcpMaxResultTokens = updates.mcpMaxResultTokens;
         if (updates.systemPrompt !== undefined) agent.systemPrompt = updates.systemPrompt?.trim() || undefined;
         if (updates.icon !== undefined) agent.icon = updates.icon?.trim() || undefined;
         if (updates.runnerType !== undefined) agent.runnerType = updates.runnerType;
@@ -334,9 +354,34 @@ export class AgentConfigService {
         }
         if (updates.openclawx !== undefined) agent.openclawx = updates.openclawx;
         if (updates.opencode !== undefined) agent.opencode = updates.opencode;
+        if (updates.claudeCode !== undefined) agent.claudeCode = updates.claudeCode;
         if (updates.useLongMemory !== undefined) agent.useLongMemory = updates.useLongMemory;
+        if ('contextSize' in updates) {
+            const v = updates.contextSize;
+            agent.contextSize =
+                typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined;
+        }
+        if (updates.webSearch !== undefined) {
+            agent.webSearch =
+                updates.webSearch && (updates.webSearch.enabled || updates.webSearch.provider)
+                    ? {
+                          enabled: !!updates.webSearch.enabled,
+                          provider:
+                              updates.webSearch.provider === 'brave' || updates.webSearch.provider === 'duck-duck-scrape'
+                                  ? updates.webSearch.provider
+                                  : 'duck-duck-scrape',
+                          maxResultTokens:
+                              updates.webSearch.maxResultTokens != null && typeof updates.webSearch.maxResultTokens === 'number' && updates.webSearch.maxResultTokens > 0
+                                  ? updates.webSearch.maxResultTokens
+                                  : undefined,
+                      }
+                    : undefined;
+        }
         await this.writeAgentsFile(file);
         await addPendingAgentReload(id).catch(() => {});
+        // 立即使该智能体下所有运行中的 AgentSession 失效，下次请求将用新配置创建新会话（安全：先持久化 compaction 再移除）
+        await agentManager.deleteSessionsByAgentId(id).catch(() => {});
+        await consumePendingAgentReload(id).catch(() => {});
         return { ...agent, isDefault: agent.id === DEFAULT_AGENT_ID };
     }
 
@@ -410,5 +455,17 @@ export class AgentConfigService {
             agent.modelItemCode = modelItemCode;
         }
         await this.writeAgentsFile(file);
+    }
+
+    /**
+     * 测试单条 MCP 配置是否可用（连接并拉取工具列表后断开）。
+     * 用于配置界面「测试」按钮，可提前触发 uvx/npx 依赖安装。
+     */
+    async testMcpServer(entry: McpServerConfigStandardEntry): Promise<{ success: boolean; error?: string; toolsCount?: number }> {
+        const configs = standardFormatToArray({ test: entry });
+        if (configs.length === 0) {
+            return { success: false, error: '无效配置：需 command（本地进程）或 url（远程服务）' };
+        }
+        return testMcpConnection(configs[0], { initTimeoutMs: 60_000 });
     }
 }

@@ -1,17 +1,25 @@
-# 本地构建并运行 OpenBot Gateway（不依赖 CI 镜像）
+# 本地构建并运行 OpenClawX Gateway（不依赖 CI 镜像）
 # 在仓库根目录执行：docker compose -f deploy/docker-compose-dev.yaml up --build
 # 或在 deploy 目录执行：docker compose -f docker-compose-dev.yaml up --build
+#
+# 若在 Mac ARM 上出现「镜像 platform (linux/amd64) 与主机 (linux/arm64) 不一致」或 MCP 子进程 code=1 退出，
+# 可指定本机平台构建：docker build --platform linux/arm64 -f deploy/Dockerfile-dev -t openclawx:dev .. 再 up
 
 services:
-  openbot:
+  openclawx:
     build:
       context: ..
-      dockerfile: deploy/Dockerfile
-    image: openbot:dev
-    container_name: openbot-dev
+      dockerfile: deploy/Dockerfile-dev
+    image: openclawx:dev
+    
+    container_name: openclawx-dev
     ports:
-      - "38080:38080"
+      - "38888:38080"
     environment:
       - NODE_ENV=production
+      - LOCAL_LLM_CONTEXT_MAX=16384
     restart: unless-stopped
+    volumes:
+      # 持久化 ~/.openbot：配置（desktop/config 等）及本地模型缓存（.cached_models）
+      - ~/.openbot-data:/root/.openbot
     command: ["gateway", "--port", "38080"]

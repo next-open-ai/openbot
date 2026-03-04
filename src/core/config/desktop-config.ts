@@ -93,6 +93,16 @@ interface DesktopConfigJson {
     };
     /** 通道配置：飞书、Telegram 等 */
     channels?: ChannelsConfig;
+    /** 工具全局配置：在线搜索等 */
+    tools?: {
+        webSearch?: {
+            defaultProvider?: "brave" | "duck-duck-scrape";
+            timeoutSeconds?: number;
+            cacheTtlMinutes?: number;
+            maxResults?: number;
+            providers?: { brave?: { apiKey?: string } };
+        };
+    };
 }
 
 /** MCP 服务器配置（与 core/mcp 类型一致，避免 core/config 依赖 core/mcp 实现） */
@@ -100,8 +110,8 @@ export type DesktopMcpServerConfig = import("../mcp/index.js").McpServerConfig;
 /** MCP 标准 JSON 格式（key 为服务器名称），存储与 UI 可读写 */
 export type DesktopMcpServersStandardFormat = import("../mcp/index.js").McpServersStandardFormat;
 
-/** Agent 执行器类型：local=本机 pi-coding-agent，coze/openclawx/opencode=远程代理 */
-export type AgentRunnerType = "local" | "coze" | "openclawx" | "opencode";
+/** Agent 执行器类型：local=本机 pi-coding-agent，coze/openclawx/opencode=远程代理，claude_code=本机 Claude Code CLI */
+export type AgentRunnerType = "local" | "coze" | "openclawx" | "opencode" | "claude_code";
 
 /** Coze 站点：国内站 api.coze.cn / 国际站 api.coze.com，凭证不通用 */
 export type CozeRegion = "cn" | "com";
@@ -133,13 +143,19 @@ export interface CozeResolvedConfig {
 }
 
 /** OpenBot 代理配置（代理到另一台 OpenBot 实例） */
-export interface AgentOpenBotConfig {
+export interface AgentOpenClawXConfig {
     baseUrl: string;
     apiKey?: string;
 }
 
 /** OpenCode 启动模式：local=由本应用按需启动本机服务；remote=连接已运行的远端服务 */
 export type OpenCodeServerMode = "local" | "remote";
+
+/** Claude Code CLI 代理配置（当 runnerType 为 claude_code 时使用） */
+export interface AgentClaudeCodeConfig {
+    /** 工作目录：Claude Code CLI 执行时的 cwd；留空则使用该智能体工作区路径 */
+    workingDirectory?: string;
+}
 
 /** OpenCode 代理配置：仅对接 [OpenCode 官方 Server API](https://opencode.ai/docs/server)（Session/Message + HTTP Basic） */
 export interface AgentOpenCodeConfig {
@@ -178,6 +194,8 @@ interface AgentItem {
     modelItemCode?: string;
     /** MCP 配置：数组（含 transport）或标准 JSON 对象（key 为名称），创建 Session 时归一化使用 */
     mcpServers?: DesktopMcpServerConfig[] | DesktopMcpServersStandardFormat;
+    /** MCP 单次返回最大 token；超过则从尾部裁剪；不配置则不限制 */
+    mcpMaxResultTokens?: number;
     /** 自定义系统提示词，与技能等一起组成最终 systemPrompt */
     systemPrompt?: string;
     /** 执行器类型，缺省 local */
@@ -185,11 +203,22 @@ interface AgentItem {
     /** Coze 代理配置，当 runnerType 为 coze 时使用 */
     coze?: AgentCozeConfig;
     /** OpenBot 代理配置，当 runnerType 为 openclawx 时使用 */
-    openclawx?: AgentOpenBotConfig;
+    openclawx?: AgentOpenClawXConfig;
     /** OpenCode 代理配置，当 runnerType 为 opencode 时使用 */
     opencode?: AgentOpenCodeConfig;
+    /** Claude Code CLI 代理配置，当 runnerType 为 claude_code 时使用 */
+    claudeCode?: AgentClaudeCodeConfig;
     /** 是否使用经验（长记忆）；默认 true */
     useLongMemory?: boolean;
+    /** 在线搜索：是否启用 web_search 工具；启用时可指定 provider、maxResultTokens */
+    webSearch?: {
+        enabled?: boolean;
+        provider?: "brave" | "duck-duck-scrape";
+        /** 单次搜索返回最大 token；超过则从尾部裁剪；不配置则不限制；前端默认 64K */
+        maxResultTokens?: number;
+    };
+    /** 本地模型上下文长度（token 数），仅 runnerType 为 local 时生效；默认 32768（32K） */
+    contextSize?: number;
 }
 
 interface AgentsFile {
@@ -336,6 +365,8 @@ export interface DesktopAgentConfig {
     workspace?: string;
     /** MCP 服务器配置（数组或标准对象格式），创建 Session 时传入并归一化 */
     mcpServers?: DesktopMcpServerConfig[] | DesktopMcpServersStandardFormat;
+    /** MCP 单次返回最大 token；超过则从尾部裁剪；不配置则不限制 */
+    mcpMaxResultTokens?: number;
     /** 自定义系统提示词，会与技能等一起组成最终 systemPrompt */
     systemPrompt?: string;
     /** 执行器类型，缺省 local */
@@ -343,11 +374,26 @@ export interface DesktopAgentConfig {
     /** Coze 代理配置（解析后：当前站点的凭证） */
     coze?: CozeResolvedConfig;
     /** OpenBot 代理配置 */
-    openclawx?: AgentOpenBotConfig;
+    openclawx?: AgentOpenClawXConfig;
     /** OpenCode 代理配置 */
     opencode?: AgentOpenCodeConfig;
+    /** Claude Code CLI 代理配置 */
+    claudeCode?: AgentClaudeCodeConfig;
     /** 是否使用经验（长记忆）；默认 true */
     useLongMemory?: boolean;
+    /** 在线搜索：解析后的运行时配置，仅当 runnerType 为 local 时用于注册 web_search 工具 */
+    webSearch?: {
+        enabled: boolean;
+        provider: "brave" | "duck-duck-scrape";
+        apiKey?: string;
+        timeoutSeconds: number;
+        cacheTtlMinutes: number;
+        maxResults: number;
+        /** 单次搜索返回最大 token；超过则从尾部裁剪；不配置则不限制 */
+        maxResultTokens?: number;
+    };
+    /** 本地模型上下文长度（token 数），仅 runnerType 为 local 时用于启动本地 LLM；默认 32768 */
+    contextSize?: number;
 }
 
 /**
@@ -404,8 +450,8 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
     }
 
     const resolvedAgentId = agentId === "default" ? "default" : agentId;
-    let provider = config.defaultProvider ?? "deepseek";
-    let model = config.defaultModel ?? "deepseek-chat";
+    let provider = config.defaultProvider ?? "ollama";
+    let model = config.defaultModel ?? "qwen3:4b";
     if (config.defaultModelItemCode && Array.isArray(config.configuredModels)) {
         const configured = config.configuredModels.find((m) => m.modelItemCode === config.defaultModelItemCode);
         if (configured) {
@@ -413,10 +459,14 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
             model = configured.modelId;
         }
     }
+    /** 是否从当前智能体自己的配置得到了模型（有 modelItemCode 或 provider/model）；若否，则使用的是全局默认 */
+    let agentHadOwnModel = false;
     let workspaceName: string = resolvedAgentId;
     let mcpServers: DesktopMcpServerConfig[] | DesktopMcpServersStandardFormat | undefined;
+    let mcpMaxResultTokens: number | undefined;
     let systemPrompt: string | undefined;
     let useLongMemory: boolean = true;
+    let contextSize: number | undefined;
 
     if (existsSync(agentsPath)) {
         try {
@@ -427,6 +477,12 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
             if (agent) {
                 if (agent.workspace) workspaceName = agent.workspace;
                 else if (agent.id) workspaceName = agent.id;
+                if (agent.mcpMaxResultTokens != null && typeof agent.mcpMaxResultTokens === "number" && agent.mcpMaxResultTokens > 0) {
+                    mcpMaxResultTokens = agent.mcpMaxResultTokens;
+                }
+                if (agent.contextSize != null && typeof agent.contextSize === "number" && agent.contextSize > 0) {
+                    contextSize = agent.contextSize;
+                }
                 if (agent.mcpServers != null) {
                     if (Array.isArray(agent.mcpServers) || (typeof agent.mcpServers === "object" && !Array.isArray(agent.mcpServers))) {
                         mcpServers = agent.mcpServers;
@@ -441,18 +497,25 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
                     if (configured) {
                         provider = configured.provider;
                         model = configured.modelId;
+                        agentHadOwnModel = true;
                     } else {
-                        if (agent.provider) provider = agent.provider;
-                        if (agent.model) model = agent.model;
+                        if (agent.provider) { provider = agent.provider; agentHadOwnModel = true; }
+                        if (agent.model) { model = agent.model; agentHadOwnModel = true; }
                     }
                 } else {
-                    if (agent.provider) provider = agent.provider;
-                    if (agent.model) model = agent.model;
+                    if (agent.provider) { provider = agent.provider; agentHadOwnModel = true; }
+                    if (agent.model) { model = agent.model; agentHadOwnModel = true; }
                 }
             }
         } catch {
             // ignore
         }
+    }
+
+    // 本地 LLM 可用且当前智能体未配置自己的模型时，使用本地推理作为缺省，使所有智能体“拥有”该配置
+    if (!agentHadOwnModel && process.env.LOCAL_LLM_BASE_URL?.trim()) {
+        provider = "local";
+        model = "local-llm";
     }
 
     const provConfig = config.providers?.[provider];
@@ -463,8 +526,21 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
 
     let runnerType: AgentRunnerType = "local";
     let coze: CozeResolvedConfig | undefined;
-    let openclawx: AgentOpenBotConfig | undefined;
+    let openclawx: AgentOpenClawXConfig | undefined;
     let opencode: AgentOpenCodeConfig | undefined;
+    let claudeCode: AgentClaudeCodeConfig | undefined;
+    const tw = config.tools?.webSearch;
+    const timeoutSeconds = typeof tw?.timeoutSeconds === "number" && tw.timeoutSeconds > 0 ? tw.timeoutSeconds : 15;
+    const cacheTtlMinutes = typeof tw?.cacheTtlMinutes === "number" && tw.cacheTtlMinutes >= 0 ? tw.cacheTtlMinutes : 5;
+    const maxResultsRaw = typeof tw?.maxResults === "number" ? tw.maxResults : 5;
+    const maxResults = Math.min(10, Math.max(1, maxResultsRaw));
+    let webSearch: DesktopAgentConfig["webSearch"] = {
+        enabled: false,
+        provider: "duck-duck-scrape",
+        timeoutSeconds,
+        cacheTtlMinutes,
+        maxResults,
+    };
     if (existsSync(agentsPath)) {
         try {
             const rawAgents = await readFile(agentsPath, "utf-8");
@@ -475,9 +551,17 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
                 if (
                     agentRow.runnerType === "coze" ||
                     agentRow.runnerType === "openclawx" ||
-                    agentRow.runnerType === "opencode"
+                    agentRow.runnerType === "opencode" ||
+                    agentRow.runnerType === "claude_code"
                 ) {
                     runnerType = agentRow.runnerType;
+                }
+                if (agentRow.runnerType === "claude_code") {
+                    const wd = agentRow.claudeCode?.workingDirectory;
+                    claudeCode = {
+                        workingDirectory:
+                            typeof wd === "string" && wd.trim() ? wd.trim() : undefined,
+                    };
                 }
                 if (agentRow.coze) {
                     const row = agentRow.coze as AgentCozeConfig & { botId?: string; apiKey?: string };
@@ -553,6 +637,36 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
                         }
                     }
                 }
+                if (agentRow.webSearch?.enabled === true) {
+                    let preferredProvider: "brave" | "duck-duck-scrape" =
+                        agentRow.webSearch?.provider === "brave" || agentRow.webSearch?.provider === "duck-duck-scrape"
+                            ? agentRow.webSearch.provider
+                            : tw?.defaultProvider === "brave" || tw?.defaultProvider === "duck-duck-scrape"
+                                ? tw.defaultProvider!
+                                : "duck-duck-scrape";
+                    let braveKey: string | undefined;
+                    if (preferredProvider === "brave") {
+                        braveKey =
+                            (typeof tw?.providers?.brave?.apiKey === "string" && tw.providers.brave.apiKey.trim()
+                                ? tw.providers.brave.apiKey.trim()
+                                : undefined) ??
+                            (process.env.BRAVE_API_KEY && process.env.BRAVE_API_KEY.trim() ? process.env.BRAVE_API_KEY.trim() : undefined);
+                        if (!braveKey) preferredProvider = "duck-duck-scrape";
+                    }
+                    const maxResultTokens =
+                        agentRow.webSearch?.maxResultTokens != null && typeof agentRow.webSearch?.maxResultTokens === "number" && agentRow.webSearch.maxResultTokens > 0
+                            ? agentRow.webSearch.maxResultTokens
+                            : undefined;
+                    webSearch = {
+                        enabled: true,
+                        provider: preferredProvider,
+                        apiKey: preferredProvider === "brave" ? braveKey : undefined,
+                        timeoutSeconds,
+                        cacheTtlMinutes,
+                        maxResults,
+                        maxResultTokens,
+                    };
+                }
             }
         } catch {
             // ignore
@@ -565,12 +679,16 @@ export async function loadDesktopAgentConfig(agentId: string): Promise<DesktopAg
         apiKey: apiKey ?? undefined,
         workspace: workspaceName,
         mcpServers,
+        mcpMaxResultTokens,
         systemPrompt,
         runnerType,
         coze,
         openclawx,
         opencode,
+        claudeCode,
         useLongMemory,
+        webSearch,
+        contextSize,
     };
 }
 
@@ -786,21 +904,58 @@ export async function ensureProviderSupportFile(): Promise<void> {
     }
 }
 
-/** 若 config.json 不存在则用 preset-config.json 初始化，若存在则浅合并补充新基础键值 */
+/** 预装本地推理缺省：推荐列表第一个 LLM（Qwen 3.5 4B）对应的本地文件名，与 modelUriToFilename 一致 */
+const DEFAULT_LOCAL_LLM_MODEL_ID = "hf_unsloth_Qwen3.5-4B-GGUF_Qwen3.5-4B-Q5_K_M.gguf";
+const DEFAULT_LOCAL_MODEL_ITEM_CODE = "local-qwen35-4b";
+
+/** 代码内建默认：local provider + 本地 Qwen 3.5 4B，首次与合并时优先保证存在 */
+const BUILTIN_DEFAULT_CONFIG: DesktopConfigJson = {
+    defaultProvider: "local",
+    defaultModel: DEFAULT_LOCAL_LLM_MODEL_ID,
+    defaultModelItemCode: DEFAULT_LOCAL_MODEL_ITEM_CODE,
+    defaultAgentId: DEFAULT_AGENT_ID,
+    maxAgentSessions: DEFAULT_MAX_AGENT_SESSIONS,
+    providers: {
+        local: { baseUrl: "http://127.0.0.1:11435/v1" },
+    },
+    configuredModels: [
+        {
+            provider: "local",
+            modelId: DEFAULT_LOCAL_LLM_MODEL_ID,
+            type: "llm",
+            alias: "Qwen 3.5 4B Q5_K_M",
+            modelItemCode: DEFAULT_LOCAL_MODEL_ITEM_CODE,
+        },
+        {
+            provider: "local",
+            modelId: "hf_ggml-org_embeddinggemma-300M-GGUF_embeddinggemma-300M-Q8_0.gguf",
+            type: "embedding",
+            alias: "EmbeddingGemma 300M Q8 (768维)",
+            modelItemCode: "local-embeddinggemma-300m",
+        },
+    ],
+};
+
+/** 若 config.json 不存在则用 preset-config.json 初始化，若存在则浅合并补充新基础键值。预装 local provider + 本地 Qwen 3.5 4B 模型并设为缺省；preset 与代码默认合并，保证 local 一定存在。 */
 async function ensureConfigJsonInitialized(): Promise<void> {
     const presetPath = join(getPresetsDir(), "preset-config.json");
-    let presetConfig: DesktopConfigJson = {
-        defaultProvider: "deepseek",
-        defaultModel: "deepseek-chat",
-        defaultAgentId: DEFAULT_AGENT_ID,
-        maxAgentSessions: DEFAULT_MAX_AGENT_SESSIONS,
-        providers: {},
-        configuredModels: [],
-    };
+    let presetConfig: DesktopConfigJson = { ...BUILTIN_DEFAULT_CONFIG };
     if (existsSync(presetPath)) {
         try {
             const data = JSON.parse(await readFile(presetPath, "utf-8"));
-            if (data.config) presetConfig = data.config;
+            if (data.config && typeof data.config === "object") {
+                presetConfig = { ...BUILTIN_DEFAULT_CONFIG, ...data.config };
+                presetConfig.providers = { ...BUILTIN_DEFAULT_CONFIG.providers, ...(presetConfig.providers || {}) };
+                const hasLocalModel = (presetConfig.configuredModels || []).some(
+                    (m: any) => m?.provider === "local" && (m?.modelId === DEFAULT_LOCAL_LLM_MODEL_ID || m?.modelItemCode === DEFAULT_LOCAL_MODEL_ITEM_CODE)
+                );
+                if (!hasLocalModel) {
+                    presetConfig.configuredModels = [
+                        ...(BUILTIN_DEFAULT_CONFIG.configuredModels || []),
+                        ...(presetConfig.configuredModels || []),
+                    ];
+                }
+            }
         } catch { }
     }
 
@@ -871,19 +1026,46 @@ async function ensureAgentsJsonInitialized(): Promise<void> {
         }
     }
 
+    // 所有未单独配置模型的智能体使用 config 的缺省模型（预装为 local + Qwen 3.5 4B）
+    const configPath = join(getDesktopDir(), "config.json");
+    if (existsSync(configPath)) {
+        try {
+            const configRaw = await readFile(configPath, "utf-8");
+            const configData = JSON.parse(configRaw) as { defaultProvider?: string; defaultModel?: string; defaultModelItemCode?: string };
+            const defProvider = configData.defaultProvider?.trim();
+            const defModel = configData.defaultModel?.trim();
+            const defCode = configData.defaultModelItemCode?.trim();
+            if (defProvider && defModel) {
+                for (const agent of currentData.agents) {
+                    const hasOwn = (agent.provider && String(agent.provider).trim()) || (agent.model && String(agent.model).trim()) || (agent.modelItemCode && String(agent.modelItemCode).trim());
+                    if (!hasOwn) {
+                        agent.provider = defProvider;
+                        agent.model = defModel;
+                        if (defCode) agent.modelItemCode = defCode;
+                        changed = true;
+                    }
+                }
+            }
+        } catch { /* ignore */ }
+    }
+
     if (changed || !existsSync(agentsPath)) {
         await writeFile(agentsPath, JSON.stringify(currentData, null, 2), "utf-8");
     }
 }
 
 /**
- * CLI / Gateway 运行时调用，确保 config.json、provider-support.json、agents.json 均完成初始化。
+ * CLI / Gateway 运行时调用，确保 config.json、provider-support.json、agents.json 均完成初始化，
+ * 并同步到 agent 目录 models.json，供 pi ModelRegistry 解析 local 等模型与凭证。
  */
 export async function ensureDesktopConfigInitialized(): Promise<void> {
     ensureDesktopDir();
     await ensureProviderSupportFile();
     await ensureConfigJsonInitialized();
     await ensureAgentsJsonInitialized();
+    await syncDesktopConfigToModelsJson().catch((err) => {
+        console.warn("[ensureDesktopConfigInitialized] syncDesktopConfigToModelsJson failed:", err);
+    });
 }
 
 /**
@@ -956,6 +1138,10 @@ const SYNC_DEFAULTS: Record<string, { baseUrl: string; apiKey: string; api: stri
     "openai-custom": { baseUrl: "", apiKey: "OPENAI_API_KEY", api: "openai-completions" },
     nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", apiKey: "NVIDIA_API_KEY", api: "openai-completions" },
     kimi: { baseUrl: "https://api.moonshot.cn/v1", apiKey: "MOONSHOT_API_KEY", api: "openai-completions" },
+    /** 本地 Ollama，无需真实 API Key */
+    ollama: { baseUrl: "http://localhost:11434/v1", apiKey: "OPENAI_API_KEY", api: "openai-completions" },
+    /** 内置本地推理（node-llama-cpp），无需 API Key，baseUrl 指向本地子进程服务 */
+    local: { baseUrl: "http://127.0.0.1:11435/v1", apiKey: "OPENAI_API_KEY", api: "openai-completions" },
 };
 
 const DEFAULT_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
@@ -983,23 +1169,35 @@ function configuredModelToPi(item: DesktopConfiguredModel, displayName: string):
 
 /**
  * 根据桌面 config（已配置的 providers + configuredModels）与 provider-support，生成并写入 agent 目录的 models.json。
- * 仅包含在 config 的 providers 中已配置的 provider；每个 provider 的 models 来自 configuredModels，结构含 reasoning、cost 等。
+ * 包含：config.providers 中已配置的 provider；以及 configuredModels / defaultProvider 中引用但未在 providers 中的 provider（用 support 默认 baseUrl 补全，避免 Ollama 等仅选模型未填 baseUrl 时连不上）。
  */
 export async function syncDesktopConfigToModelsJson(): Promise<void> {
     const config = await readDesktopConfigJson();
     const configured = config.providers ?? {};
     const configuredModels = Array.isArray(config.configuredModels) ? config.configuredModels : [];
-    if (Object.keys(configured).length === 0) {
+    const support = await getProviderSupport();
+    const providerIdsFromModels = new Set<string>();
+    for (const m of configuredModels) if (m?.provider) providerIdsFromModels.add(m.provider);
+    if (config.defaultProvider) providerIdsFromModels.add(config.defaultProvider);
+    const allProviderIds = new Set<string>([...Object.keys(configured), ...providerIdsFromModels]);
+    if (allProviderIds.size === 0) {
         return;
     }
-    const support = await getProviderSupport();
     const piProviders: Record<string, PiProviderEntry> = {};
-    for (const [providerId, userConfig] of Object.entries(configured)) {
-        if (!userConfig?.apiKey?.trim()) continue;
+    for (const providerId of allProviderIds) {
+        const userConfig = configured[providerId];
+        // ollama / local 不需要 API Key，其他 provider 必须有 apiKey
+        const isNoKeyProvider = providerId === "ollama" || providerId === "local";
+        if (!isNoKeyProvider && !userConfig?.apiKey?.trim()) continue;
         const defaults = SYNC_DEFAULTS[providerId] ?? { baseUrl: "", apiKey: "OPENAI_API_KEY", api: "openai-completions" };
-        const baseUrl = userConfig.baseUrl?.trim() || (support[providerId]?.baseUrl ?? "").trim() || defaults.baseUrl;
+        let baseUrl = userConfig?.baseUrl?.trim() || (support[providerId]?.baseUrl ?? "").trim() || defaults.baseUrl;
+        if (providerId === "ollama" && process.env.OLLAMA_BASE_URL?.trim()) {
+            const u = process.env.OLLAMA_BASE_URL.trim().replace(/\/$/, "");
+            baseUrl = u.endsWith("/v1") ? u : u + "/v1";
+        }
         if (!baseUrl) continue;
         const def = support[providerId];
+        if (!def) continue;
         const items = configuredModels.filter((m) => m.provider === providerId);
         let models: PiModelEntry[];
         if (items.length > 0) {
@@ -1008,7 +1206,10 @@ export async function syncDesktopConfigToModelsJson(): Promise<void> {
                     (item.alias && item.alias.trim()) ||
                     (def?.models?.find((m) => m.id === item.modelId)?.name) ||
                     item.modelId;
-                return configuredModelToPi(item, displayName);
+                const pi = configuredModelToPi(item, displayName);
+                // 本地 node-llama-cpp 关闭思考：不向 SDK 发送 reasoning，避免启用 thinking 相关参数
+                if (providerId === "local") return { ...pi, reasoning: false };
+                return pi;
             });
         } else if (def?.models?.length) {
             models = def.models.map((m) =>
@@ -1030,7 +1231,7 @@ export async function syncDesktopConfigToModelsJson(): Promise<void> {
             continue;
         }
         piProviders[providerId] = {
-            name: (userConfig.alias?.trim() || def?.name) || providerId,
+            name: (userConfig?.alias?.trim() || def?.name) || providerId,
             apiKey: defaults.apiKey,
             api: defaults.api,
             baseUrl: baseUrl.replace(/\/$/, ""),

@@ -60,7 +60,7 @@ docs/
 
 - **Windows 安装失败 / 无法运行？**  
   - **Desktop 安装包**：若安装或启动报错（如缺少运行库、闪退），请安装 [Visual C++ Redistributable](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)（选 x64）；若为杀毒/安全软件拦截，可尝试加入排除项或暂时关闭后重试。  
-  - **npm 全局安装**：Windows 上若因 `node-llama-cpp` 等原生依赖安装失败，可使用 `npm install -g @next-open-ai/openclawx --ignore-scripts` 跳过可选原生模块，对 CLI/Gateway/Desktop 常规使用无影响；长记忆需单独配置在线 RAG 或本地环境。  
+  - **npm 全局安装**：Windows 上若因 `node-llama-cpp` 等原生依赖安装失败，可使用 `npm install -g @next-open-ai/openbot --ignore-scripts` 跳过可选原生模块，对 CLI/Gateway/Desktop 常规使用无影响；长记忆需单独配置在线 RAG 或本地环境。  
 - 更多问题（macOS 安装包「已损坏」、端口占用、通道不回复等）见 **[常见问题](docs/zh/reference/faq.md)**；版本变更见 **[发布说明](docs/zh/release-notes.md)**。
 
 ---
@@ -108,7 +108,7 @@ docs/
 │  AgentManager   │    │  server-api/*               │    │  Vectra + 嵌入       │
 │  执行方式:      │    │  Agents · Skills · Tasks    │    │  compaction 扩展     │
 │  local/coze/    │    │  Auth · Users · Workspace   │    │  sql.js              │
-│  openclawx/     │    │                             │    │                     │
+│  openbot/     │    │                             │    │                     │
 │  opencode(代理) │    │                             │    │                     │
 │  pi-coding-agent│    │                             │    │                     │
 │  pi-ai 多模型   │    │                             │    │                     │
@@ -178,12 +178,12 @@ npm -v    # 能正常输出版本号
 
 ```bash
 # 全局安装（测试过 node 版本：20/22；24 太新，部分库需本地编译环境）
-npm install -g @next-open-ai/openclawx
+npm install -g @next-open-ai/openbot
 ```
 #### ***如果是在windows上安装最新版本（v0.8.0以上版本），可能会因为node-llama-cpp无法安装，可以采用如下安装命令跳过它的安装，对当前系统使用无影响***
 ```bash
 # 跳过预下载脚本
-npm install -g @next-open-ai/openclawx --ignore-scripts
+npm install -g @next-open-ai/openbot --ignore-scripts
 # 尝试手工安装跳过的预下载(这一步失败了也不影响正常使用)
 npm run postinstall --if-present
 ```

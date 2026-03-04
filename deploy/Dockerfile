@@ -8,6 +8,9 @@
 FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim AS builder
 WORKDIR /app
 
+# 使用国内 npm 镜像加速依赖安装（构建阶段所有 npm ci 均生效）
+RUN npm config set registry https://registry.npmmirror.com
+
 # 根项目依赖（含 devDependencies，用于 tsc 构建）
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -26,26 +29,61 @@ COPY apps/desktop/renderer ./apps/desktop/renderer
 RUN cd apps/desktop/renderer && npm ci && npm run build
 
 # ------------------------------------------------------------------------------
-# Stage 2: 运行镜像（与 builder 同镜像；若仓库有 22.11.0-slim 可改用 slim 减小体积）
+# Stage 2: 运行镜像（支持 npx、uvx 及常用 CLI，便于 openclawx 在容器内执行任务）
 # ------------------------------------------------------------------------------
 FROM ccr.ccs.tencentyun.com/windwithlife/node:22-bookworm-slim
 WORKDIR /app
 
+# 系统基础能力：证书、网络、版本控制、压缩、进程查看、Python3 + uv（提供 uvx）
+# 使镜像具备类 Ubuntu/Debian 的常用命令行环境，支持 npx / uvx 及通用工具
+ENV HOME=/root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    procps \
+    unzip \
+    zip \
+    less \
+    file \
+    python3 \
+    python3-venv \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv 安装到 /root/.local/bin，加入 PATH 以便使用 uvx；校验存在避免运行时 ENOENT
+ENV PATH="/root/.local/bin:$PATH"
+RUN uvx --version
+
 # 从构建阶段拷贝依赖与产物（无原生模块，任意 Linux 镜像即可）
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
+RUN npm config set registry https://registry.npmmirror.com
 RUN npm prune --production
+
+# 运行时 npx/uvx 使用国内镜像：npm 淘宝源、uv/pip 清华源（MCP 等子进程会继承）
+ENV npm_config_registry=https://registry.npmmirror.com
+ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 从构建阶段拷贝产物
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/skills ./skills
 COPY --from=builder /app/apps/desktop/renderer/dist ./apps/desktop/renderer/dist
 
+# 预装资源：智能体/工作区/技能预设，运行时通过 OPENBOT_PRESETS_DIR 或 process.cwd()/presets 使用
+COPY presets ./presets
+
+# 入口脚本：容器启动时按需安装 OpenCode CLI（不打进镜像以减小体积），再启动主进程
+COPY deploy/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 ENV NODE_ENV=production
 
 # Gateway 默认端口；CLI 可通过 CMD 覆盖
 EXPOSE 38080
 
-# 使用 openbot CLI；默认启动 Gateway
-ENTRYPOINT ["node", "dist/cli/cli.js"]
+# 先执行 entrypoint 安装缺失 CLI，再 exec 主命令
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["gateway", "--port", "38080"]

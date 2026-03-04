@@ -76,8 +76,10 @@ export async function handleRunScheduledTask(
             modelId,
             apiKey,
             mcpServers: agentConfig?.mcpServers,
+            mcpMaxResultTokens: agentConfig?.mcpMaxResultTokens,
             systemPrompt: agentConfig?.systemPrompt,
             useLongMemory: agentConfig?.useLongMemory,
+            webSearch: agentConfig?.webSearch,
         });
         let assistantContent = "";
         let turnPromptTokens = 0;

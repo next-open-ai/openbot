@@ -1,6 +1,6 @@
 {
     "name": "@next-open-ai/openbot-desktop",
-    "version": "0.6.16",
+    "version": "0.6.66",
     "description": "OpenBot Desktop - Professional agent management application",
     "main": "main.js",
     "scripts": {

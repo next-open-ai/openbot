@@ -1,0 +1,68 @@
+# 使用 Drone CI/CD 构建的镜像启动 OpenClawX Gateway
+# 镜像来源：.drone.yml 推送到 ccr.ccs.tencentyun.com/windwithlife/openclawx
+# 可用标签：latest、具体版本（如 0.8.28）或 build-ci-openbot-${DRONE_BUILD_NUMBER}
+#
+# 使用宿主机英伟达显卡（本地推理 node-llama-cpp 或 Ollama）时：
+# 1. 宿主机安装 NVIDIA 驱动 + NVIDIA Container Toolkit：
+#    https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+# 2. 本文件已启用 deploy.reservations.devices（见下），无需改配置。
+# 3. 若无 GPU 或不想用 GPU，可注释掉各服务下的 deploy 整段，容器将仅用 CPU 推理。
+#
+# Ollama 与 OpenClawX 同栈时：OpenClawX 通过 OLLAMA_BASE_URL 自动连到 ollama 服务；
+# 在「模型配置」或智能体中选用 Ollama 为 Provider 即可，无需再填 baseUrl。
+#
+# 仅使用宿主机上的 Ollama（不跑 compose 里的 ollama 容器）时：
+# 1. 不启动下方的 ollama 服务（或 docker compose up openclawx 只起 openclawx）。
+# 2. 宿主机确保 Ollama 监听 0.0.0.0（如 OLLAMA_HOST=0.0.0.0）且防火墙放行 11434。
+# 3. Custom OpenAPI 的 baseUrl 必须带协议，填：http://host.docker.internal:11434/v1（不能省 http://）。
+# 4. 本文件已通过 extra_hosts 将 host.docker.internal 解析为宿主机（Linux 需 Docker 20.10+）。
+
+services:
+  openclawx:
+    image: ccr.ccs.tencentyun.com/windwithlife/openclawx:latest
+    container_name: openclawx
+    ports:
+      - "38080:38080"
+    environment:
+      - NODE_ENV=production
+      # 使用同栈 Ollama 容器时用下面这行；仅用宿主机 Ollama 时改为下一行并确保不启动 ollama 服务
+      - OLLAMA_BASE_URL=http://ollama:11434
+      # - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    restart: unless-stopped
+    volumes:
+      # 持久化 ~/.openbot：配置（desktop/config 等）及本地模型缓存（.cached_models）
+      - ~/.openbot-data:/root/.openbot
+    # 支持容器内通过 host.docker.internal 访问宿主机（Linux 需 Docker 20.10+，用 host-gateway 解析宿主机 IP）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # 与 Dockerfile 一致：node dist/cli/cli.js gateway --port 38080
+    command: ["gateway", "--port", "38080"]
+    # 将宿主机 GPU 暴露给容器，供 node-llama-cpp 本地推理使用（需宿主机已装 nvidia-container-toolkit）
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    # 使用宿主机 GPU 加速推理（需 nvidia-container-toolkit）
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  openbot-data:
+  ollama-data:

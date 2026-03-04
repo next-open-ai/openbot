@@ -8,6 +8,7 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { AgentConfigModule } from "../../src/server/agent-config/agent-config.module.js";
 import { AgentConfigService, DEFAULT_AGENT_ID } from "../../src/server/agent-config/agent-config.service.js";
+import { DatabaseModule } from "../../src/server/database/database.module.js";
 
 describe("AgentConfigService", () => {
     let service: AgentConfigService;
@@ -33,8 +34,9 @@ describe("AgentConfigService", () => {
         const agentsPath = join(desktopDir, "agents.json");
         if (existsSync(agentsPath)) rmSync(agentsPath);
         const module: TestingModule = await Test.createTestingModule({
-            imports: [AgentConfigModule],
+            imports: [DatabaseModule, AgentConfigModule],
         }).compile();
+        await module.init();
         service = module.get(AgentConfigService);
     });
 

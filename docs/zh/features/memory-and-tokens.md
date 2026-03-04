@@ -1,6 +1,6 @@
 # 长记忆（Memory）存储、使用时机与 Token 消耗
 
-本文说明 openclawx 中向量库（memory）的**写入时机**、**读取与注入时机**，以及由此带来的 **token 消耗**。便于与其它实现（如 moltbot）对比。
+本文说明 OpenBot 中向量库（memory）的**写入时机**、**读取与注入时机**，以及由此带来的 **token 消耗**。便于与其它实现（如 moltbot）对比。
 
 ---
 
@@ -53,7 +53,7 @@
 
 ## 4. 与 moltbot 的对比（基于 moltbot 源码）
 
-以下基于与 openclawx 平行的 **moltbot** 项目源码（`moltbot/src/memory`、`moltbot/src/agents`、`moltbot/src/auto-reply/reply` 等）整理。
+以下基于与 OpenBot 平行的 **moltbot** 项目源码（`moltbot/src/memory`、`moltbot/src/agents`、`moltbot/src/auto-reply/reply` 等）整理。
 
 ### 4.1 数据来源与存储
 

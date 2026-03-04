@@ -14,7 +14,7 @@ A: Node.js ≥ 20. Prefer 20 or 22.
 A: Run in Terminal: `xattr -cr /Applications/OpenBot.app` (adjust path if needed), then open the app.
 
 **Q: Windows install or run fails?**  
-A: For the Desktop installer, install [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) (x64) if needed; check antivirus. For npm, you can use `npm install -g @next-open-ai/openclawx --ignore-scripts` to skip optional native modules; long memory then needs online RAG or a local build.
+A: For the Desktop installer, install [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) (x64) if needed; check antivirus. For npm, you can use `npm install -g @next-open-ai/openbot --ignore-scripts` to skip optional native modules; long memory then needs online RAG or a local build.
 
 ---
 

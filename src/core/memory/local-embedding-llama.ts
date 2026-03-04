@@ -4,8 +4,6 @@
  * 加载前会注册 ESM 钩子，将 "typescript" 解析为桩模块，避免依赖链加载 typescript.js（含 with 语句，ESM 下报错）。
  */
 import type { IEmbeddingProvider } from "./embedding-types.js";
-import { join } from "path";
-import { homedir } from "os";
 
 let cached: IEmbeddingProvider | null = null;
 let initError: Error | null = null;
@@ -41,19 +39,23 @@ export async function getLocalEmbeddingLlamaProvider(
         // Node 20.10+ 才提供 node:module 的 register；Electron 内置 Node 较旧时无此导出，跳过钩子
         const nodeModule = await import("node:module") as { register?: (url: string, parent?: string) => void | Promise<void> };
         if (typeof nodeModule.register === "function") {
+            // Use Function to avoid TS1343 when tsconfig module is not NodeNext (e.g. some Jest setups)
+            const metaUrl = (new Function("return typeof import.meta !== 'undefined' ? import.meta.url : ''")()) as string;
+            if (metaUrl) {
             const loaderUrl = new URL(
                 "../../../scripts/ts-stub-loader.mjs",
-                import.meta.url,
+                metaUrl,
             ).href;
-            await Promise.resolve(nodeModule.register(loaderUrl, import.meta.url));
+            await Promise.resolve(nodeModule.register(loaderUrl, metaUrl));
+            }
         }
 
         const { getLlama, resolveModelFile, LlamaLogLevel } = await import(
             "node-llama-cpp"
         );
+        const { LOCAL_LLM_CACHE_DIR } = await import("../local-llm-server/model-resolve.js");
         const llama = await getLlama({ logLevel: LlamaLogLevel.error });
-        const cacheDir = join(homedir(), ".cache", "llama");
-        const resolved = await resolveModelFile(effectivePath, cacheDir);
+        const resolved = await resolveModelFile(effectivePath, LOCAL_LLM_CACHE_DIR);
         const model = await llama.loadModel({ modelPath: resolved });
         const embeddingCtx = await model.createEmbeddingContext();
 

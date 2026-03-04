@@ -18,7 +18,7 @@
 
 ```bash
 # 全局安装
-npm install -g @next-open-ai/openclawx
+npm install -g @next-open-ai/openbot
 
 # 登录 Provider（以 DeepSeek 为例，不传 model 则用该 provider 第一个模型）
 openbot login deepseek YOUR_DEEPSEEK_API_KEY

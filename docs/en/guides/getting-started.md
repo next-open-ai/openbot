@@ -18,7 +18,7 @@ Get installed, have your first conversation, and find desktop and channel entry 
 
 ```bash
 # Global install
-npm install -g @next-open-ai/openclawx
+npm install -g @next-open-ai/openbot
 
 # Login (e.g. DeepSeek; omit model to use provider default)
 openbot login deepseek YOUR_DEEPSEEK_API_KEY

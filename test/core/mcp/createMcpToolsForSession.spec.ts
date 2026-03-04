@@ -2,6 +2,7 @@
  * createMcpToolsForSession 单元测试（无真实 MCP 进程）
  */
 import { createMcpToolsForSession } from "../../../src/core/mcp/index.js";
+import { setSessionOutlet, getSessionOutlet } from "../../../src/core/session-outlet/index.js";
 import type { ISessionOutlet } from "../../../src/core/session-outlet/index.js";
 
 describe("core/mcp/createMcpToolsForSession", () => {
@@ -31,7 +32,7 @@ describe("core/mcp/createMcpToolsForSession", () => {
         expect(tools.length).toBe(0);
     });
 
-    it("emits mcp.progress system messages via sessionOutlet when sessionId and outlet provided", async () => {
+    it("emits mcp.progress system messages via global sessionOutlet when sessionId provided", async () => {
         const emitted: { sessionId: string; message: { type: string; code?: string; payload?: unknown } }[] = [];
         const sessionOutlet: ISessionOutlet = {
             emit(sessionId, message) {
@@ -41,17 +42,22 @@ describe("core/mcp/createMcpToolsForSession", () => {
                 return () => {};
             },
         };
-        await createMcpToolsForSession({
-            mcpServers: [{ transport: "stdio", command: "/nonexistent/mcp-server-binary" }],
-            sessionId: "test-session-1",
-            sessionOutlet,
-        });
-        expect(emitted.length).toBeGreaterThanOrEqual(1);
-        const progressMessages = emitted.filter((e) => e.message.type === "system" && e.message.code === "mcp.progress");
-        expect(progressMessages.length).toBeGreaterThanOrEqual(1);
-        expect(progressMessages[0].sessionId).toBe("test-session-1");
-        expect(progressMessages[0].message.payload).toEqual(
-            expect.objectContaining({ phase: expect.any(String) })
-        );
+        const prev = getSessionOutlet();
+        setSessionOutlet(sessionOutlet);
+        try {
+            await createMcpToolsForSession({
+                mcpServers: [{ transport: "stdio", command: "/nonexistent/mcp-server-binary" }],
+                sessionId: "test-session-1",
+            });
+            expect(emitted.length).toBeGreaterThanOrEqual(1);
+            const progressMessages = emitted.filter((e) => e.message.type === "system" && e.message.code === "mcp.progress");
+            expect(progressMessages.length).toBeGreaterThanOrEqual(1);
+            expect(progressMessages[0].sessionId).toBe("test-session-1");
+            expect(progressMessages[0].message.payload).toEqual(
+                expect.objectContaining({ phase: expect.any(String) })
+            );
+        } finally {
+            setSessionOutlet(prev);
+        }
     });
 });

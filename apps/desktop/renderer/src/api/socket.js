@@ -91,6 +91,7 @@ class SocketService {
                 'conversation_end': 'conversation_end',
                 'turn_end': 'turn_end',
                 'agent_end': 'agent_end',
+                'system_message': 'system_message',
             };
             const mappedEvent = eventMap[event] || event;
             this.emit(mappedEvent, payload);
@@ -113,8 +114,8 @@ class SocketService {
             sessionId,
             agentId: this.currentAgentId,
             sessionType: this.currentSessionType,
-        });
-        await this.call('subscribe_session', { sessionId });
+        }, 30000);
+        await this.call('subscribe_session', { sessionId }, 30000);
     }
 
     /**
@@ -135,7 +136,8 @@ class SocketService {
         if (targetAgentId !== undefined && targetAgentId !== null) {
             params.targetAgentId = targetAgentId;
         }
-        return this.call('agent.chat', params, 120000);
+        // 后端流式启动即返回；首响应可能较慢（冷启、首包等），给 3 分钟
+        return this.call('agent.chat', params, 180000);
     }
 
     /**
@@ -187,7 +189,9 @@ class SocketService {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         let host = window.location.host;
         if (window.location.port === '5173' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-            host = window.location.hostname + ':38080';
+            const raw = window.__GATEWAY_PORT__;
+            const port = (typeof raw === 'number' && raw > 0) ? raw : (Number.parseInt(raw, 10) || 38080);
+            host = window.location.hostname + ':' + port;
         }
         const base = `${protocol}//${host}`;
         const url = base.replace(/\/$/, '') + '/ws';

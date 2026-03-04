@@ -8,6 +8,7 @@ import type { INestApplication } from '@nestjs/common';
 import express from 'express';
 import type { Express } from 'express';
 import { AppModule } from './app.module.js';
+import { ensureDesktopConfigInitialized } from '../core/config/desktop-config.js';
 
 const BODY_LIMIT = '10mb';
 
@@ -28,7 +29,14 @@ export async function createNestAppEmbedded(): Promise<NestAppResult> {
     expressApp.use(express.json({ limit: BODY_LIMIT }));
     expressApp.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:38080', 'http://localhost:38081'],
+        origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'http://localhost:38080',
+            'http://localhost:38081',
+            'http://127.0.0.1:38080',
+            'http://127.0.0.1:38081',
+        ],
         credentials: true,
     });
     await app.init();
@@ -37,8 +45,10 @@ export async function createNestAppEmbedded(): Promise<NestAppResult> {
 
 /**
  * 独立启动时使用：设置 globalPrefix 并监听端口。
+ * 先执行桌面配置初始化，保证首次启动即有 local provider 与缺省模型。
  */
 export async function createNestAppStandalone(port: number = 38081): Promise<INestApplication> {
+    await ensureDesktopConfigInitialized();
     const app = await NestFactory.create(AppModule, {
         cors: true,
     });
@@ -47,7 +57,14 @@ export async function createNestAppStandalone(port: number = 38081): Promise<INe
     expressApp.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
     app.setGlobalPrefix('server-api');
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:38080', 'http://localhost:38081'],
+        origin: [
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+            'http://localhost:38080',
+            'http://localhost:38081',
+            'http://127.0.0.1:38080',
+            'http://127.0.0.1:38081',
+        ],
         credentials: true,
     });
     await app.listen(port);

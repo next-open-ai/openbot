@@ -27,7 +27,7 @@ npm -v
 ### Install
 
 ```bash
-npm install -g @next-open-ai/openclawx
+npm install -g @next-open-ai/openbot
 ```
 
 Then use the `openbot` command. To build from source:

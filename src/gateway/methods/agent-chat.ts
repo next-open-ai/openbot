@@ -13,6 +13,19 @@ import type { SessionMessage, SessionMessageConsumer } from "../../core/session-
 
 const COMPOSITE_KEY_SEP = "::";
 
+/** 将 delta/text 规范为字符串，避免 SDK 或上游返回对象时前端显示 [object Object] 或触发 Unknown value type */
+function normalizeChunkText(v: unknown): string {
+    if (v == null) return "";
+    if (typeof v === "string") return v;
+    if (typeof (v as { content?: string }).content === "string") return (v as { content: string }).content;
+    if (typeof (v as { text?: string }).text === "string") return (v as { text: string }).text;
+    try {
+        return String(JSON.stringify(v));
+    } catch {
+        return String(v);
+    }
+}
+
 /** 当前每个 session 的流式订阅（用于在 cancel 或新 run 前移除旧订阅，避免重复广播） */
 const sessionSubscriptionBySessionId = new Map<string, () => void>();
 
@@ -47,7 +60,7 @@ const SYSTEM_MSG_SUFFIX = "\n";
 
 /**
  * 创建 Web 端会话消息消费者：将统一出口的 SessionMessage 转为 Gateway 事件并 broadcast。
- * 系统消息以 agent.chunk 形式发送，正文带 [System Message] 前缀且结尾换行，与当轮回复分行。
+ * 系统消息以独立事件 system_message 下发，前端做中间展示、不进入 session 聊天记录；各通道通过统一出口收到原始 system 消息后自行处理。
  */
 function createWebSessionConsumer(_sessionId: string): SessionMessageConsumer {
     return {
@@ -55,8 +68,7 @@ function createWebSessionConsumer(_sessionId: string): SessionMessageConsumer {
             const sid = msg.sessionId;
             if (msg.type === "system" && msg.code === "command.result") {
                 const raw = (msg.payload?.text as string) ?? "";
-                const text = raw ? SYSTEM_MSG_PREFIX + raw + SYSTEM_MSG_SUFFIX : "";
-                if (text) broadcastToSession(sid, createEvent("agent.chunk", { text, sessionId: sid }));
+                if (raw) broadcastToSession(sid, createEvent("system_message", { text: raw, code: "command.result", sessionId: sid }));
                 broadcastToSession(sid, createEvent("turn_end", { sessionId: sid, content: "" }));
                 broadcastToSession(sid, createEvent("message_complete", { sessionId: sid, content: "" }));
                 broadcastToSession(sid, createEvent("agent_end", { sessionId: sid }));
@@ -65,10 +77,7 @@ function createWebSessionConsumer(_sessionId: string): SessionMessageConsumer {
             }
             if (msg.type === "system" && msg.code === "mcp.progress") {
                 const raw = (msg.payload?.message as string) ?? (msg.payload?.phase as string) ?? "";
-                if (raw) {
-                    const text = SYSTEM_MSG_PREFIX + raw + SYSTEM_MSG_SUFFIX;
-                    broadcastToSession(sid, createEvent("agent.chunk", { text, sessionId: sid }));
-                }
+                if (raw) broadcastToSession(sid, createEvent("system_message", { text: raw, code: "mcp.progress", sessionId: sid }));
                 return;
             }
             if (msg.type === "chat") {
@@ -167,7 +176,7 @@ async function handleAgentChatInner(
         }
 
         const runnerType = agentConfig?.runnerType ?? "local";
-        const isProxyAgent = runnerType === "coze" || runnerType === "openclawx" || runnerType === "opencode";
+        const isProxyAgent = runnerType === "coze" || runnerType === "openclawx" || runnerType === "opencode" || runnerType === "claude_code";
 
         if (isProxyAgent) {
         console.log(`[agent.chat] Using proxy agent (${runnerType}) for session=${targetSessionId}, agentId=${currentAgentId}`);
@@ -183,38 +192,42 @@ async function handleAgentChatInner(
                 sendSessionMessage(targetSessionId, { type: "chat", code: "agent_end", payload: {} });
                 sendSessionMessage(targetSessionId, { type: "chat", code: "conversation_end", payload: {} });
             };
-            try {
-                await runForChannelStream(
-                    {
-                        sessionId: targetSessionId,
-                        message,
-                        agentId: currentAgentId,
-                        signal,
+            runForChannelStream(
+                {
+                    sessionId: targetSessionId,
+                    message,
+                    agentId: currentAgentId,
+                    signal,
+                },
+                {
+                    onChunk(delta: string) {
+                        sendSessionMessage(targetSessionId, { type: "chat", code: "agent.chunk", payload: { text: delta } });
                     },
-                    {
-                        onChunk(delta: string) {
-                            sendSessionMessage(targetSessionId, { type: "chat", code: "agent.chunk", payload: { text: delta } });
-                        },
-                        onTurnEnd() {
-                            sendSessionMessage(targetSessionId, { type: "chat", code: "turn_end", payload: {} });
-                            sendSessionMessage(targetSessionId, { type: "chat", code: "message_complete", payload: {} });
-                        },
-                        onDone() {
-                            finishAndUnregister();
-                        },
-                    }
-                );
-                return { status: "completed", sessionId: targetSessionId };
-            } catch (error: any) {
+                    onTurnEnd() {
+                        sendSessionMessage(targetSessionId, { type: "chat", code: "turn_end", payload: {} });
+                        sendSessionMessage(targetSessionId, { type: "chat", code: "message_complete", payload: {} });
+                    },
+                    onDone() {
+                        finishAndUnregister();
+                    },
+                }
+            ).catch((error: any) => {
                 const isAbort = error?.name === "AbortError" || (typeof error?.message === "string" && error.message.includes("abort"));
                 if (!isAbort) console.error(`Error in agent chat (proxy ${runnerType}):`, error);
                 finishAndUnregister();
                 if (!isAbort) {
-                    const errMsg = error?.message || String(error);
+                    let errMsg = error?.message || String(error);
+                    const needNormalize = typeof errMsg === "object" || (typeof errMsg === "string" && errMsg.includes("[object Object]"));
+                    if (needNormalize) {
+                        errMsg = normalizeChunkText(errMsg);
+                        if (typeof errMsg === "string" && errMsg.includes("Unknown value type") && errMsg.includes("[object Object]")) {
+                            errMsg = "模型返回了不支持的数据结构（如工具调用流），请尝试关闭工具或更换模型。";
+                        }
+                    }
                     sendSessionMessage(targetSessionId, { type: "chat", code: "agent.chunk", payload: { text: `请求失败：${errMsg}` } });
                 }
-                return { status: "completed", sessionId: targetSessionId };
-            }
+            });
+            return { status: "streaming", sessionId: targetSessionId };
         }
 
         const isEphemeralSession = sessionType === "system" || sessionType === "scheduled";
@@ -239,8 +252,10 @@ async function handleAgentChatInner(
                 maxSessions: maxAgentSessions,
                 targetAgentId: effectiveTargetAgentId,
                 mcpServers: agentConfig?.mcpServers,
+                mcpMaxResultTokens: agentConfig?.mcpMaxResultTokens,
                 systemPrompt: agentConfig?.systemPrompt,
                 useLongMemory: agentConfig?.useLongMemory,
+                webSearch: agentConfig?.webSearch,
             });
         } catch (err: any) {
             const msg = err?.message ?? String(err);
@@ -279,9 +294,9 @@ async function handleAgentChatInner(
                 const update = event as any;
                 if (update.assistantMessageEvent && update.assistantMessageEvent.type === "text_delta") {
                     hasReceivedAnyChunk = true;
-                    wsPayload = { type: "chat", code: "agent.chunk", payload: { text: update.assistantMessageEvent.delta } };
+                    wsPayload = { type: "chat", code: "agent.chunk", payload: { text: normalizeChunkText(update.assistantMessageEvent.delta) } };
                 } else if (update.assistantMessageEvent && update.assistantMessageEvent.type === "thinking_delta") {
-                    wsPayload = { type: "chat", code: "agent.chunk", payload: { text: update.assistantMessageEvent.delta, isThinking: true } };
+                    wsPayload = { type: "chat", code: "agent.chunk", payload: { text: normalizeChunkText(update.assistantMessageEvent.delta), isThinking: true } };
                 } else if (update.assistantMessageEvent?.type === "error" && update.assistantMessageEvent?.error?.errorMessage) {
                     console.warn("[agent.chat] model error:", update.assistantMessageEvent.error.errorMessage);
                 }
@@ -302,9 +317,30 @@ async function handleAgentChatInner(
                     hasReceivedAnyChunk = true;
                 }
                 if (msg?.errorMessage) {
-                    const errText = msg.errorMessage.includes("402") || msg.errorMessage.includes("Insufficient Balance")
+                    // 调试：定位本地 LLM 流式报错来源（pi-ai 等 SDK 抛出的原始 errorMessage）
+                    console.error("[agent.chat] message_end errorMessage:", msg.errorMessage);
+                    if (typeof (msg as any).errorStack === "string") console.error("[agent.chat] message_end errorStack:", (msg as any).errorStack);
+                    let errText = msg.errorMessage.includes("402") || msg.errorMessage.includes("Insufficient Balance")
                         ? "API 余额不足，请到「设置」检查并充值后重试。"
-                        : `请求失败：${msg.errorMessage}`;
+                        : `请求失败：${normalizeChunkText(msg.errorMessage)}`;
+                    if (errText.includes("Unknown value type") && errText.includes("[object Object]")) {
+                        errText = "请求失败：模型返回了不支持的数据结构（如工具调用流），请尝试关闭工具或更换模型。";
+                    }
+                    const isConnErr = /Connection error|ECONNREFUSED|fetch failed/i.test(msg.errorMessage);
+                    const localFailed = process.env.LOCAL_LLM_START_FAILED;
+                    const isLocalProvider = provider === "local";
+                    const isModelRequired = /model is required|400.*model/i.test(msg.errorMessage);
+                    if (isLocalProvider && localFailed && (msg.errorMessage === "terminated" || isConnErr)) {
+                        errText = `请求失败：${localFailed}`;
+                    } else if ((provider === "openai-custom" || provider === "ollama") && isConnErr) {
+                        errText = "请求失败：无法连接到模型服务（若使用 Ollama 请确认已启动且 baseUrl 为 http://localhost:11434/v1，或改用「Ollama」Provider）。";
+                    } else if (isModelRequired && (provider === "openai-custom" || provider === "ollama")) {
+                        errText =
+                            "请求失败：模型名称未被服务端识别。若使用 Ollama，请确保「模型配置」中的模型名与终端中 `ollama list` 显示的名称完全一致（如 qwen3:4b）。";
+                    } else if (provider === "local" && /context size.*too large|VRAM|显存/i.test(msg.errorMessage)) {
+                        errText =
+                            "请求失败：显存/内存不足，当前上下文长度过大。请在「智能体配置」中将该智能体的「上下文长度」调小（如 8192 或 4096）后重新启动本地模型服务再试。";
+                    }
                     sendSessionMessage(targetSessionId, { type: "chat", code: "agent.chunk", payload: { text: errText } });
                 }
                 wsPayload = null;
@@ -321,9 +357,30 @@ async function handleAgentChatInner(
                     }
                 }
                 if (msg?.errorMessage) {
-                    const errText = msg.errorMessage.includes("402") || msg.errorMessage.includes("Insufficient Balance")
+                    // 调试：定位 turn_end 时 SDK 传入的原始错误
+                    console.error("[agent.chat] turn_end errorMessage:", msg.errorMessage);
+                    if (typeof (msg as any).errorStack === "string") console.error("[agent.chat] turn_end errorStack:", (msg as any).errorStack);
+                    let errText = msg.errorMessage.includes("402") || msg.errorMessage.includes("Insufficient Balance")
                         ? "API 余额不足，请到「设置」检查并充值后重试。"
-                        : `请求失败：${msg.errorMessage}`;
+                        : `请求失败：${normalizeChunkText(msg.errorMessage)}`;
+                    if (errText.includes("Unknown value type") && errText.includes("[object Object]")) {
+                        errText = "请求失败：模型返回了不支持的数据结构（如工具调用流），请尝试关闭工具或更换模型。";
+                    }
+                    const isConnErr = /Connection error|ECONNREFUSED|fetch failed/i.test(msg.errorMessage);
+                    const localFailed = process.env.LOCAL_LLM_START_FAILED;
+                    const isLocalProvider = provider === "local";
+                    const isModelRequired = /model is required|400.*model/i.test(msg.errorMessage);
+                    if (isLocalProvider && localFailed && (msg.errorMessage === "terminated" || isConnErr)) {
+                        errText = `请求失败：${localFailed}`;
+                    } else if ((provider === "openai-custom" || provider === "ollama") && isConnErr) {
+                        errText = "请求失败：无法连接到模型服务（若使用 Ollama 请确认已启动且 baseUrl 为 http://localhost:11434/v1，或改用「Ollama」Provider）。";
+                    } else if (isModelRequired && (provider === "openai-custom" || provider === "ollama")) {
+                        errText =
+                            "请求失败：模型名称未被服务端识别。若使用 Ollama，请确保「模型配置」中的模型名与终端中 `ollama list` 显示的名称完全一致（如 qwen3:4b）。";
+                    } else if (provider === "local" && /context size.*too large|VRAM|显存/i.test(msg.errorMessage)) {
+                        errText =
+                            "请求失败：显存/内存不足，当前上下文长度过大。请在「智能体配置」中将该智能体的「上下文长度」调小（如 8192 或 4096）后重新启动本地模型服务再试。";
+                    }
                     sendSessionMessage(targetSessionId, { type: "chat", code: "agent.chunk", payload: { text: errText } });
                     hasReceivedAnyChunk = true;
                 }
@@ -365,9 +422,8 @@ async function handleAgentChatInner(
 
         try {
             await session.sendUserMessage(message, { deliverAs: "followUp" });
-            await agentDonePromise;
-            console.log(`Agent chat completed for session ${targetSessionId}`);
-            return { status: "completed", sessionId: targetSessionId };
+            // 流已启动，立即返回；前端以 agent_end 判断整轮结束，超时以「首包」计算更优
+            return { status: "streaming", sessionId: targetSessionId };
         } catch (error: any) {
             console.error(`Error in agent chat:`, error);
             resolveAgentDone!();

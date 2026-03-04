@@ -30,6 +30,9 @@ export const agentConfigAPI = {
     updateAgent: (id, body) => apiClient.put(`/agent-config/${id}`, body),
     /** deleteWorkspaceDir: true 时同时删除工作区磁盘目录；默认仅删数据库中的工作区相关数据 */
     deleteAgent: (id, params) => apiClient.delete(`/agent-config/${id}`, { params: params || {} }),
+    /** 测试单条 MCP 配置是否可用（连接并拉取工具列表，可提前触发 uvx/npx 依赖安装） */
+    testMcp: (mcpServer) =>
+        apiClient.post('/agent-config/mcp/test', { mcpServer: mcpServer || {} }),
 };
 
 // Skills API
@@ -78,6 +81,31 @@ export const configAPI = {
     getModels: (provider, type) => apiClient.get(`/config/providers/${encodeURIComponent(provider)}/models`, { params: type ? { type } : {} }),
     /** OpenCode 免费/推荐模型列表，供代理配置界面下拉选择 */
     getOpencodeFreeModels: () => apiClient.get('/config/opencode-free-models'),
+};
+
+// Local Models API（本地 GGUF 模型管理）
+export const localModelsAPI = {
+    /** 列出本地已缓存的 GGUF 模型文件 */
+    list: () => apiClient.get('/config/local-models'),
+    /** 推荐的 GGUF 模型列表（供下载选择） */
+    getRecommended: () => apiClient.get('/config/local-models/recommended'),
+    /** 仅返回尚未安装的推荐模型（已安装的不显示在下载区） */
+    getRecommendedToDownload: () => apiClient.get('/config/local-models/recommended-to-download'),
+    /** 推荐模型列表含是否已安装（用于展示已下载 / 中国·全球下载） */
+    getRecommendedWithStatus: () => apiClient.get('/config/local-models/recommended-with-status'),
+    /** 本地模型服务状态：available, error?, baseUrl? */
+    getStatus: () => apiClient.get('/config/local-models/status'),
+    /** 启动本地模型服务，可选 llmModelUri、embeddingModelUri（文件名或 hf: URI） */
+    start: (body) => apiClient.post('/config/local-models/start', body),
+    /** 开始后台下载模型。useMirror=true 使用国内镜像，false 使用全球官方源 */
+    startDownload: (modelUri, useMirror = false) =>
+        apiClient.post('/config/local-models/download', { modelUri, useMirror }),
+    /** 取消指定模型的下载 */
+    cancelDownload: (modelUri) => apiClient.post('/config/local-models/cancel-download', { modelUri }),
+    /** 查询下载进度 */
+    getProgress: (uri) => apiClient.get('/config/local-models/progress', { params: { uri } }),
+    /** 删除本地缓存的 GGUF 模型文件 */
+    delete: (filename) => apiClient.delete(`/config/local-models/${encodeURIComponent(filename)}`),
 };
 
 // Auth API（登录）

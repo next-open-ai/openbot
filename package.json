@@ -3,7 +3,7 @@
     "publishConfig": {
         "access": "public"
     },
-    "version": "0.6.16",
+    "version": "0.6.66",
     "description": "OpenBot - A professional desktop application for managing and executing AI agents with real-time chat, session management, and skills browsing.",
     "type": "module",
     "main": "dist/index.js",
@@ -26,6 +26,7 @@
         "openbot": "./dist/cli/cli.js"
     },
     "dependencies": {
+        "@instantlyeasy/claude-code-sdk-ts": "^0.3.3",
         "@larksuiteoapi/node-sdk": "^1.59.0",
         "@mariozechner/pi-ai": "^0.51.2",
         "@mariozechner/pi-coding-agent": "^0.51.2",
@@ -41,6 +42,7 @@
         "commander": "^14.0.2",
         "croner": "^9.1.0",
         "dingtalk-stream": "^2.1.4",
+        "duck-duck-scrape": "^2.2.7",
         "multer": "^1.4.5-lts.1",
         "node-llama-cpp": "^3.15.0",
         "qrcode": "^1.5.4",
