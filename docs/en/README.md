@@ -89,4 +89,10 @@ docs/en/                        # English documentation
 
 ---
 
+## License
+
+This project is under the **Restrictive MIT License**: commercial use, modification, or distribution without prior written permission from the copyright holder is prohibited. See [Project home – License](../../README.md#许可证--license), [LICENSE](../../LICENSE) (English), [LICENSE.zh-CN](../../LICENSE.zh-CN) (Chinese).
+
+---
+
 Back to [OpenBot project home](../../README.md).

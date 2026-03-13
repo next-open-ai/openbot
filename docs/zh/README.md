@@ -89,4 +89,10 @@ docs/zh/                        # 中文文档
 
 ---
 
+## 许可证
+
+本项目采用 **限制性 MIT 许可证**，禁止未经著作权人书面许可进行商业化使用、修改或发布。详见 [项目首页 - 许可证](../../README.md#许可证--license)，[LICENSE](../../LICENSE)（英文）、[LICENSE.zh-CN](../../LICENSE.zh-CN)（中文）。
+
+---
+
 返回 [OpenBot 项目首页](../../README.md)。
