@@ -61,6 +61,9 @@ docs/
 - **Windows 安装失败 / 无法运行？**  
   - **Desktop 安装包**：若安装或启动报错（如缺少运行库、闪退），请安装 [Visual C++ Redistributable](https://learn.microsoft.com/zh-cn/cpp/windows/latest-supported-vc-redist)（选 x64）；若为杀毒/安全软件拦截，可尝试加入排除项或暂时关闭后重试。  
   - **npm 全局安装**：Windows 上若因 `node-llama-cpp` 等原生依赖安装失败，可使用 `npm install -g @next-open-ai/openbot --ignore-scripts` 跳过可选原生模块，对 CLI/Gateway/Desktop 常规使用无影响；长记忆需单独配置在线 RAG 或本地环境。  
+- **Windows 桌面端兼容（CLI/Shell 与输入焦点）**  
+  - **Shell 命令**：在 Windows 上运行 Desktop 时，智能体执行的文件/目录操作（如整理下载文件夹、`dir`、`cd`、PowerShell 等）**无需安装 Git Bash**；若系统未检测到 bash，将自动使用 **cmd.exe** 兜底，常用命令可正常执行。若已安装 Git for Windows，会优先使用 bash。  
+  - **输入框焦点**：启动后对话输入框会自动获得焦点，无需先按 Tab 或点击即可直接输入。  
 - 更多问题（macOS 安装包「已损坏」、端口占用、通道不回复等）见 **[常见问题](docs/zh/reference/faq.md)**；版本变更见 **[发布说明](docs/zh/release-notes.md)**。
 
 ---

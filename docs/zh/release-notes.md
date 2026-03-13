@@ -16,6 +16,11 @@
 - **RPA（影刀）**
   - 通过 MCP 可接入影刀 RPA：在智能体 MCP 配置中添加 [yingdao-mcp-server](https://www.npmjs.com/package/yingdao-mcp-server)（如命令 `npx -y yingdao-mcp-server`，环境变量可选 `RPA_MODEL`、`SHADOWBOT_PATH`、`USER_FOLDER` 等），即可在对话中调用影刀自动化能力。
 
+### Windows 桌面端兼容
+
+- **Shell/CLI 命令**：在 Windows 上运行 Desktop 时，智能体执行的文件与目录操作（如整理下载文件夹、`dir`、`cd`、PowerShell 等）**无需安装 Git Bash**。若系统未检测到 bash，将自动使用 **cmd.exe** 兜底，避免出现「No bash shell found」类报错；若已安装 Git for Windows，会优先使用 bash。
+- **输入框焦点**：启动后对话输入框会自动获得焦点，无需先按 Tab 或点击即可直接输入。
+
 ### 其他
 
 - npm 打包已包含 `presets` 目录，通过 npm 安装后预装智能体与技能可正常合并到本地配置（需在包目录下执行或设置 `OPENBOT_PRESETS_DIR`）。
